@@ -1,12 +1,126 @@
-import { useEffect, useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import { normalizarTelefone, validarTelefone, telefonesCoincidem } from "./telefone";
+import { useTheme } from "./theme/ThemeContext";
+import Button from "./components/Button";
+import Input from "./Input";
+import Card from "./components/Card";
 
 export default function FichaLead({ leadId, user, voltar }) {
+  const theme = useTheme();
   const [lead, setLead] = useState(null);
   const [form, setForm] = useState(null);
   const [agentes, setAgentes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
+  const [telefoneErro, setTelefoneErro] = useState("");
+
+  const styles = {
+    container: {
+      position: "relative",
+      background: theme.colors.surface,
+      padding: theme.spacing.lg,
+      borderRadius: theme.borderRadius.xl,
+      boxShadow: theme.shadow.lg,
+      minHeight: "580px"
+    },
+    backButton: {
+      position: "absolute",
+      top: theme.spacing.md,
+      left: theme.spacing.md,
+      zIndex: 10,
+      minWidth: "46px",
+      borderRadius: "8px",
+      boxShadow: "0 1px 2px rgba(15, 23, 42, 0.06)"
+    },
+    header: {
+      display: "flex",
+      justifyContent: "space-between",
+      gap: theme.spacing.lg,
+      alignItems: "flex-start",
+      marginBottom: theme.spacing.lg
+    },
+    headerTitle: {
+      margin: 0,
+      fontSize: "1.8rem",
+      lineHeight: 1.05,
+      color: theme.colors.text
+    },
+    headerSubtitle: {
+      margin: 0,
+      color: theme.colors.muted,
+      fontSize: "0.95rem"
+    },
+    badge: {
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "10px 16px",
+      borderRadius: theme.borderRadius.lg,
+      fontWeight: 700,
+      fontSize: "0.95rem"
+    },
+    infoBox: {
+      background: theme.colors.surfaceSoft,
+      color: theme.colors.text,
+      padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+      borderRadius: theme.borderRadius.md,
+      marginBottom: theme.spacing.lg,
+      fontSize: "0.95rem"
+    },
+    grid: {
+      display: "grid",
+      gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
+      gap: theme.spacing.md,
+      marginBottom: theme.spacing.lg
+    },
+    label: {
+      display: "flex",
+      flexDirection: "column",
+      gap: theme.spacing.xs,
+      fontSize: "0.95rem",
+      color: theme.colors.muted
+    },
+    select: {
+      borderRadius: theme.borderRadius.md,
+      border: `1px solid ${theme.colors.border}`,
+      padding: theme.spacing.sm,
+      background: theme.colors.inputBackground,
+      color: theme.colors.text,
+      fontSize: theme.typography.fontSize,
+      outline: "none"
+    },
+    textarea: {
+      minHeight: "140px",
+      marginTop: theme.spacing.xs
+    },
+    footer: {
+      display: "flex",
+      flexWrap: "wrap",
+      justifyContent: "flex-end",
+      gap: theme.spacing.sm,
+      marginTop: theme.spacing.lg
+    },
+    btnSecondary: {
+      minWidth: "150px"
+    },
+    btnPrimary: {
+      minWidth: "170px"
+    },
+    errorText: {
+      color: theme.colors.danger,
+      fontSize: "13px",
+      marginTop: theme.spacing.xs
+    },
+    loading: {
+      minHeight: "280px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: theme.colors.muted,
+      fontSize: "1rem"
+    }
+  };
 
   useEffect(() => {
     carregarFicha();
@@ -78,6 +192,22 @@ export default function FichaLead({ leadId, user, voltar }) {
     setForm((prev) => ({ ...prev, [campo]: valor }));
   }
 
+  function handleTelefoneChange(valor) {
+    const telefoneNormalizado = normalizarTelefone(valor);
+    setForm((prev) => ({ ...prev, telefone: telefoneNormalizado }));
+
+    if (!telefoneNormalizado) {
+      setTelefoneErro("");
+      return;
+    }
+
+    setTelefoneErro(
+      validarTelefone(telefoneNormalizado)
+        ? ""
+        : "Informe o telefone com 12 dígitos (indicativo + 9 dígitos)."
+    );
+  }
+
   function nomeUtilizadorAtual() {
     return user?.user_metadata?.nome ||
       user?.user_metadata?.name ||
@@ -96,11 +226,39 @@ export default function FichaLead({ leadId, user, voltar }) {
   async function salvar() {
     setSalvando(true);
 
+    const telefoneNormalizado = normalizarTelefone(form.telefone);
+
+    if (!validarTelefone(telefoneNormalizado)) {
+      setSalvando(false);
+      alert("Informe o telefone com 12 dígitos (indicativo + 9 dígitos).");
+      return;
+    }
+
+    const { data: leadsDuplicadas, error: erroDuplicado } = await supabase
+      .from("leads")
+      .select("id, telefone")
+      .neq("id", leadId)
+      .order("created_at", { ascending: false });
+
+    if (erroDuplicado) {
+      setSalvando(false);
+      alert(erroDuplicado.message);
+      return;
+    }
+
+    const leadDuplicado = leadsDuplicadas?.find((lead) => telefonesCoincidem(telefoneNormalizado, lead.telefone));
+
+    if (leadDuplicado) {
+      setSalvando(false);
+      alert("Já existe uma lead cadastrada com este telefone.");
+      return;
+    }
+
     const { error } = await supabase
       .from("leads")
       .update({
         nome: form.nome,
-        telefone: form.telefone,
+        telefone: telefoneNormalizado,
         tipo: form.tipo,
         origem: form.origem,
         observacoes: form.observacoes,
@@ -118,54 +276,62 @@ export default function FichaLead({ leadId, user, voltar }) {
     }
 
     alert("Ficha da lead atualizada!");
-    carregarFicha();
+    voltar?.();
   }
 
-  if (loading) return <div style={box}>A carregar ficha...</div>;
-  if (!lead || !form) return <div style={box}>Lead não encontrada.</div>;
+  if (loading) return <Card style={styles.loading}>A carregar ficha...</Card>;
+  if (!lead || !form) return <Card style={styles.loading}>Lead não encontrada.</Card>;
+
+  const badgeType = {
+    quente: { background: "#dcfce7", color: "#166534" },
+    morno: { background: "#fef9c3", color: "#92400e" },
+    frio: { background: "#fee2e2", color: "#991b1b" }
+  }[form.tipo] || { background: theme.colors.surfaceSoft, color: theme.colors.text };
 
   return (
-    <div style={box}>
-      <button style={btnVoltarTop} onClick={voltar}>
-        ↩️
-      </button>
-
-      <div style={header}>
+    <Card style={styles.container}>
+      <div style={styles.header}>
         <div>
-          <h2 style={titulo}>Ficha da Lead</h2>
-          <p style={subtitulo}>Criada em {formatarData(lead.created_at)}</p>
+          <h2 style={styles.headerTitle}>Ficha da Lead</h2>
+          <p style={styles.headerSubtitle}>Criada em {formatarData(lead.created_at)}</p>
         </div>
 
-        <span style={badge(form.tipo)}>{labelTipo(form.tipo)}</span>
+        <span style={{ ...styles.badge, ...badgeType }}>{labelTipo(form.tipo)}</span>
       </div>
 
-      <div style={infoBox}>
+      <div style={styles.infoBox}>
         <strong>Criada por:</strong> {nomeAgente(lead.agente_id)}
       </div>
 
-      <div style={grid}>
-        <label style={label}>
-          Nome
-          <input style={input} value={form.nome} onChange={(e) => atualizar("nome", e.target.value)} />
-        </label>
-
-        <label style={label}>
+      <div style={styles.grid}>
+        <label style={styles.label}>
           Telefone
-          <input style={input} value={form.telefone} onChange={(e) => atualizar("telefone", e.target.value)} />
+          <Input
+            value={form.telefone}
+            onChange={(e) => handleTelefoneChange(e.target.value)}
+            maxLength={12}
+            inputMode="numeric"
+          />
+          {telefoneErro && <div style={styles.errorText}>{telefoneErro}</div>}
         </label>
 
-        <label style={label}>
+        <label style={styles.label}>
+          Nome
+          <Input value={form.nome} onChange={(e) => atualizar("nome", e.target.value)} />
+        </label>
+
+        <label style={styles.label}>
           Tipo
-          <select style={input} value={form.tipo} onChange={(e) => atualizar("tipo", e.target.value)}>
+          <select style={styles.select} value={form.tipo} onChange={(e) => atualizar("tipo", e.target.value)}>
             <option value="quente">Quente</option>
             <option value="morno">Morno</option>
             <option value="frio">Frio</option>
           </select>
         </label>
 
-        <label style={label}>
+        <label style={styles.label}>
           Origem
-          <select style={input} value={form.origem} onChange={(e) => atualizar("origem", e.target.value)}>
+          <select style={styles.select} value={form.origem} onChange={(e) => atualizar("origem", e.target.value)}>
             <option value="">Sem origem</option>
             <option value="placa">Placa na rua</option>
             <option value="indicacao">Indicação</option>
@@ -173,9 +339,9 @@ export default function FichaLead({ leadId, user, voltar }) {
           </select>
         </label>
 
-        <label style={label}>
+        <label style={styles.label}>
           Status
-          <select style={input} value={form.status} onChange={(e) => atualizar("status", e.target.value)}>
+          <select style={styles.select} value={form.status} onChange={(e) => atualizar("status", e.target.value)}>
             <option value="novo">Novo</option>
             <option value="contactado">Contactado</option>
             <option value="agendado">Agendado</option>
@@ -183,9 +349,9 @@ export default function FichaLead({ leadId, user, voltar }) {
           </select>
         </label>
 
-        <label style={label}>
+        <label style={styles.label}>
           Agente responsável
-          <select style={input} value={form.agente_id} onChange={(e) => atualizar("agente_id", e.target.value)}>
+          <select style={styles.select} value={form.agente_id} onChange={(e) => atualizar("agente_id", e.target.value)}>
             <option value="">Sem agente</option>
             {agentes.map((agente) => (
               <option key={agente.id} value={agente.id}>
@@ -196,22 +362,18 @@ export default function FichaLead({ leadId, user, voltar }) {
         </label>
       </div>
 
-      <label style={label}>
+      <label style={styles.label}>
         Observações
-        <textarea
-          style={textarea}
-          value={form.observacoes}
-          onChange={(e) => atualizar("observacoes", e.target.value)}
-        />
+        <Input as="textarea" style={styles.textarea} value={form.observacoes} onChange={(e) => atualizar("observacoes", e.target.value)} />
       </label>
 
-      <div style={footer}>
-        <button style={btnSecundario} onClick={voltar}>Cancelar</button>
-        <button style={btnPrincipal} onClick={salvar} disabled={salvando}>
+      <div style={styles.footer}>
+        <Button color="light" style={styles.btnSecondary} onClick={voltar}>Cancelar</Button>
+        <Button color="success" style={styles.btnPrimary} onClick={salvar} disabled={salvando}>
           {salvando ? "A guardar..." : "Guardar alterações"}
-        </button>
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 }
 
@@ -225,120 +387,3 @@ function labelTipo(tipo) {
   if (tipo === "morno") return "Morno";
   return "Frio";
 }
-
-const box = {
-  position: "relative",
-  background: "white",
-  padding: "60px 25px 25px 25px",
-  borderRadius: "10px",
-  boxShadow: "0 5px 15px rgba(0,0,0,0.1)"
-};
-
-const btnVoltarTop = {
-  position: "absolute",
-  top: "15px",
-  left: "15px",
-  zIndex: 10,
-  background: "white",
-  border: "1px solid #e2e8f0",
-  borderRadius: "6px",
-  padding: "6px",
-  fontSize: "18px",
-  cursor: "pointer"
-};
-
-const header = {
-  display: "flex",
-  justifyContent: "space-between",
-  gap: "16px",
-  alignItems: "flex-start",
-  marginBottom: "18px"
-};
-
-const titulo = {
-  margin: "0 0 6px 0",
-  color: "#0f172a"
-};
-
-const subtitulo = {
-  margin: 0,
-  color: "#64748b",
-  fontSize: "13px"
-};
-
-const infoBox = {
-  background: "#f1f5f9",
-  color: "#334155",
-  padding: "10px 12px",
-  borderRadius: "8px",
-  marginBottom: "18px",
-  fontSize: "14px"
-};
-
-const grid = {
-  display: "grid",
-  gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-  gap: "14px",
-  marginBottom: "14px"
-};
-
-const label = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "6px",
-  color: "#334155",
-  fontSize: "13px",
-  fontWeight: "600"
-};
-
-const input = {
-  padding: "10px",
-  borderRadius: "6px",
-  border: "1px solid #cbd5e1",
-  fontSize: "14px",
-  boxSizing: "border-box",
-  width: "100%"
-};
-
-const textarea = {
-  ...input,
-  minHeight: "130px",
-  resize: "vertical",
-  lineHeight: "1.5"
-};
-
-const footer = {
-  display: "flex",
-  justifyContent: "flex-end",
-  gap: "10px",
-  marginTop: "18px"
-};
-
-const btnPrincipal = {
-  padding: "12px 16px",
-  border: "none",
-  borderRadius: "8px",
-  background: "#2563eb",
-  color: "white",
-  cursor: "pointer",
-  fontWeight: "600"
-};
-
-const btnSecundario = {
-  padding: "12px 16px",
-  border: "1px solid #cbd5e1",
-  borderRadius: "8px",
-  background: "white",
-  color: "#334155",
-  cursor: "pointer",
-  fontWeight: "600"
-};
-
-const badge = (tipo) => ({
-  padding: "6px 10px",
-  borderRadius: "6px",
-  fontSize: "13px",
-  fontWeight: "700",
-  background: tipo === "quente" ? "#dcfce7" : tipo === "morno" ? "#fef9c3" : "#fee2e2",
-  color: tipo === "quente" ? "#166534" : tipo === "morno" ? "#92400e" : "#991b1b"
-});

@@ -1,24 +1,104 @@
-import { useEffect, useState } from "react";
+﻿import { useState, useEffect } from "react";
 import { supabase } from "./supabase";
+import { useTheme } from "./theme/ThemeContext";
+import Button from "./components/Button";
+import Input from "./Input";
+import Card from "./components/Card";
 
 export default function Documentos() {
+  const theme = useTheme();
 
   const [documentos, setDocumentos] = useState([]);
   const [file, setFile] = useState(null);
-
   const [nome, setNome] = useState("");
   const [categoria, setCategoria] = useState("");
   const [descricao, setDescricao] = useState("");
+  const [documentoSelecionado, setDocumentoSelecionado] = useState(null);
 
-  const [documentoSelecionado, setDocumentoSelecionado] =
-    useState(null);
+  const styles = {
+    cardUpload: {
+      background: theme.colors.surface,
+      padding: theme.spacing.lg,
+      borderRadius: theme.borderRadius.xl,
+      marginBottom: theme.spacing.lg,
+      display: "flex",
+      flexDirection: "column",
+      gap: theme.spacing.sm,
+      boxShadow: theme.shadow.md
+    },
+    input: {
+      width: "100%",
+      borderRadius: theme.borderRadius.md,
+      border: `1px solid ${theme.colors.border}`,
+      padding: theme.spacing.sm,
+      background: theme.colors.inputBackground,
+      color: theme.colors.text,
+      fontSize: theme.typography.fontSize,
+      boxSizing: "border-box"
+    },
+    textarea: {
+      width: "100%",
+      minHeight: "120px",
+      borderRadius: theme.borderRadius.md,
+      border: `1px solid ${theme.colors.border}`,
+      padding: theme.spacing.sm,
+      background: theme.colors.inputBackground,
+      color: theme.colors.text,
+      fontSize: theme.typography.fontSize,
+      boxSizing: "border-box",
+      resize: "vertical"
+    },
+    fileInput: {
+      marginTop: theme.spacing.sm
+    },
+    btnUpload: {
+      alignSelf: "flex-start"
+    },
+    lista: {
+      display: "flex",
+      flexDirection: "column",
+      gap: theme.spacing.sm
+    },
+    cardDocumento: {
+      background: theme.colors.surface,
+      padding: theme.spacing.md,
+      borderRadius: theme.borderRadius.lg,
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      boxShadow: theme.shadow.sm
+    },
+    acoes: {
+      display: "flex",
+      gap: theme.spacing.sm,
+      flexWrap: "wrap"
+    },
+    btnAcao: {
+      padding: "8px 12px",
+      minWidth: "90px"
+    },
+    btnDelete: {
+      minWidth: "90px"
+    },
+    previewCard: {
+      background: theme.colors.surface,
+      padding: theme.spacing.lg,
+      marginBottom: theme.spacing.lg,
+      borderRadius: theme.borderRadius.xl,
+      boxShadow: theme.shadow.md
+    },
+    headerPreview: {
+      display: "flex",
+      justifyContent: "space-between",
+      marginBottom: theme.spacing.sm
+    }
+  };
 
   useEffect(() => {
     carregarDocumentos();
   }, []);
 
   async function carregarDocumentos() {
-
     const { data } = await supabase
       .from("documentos")
       .select("*")
@@ -28,42 +108,37 @@ export default function Documentos() {
   }
 
   async function uploadDocumento() {
-
     if (!file) {
       alert("Selecione um PDF");
       return;
     }
 
-    const nomeArquivo =
-      `${Date.now()}-${file.name}`;
+    const nomeArquivo = `${Date.now()}-${file.name}`;
 
-    const { data, error } =
-      await supabase.storage
-        .from("crm-documentos")
-        .upload(nomeArquivo, file);
+    const { data, error } = await supabase.storage
+      .from("crm-documentos")
+      .upload(nomeArquivo, file);
 
     if (error) {
       alert(error.message);
       return;
     }
 
-    const { data: publicUrl } =
-      supabase.storage
-        .from("crm-documentos")
-        .getPublicUrl(data.path);
+    const { data: publicUrl } = supabase.storage
+      .from("crm-documentos")
+      .getPublicUrl(data.path);
 
-    const { error: erroInsert } =
-      await supabase
-        .from("documentos")
-        .insert([
-          {
-            nome,
-            categoria,
-            descricao,
-            arquivo_url: publicUrl.publicUrl,
-            arquivo_nome: file.name
-          }
-        ]);
+    const { error: erroInsert } = await supabase
+      .from("documentos")
+      .insert([
+        {
+          nome,
+          categoria,
+          descricao,
+          arquivo_url: publicUrl.publicUrl,
+          arquivo_nome: file.name
+        }
+      ]);
 
     if (erroInsert) {
       alert(erroInsert.message);
@@ -71,22 +146,15 @@ export default function Documentos() {
     }
 
     alert("Documento enviado!");
-
     setNome("");
     setCategoria("");
     setDescricao("");
     setFile(null);
-
     carregarDocumentos();
   }
 
   async function apagarDocumento(doc) {
-
-    if (
-      !window.confirm(
-        "Deseja apagar este documento?"
-      )
-    ) {
+    if (!window.confirm("Deseja apagar este documento?")) {
       return;
     }
 
@@ -100,231 +168,87 @@ export default function Documentos() {
 
   return (
     <div>
+      <h2>📁 Biblioteca de Documentos</h2>
 
-      <h2>
-        📁 Biblioteca de Documentos
-      </h2>
-
-      <div style={cardUpload}>
-
-        <input
-          style={input}
+      <Card style={styles.cardUpload}>
+        <Input
           placeholder="Nome"
+          style={styles.input}
           value={nome}
-          onChange={(e) =>
-            setNome(e.target.value)
-          }
+          onChange={(e) => setNome(e.target.value)}
         />
 
-        <input
-          style={input}
+        <Input
           placeholder="Categoria"
+          style={styles.input}
           value={categoria}
-          onChange={(e) =>
-            setCategoria(e.target.value)
-          }
+          onChange={(e) => setCategoria(e.target.value)}
         />
 
-        <textarea
-          style={textarea}
+        <Input
+          as="textarea"
           placeholder="Descrição"
+          style={styles.textarea}
           value={descricao}
-          onChange={(e) =>
-            setDescricao(e.target.value)
-          }
+          onChange={(e) => setDescricao(e.target.value)}
         />
 
         <input
           type="file"
           accept=".pdf"
-          onChange={(e) =>
-            setFile(e.target.files[0])
-          }
+          style={styles.fileInput}
+          onChange={(e) => setFile(e.target.files[0])}
         />
 
-        <button
-          style={btnUpload}
-          onClick={uploadDocumento}
-        >
+        <Button style={styles.btnUpload} onClick={uploadDocumento}>
           📤 Enviar PDF
-        </button>
-
-      </div>
+        </Button>
+      </Card>
 
       {documentoSelecionado && (
-
-        <div style={previewCard}>
-
-          <div style={headerPreview}>
-
-            <strong>
-              {documentoSelecionado.nome}
-            </strong>
-
-            <button
-              onClick={() =>
-                setDocumentoSelecionado(null)
-              }
-            >
+        <Card style={styles.previewCard}>
+          <div style={styles.headerPreview}>
+            <strong>{documentoSelecionado.nome}</strong>
+            <Button color="light" onClick={() => setDocumentoSelecionado(null)}>
               ✖
-            </button>
-
+            </Button>
           </div>
 
           <iframe
             title="pdf"
-            src={
-              documentoSelecionado.arquivo_url
-            }
+            src={documentoSelecionado.arquivo_url}
             width="100%"
             height="700"
           />
-
-        </div>
-
+        </Card>
       )}
 
-      <div style={lista}>
-
+      <div style={styles.lista}>
         {documentos.map((doc) => (
-
-          <div
-            key={doc.id}
-            style={cardDocumento}
-          >
-
+          <Card key={doc.id} style={styles.cardDocumento}>
             <div>
-
-              <strong>
-                {doc.nome}
-              </strong>
-
-              <div>
-                {doc.categoria}
-              </div>
-
+              <strong>{doc.nome}</strong>
+              <div>{doc.categoria}</div>
             </div>
 
-            <div style={acoes}>
+            <div style={styles.acoes}>
+              <Button color="light" style={styles.btnAcao} onClick={() => setDocumentoSelecionado(doc)}>
+                📁 Ver
+              </Button>
 
-              <button
-                style={btnAcao}
-                onClick={() =>
-                  setDocumentoSelecionado(doc)
-                }
-              >
-                👁 Ver
-              </button>
-
-              <a
-                href={doc.arquivo_url}
-                download
-                target="_blank"
-                rel="noreferrer"
-              >
-                <button style={btnAcao}>
-                  ⬇ Download
-                </button>
+              <a href={doc.arquivo_url} download target="_blank" rel="noreferrer">
+                <Button color="light" style={styles.btnAcao}>
+                  ⬇️ Download
+                </Button>
               </a>
 
-              <button
-                style={btnDelete}
-                onClick={() =>
-                  apagarDocumento(doc)
-                }
-              >
-                🗑
-              </button>
-
+              <Button color="danger" style={styles.btnDelete} onClick={() => apagarDocumento(doc)}>
+                ❌
+              </Button>
             </div>
-
-          </div>
-
+          </Card>
         ))}
-
       </div>
-
     </div>
   );
 }
-
-//////////////////////////////////////////////////////
-// ESTILOS
-
-const cardUpload = {
-  background: "white",
-  padding: "20px",
-  borderRadius: "12px",
-  marginBottom: "20px",
-  display: "flex",
-  flexDirection: "column",
-  gap: "10px",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.06)"
-};
-
-const input = {
-  padding: "10px"
-};
-
-const textarea = {
-  padding: "10px",
-  height: "80px"
-};
-
-const btnUpload = {
-  background: "#2563eb",
-  color: "white",
-  border: "none",
-  padding: "12px",
-  borderRadius: "8px",
-  cursor: "pointer"
-};
-
-const lista = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "10px"
-};
-
-const cardDocumento = {
-  background: "white",
-  padding: "15px",
-  borderRadius: "10px",
-  display: "flex",
-  justifyContent: "space-between",
-  alignItems: "center",
-  boxShadow: "0 3px 8px rgba(0,0,0,0.05)"
-};
-
-const acoes = {
-  display: "flex",
-  gap: "8px"
-};
-
-const btnAcao = {
-  padding: "8px 12px",
-  cursor: "pointer"
-};
-
-const btnDelete = {
-  background: "#ef4444",
-  color: "white",
-  border: "none",
-  padding: "8px 12px",
-  borderRadius: "6px",
-  cursor: "pointer"
-};
-
-const previewCard = {
-  background: "white",
-  padding: "20px",
-  marginBottom: "20px",
-  borderRadius: "12px",
-  boxShadow: "0 8px 24px rgba(0,0,0,0.06)"
-};
-
-const headerPreview = {
-  display: "flex",
-  justifyContent: "space-between",
-  marginBottom: "10px"
-};

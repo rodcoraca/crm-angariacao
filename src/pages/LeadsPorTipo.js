@@ -1,22 +1,28 @@
 import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
+import { supabase } from "../supabase";
+import FichaLead from "../FichaLead";
 
 export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
   const [leads, setLeads] = useState([]);
   const [agentes, setAgentes] = useState([]);
+  const [leadSelecionadoId, setLeadSelecionadoId] = useState(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
     carregar();
-  }, [tipo]);
+  }, [tipo, refreshKey]);
 
   async function carregar() {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("leads")
       .select("*")
       .eq("tipo", tipo)
       .order("created_at", { ascending: false });
-    setLeads(data || []);
-    carregarAgentes(data || []);
+
+    if (!error) {
+      setLeads(data || []);
+      carregarAgentes(data || []);
+    }
   }
 
   async function carregarAgentes(leadsCarregadas) {
@@ -69,33 +75,39 @@ export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
   }
 
   async function alterarTipo(id, novoTipo) {
-  const { error } = await supabase
-    .from("leads")
-    .update({
-      tipo: novoTipo,
-      updated_at: new Date().toISOString() // 👈 AQUI
-    })
-    .eq("id", id);
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        tipo: novoTipo,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
 
-  if (!error) carregar();
-}
-
-async function salvarObservacao(id, texto) {
-  const { error } = await supabase
-    .from("leads")
-    .update({
-      observacoes: texto,
-      updated_at: new Date().toISOString() // 👈 AQUI
-    })
-    .eq("id", id);
-
-  if (error) {
-    alert(error.message);
-  } else {
-    // opcional: recarregar lista
-    carregar();
+    if (!error) {
+      setRefreshKey((value) => value + 1);
+    }
   }
-}
+
+  async function salvarObservacao(id, texto) {
+    const { error } = await supabase
+      .from("leads")
+      .update({
+        observacoes: texto,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", id);
+
+    if (error) {
+      alert(error.message);
+    } else {
+      setRefreshKey((value) => value + 1);
+    }
+  }
+
+  function abrirFicha(leadId) {
+    setLeadSelecionadoId(leadId);
+    onAbrirLead?.(leadId);
+  }
 
 function formatarData(data) {
   if (!data) return "";
@@ -113,6 +125,24 @@ function formatarData(data) {
   return `${dia}/${mes}/${ano} ${hora}:${min}:${seg}`;
 }
 
+  if (leadSelecionadoId) {
+    return (
+      <div>
+        <button style={btnVoltar} onClick={() => setLeadSelecionadoId(null)}>
+          ← Voltar para a lista
+        </button>
+        <FichaLead
+          leadId={leadSelecionadoId}
+          user={user}
+          voltar={() => {
+            setLeadSelecionadoId(null);
+            setRefreshKey((value) => value + 1);
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div>
       <h2>{emojiTipo(tipo)} {tipo.toUpperCase()}</h2>
@@ -120,7 +150,19 @@ function formatarData(data) {
       <div style={wrapper}>
         <div style={grid}>
           {leads.map((lead) => (
-            <div key={lead.id} style={card(lead.tipo)}>
+            <div
+              key={lead.id}
+              style={{ ...card(lead.tipo), cursor: "pointer" }}
+              role="button"
+              tabIndex={0}
+              onClick={() => abrirFicha(lead.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  abrirFicha(lead.id);
+                }
+              }}
+            >
               <div style={header}>
                 <strong>{lead.nome}</strong>
                 <span>{emojiTipo(lead.tipo)}</span>
@@ -144,13 +186,15 @@ function formatarData(data) {
                 style={textarea}
                 value={lead.observacoes || ""}
                 onChange={(e) => atualizarObsLocal(lead.id, e.target.value)}
-                onBlur={(e) => salvarObservacao(lead.id, e.target.value)} // 👈 AQUI
+                onBlur={(e) => salvarObservacao(lead.id, e.target.value)}
+                onClick={(event) => event.stopPropagation()}
                 placeholder="Adicionar observações..."
               />
 
 	      <select
                 value={lead.tipo}
                 onChange={(e) => alterarTipo(lead.id, e.target.value)}
+                onClick={(event) => event.stopPropagation()}
                 style={select}
               >
                 <option value="quente">🔥 Quente</option>
@@ -160,7 +204,10 @@ function formatarData(data) {
 
               <button
                 style={btnFicha}
-                onClick={() => onAbrirLead?.(lead.id)}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  abrirFicha(lead.id);
+                }}
               >
                 Editar ficha
               </button>
@@ -245,6 +292,16 @@ const btnFicha = {
   fontWeight: "600"
 };
 
+const btnVoltar = {
+  marginBottom: "16px",
+  padding: "8px 12px",
+  borderRadius: "6px",
+  border: "1px solid #cbd5e1",
+  background: "#f8fafc",
+  color: "#0f172a",
+  cursor: "pointer",
+  fontWeight: "600"
+};
 const btnSalvar = {
   marginTop: "6px",
   width: "100%",
