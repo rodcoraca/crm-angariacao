@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "./supabase";
 
 import Login from "./pages/Login";
+import Home from "./pages/Home";
 import Fluxo from "./pages/Fluxo";
 import Dashboard from "./pages/Dashboard";
 import LeadsPorTipo from "./pages/LeadsPorTipo";
@@ -18,7 +19,7 @@ import { temAcesso } from "./utils/usuarios";
 export default function App() {
   const [user, setUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
-  const [view, setView] = useState("fluxo");
+  const [view, setView] = useState("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [leadSelecionadoId, setLeadSelecionadoId] = useState(null);
   const [viewAnteriorFicha, setViewAnteriorFicha] = useState("fluxo");
@@ -44,6 +45,12 @@ export default function App() {
   }
 
   function mudarView(nextView) {
+    if (nextView === "home") {
+      setView("home");
+      registrarLog('navegacao', 'Acedeu a home');
+      return;
+    }
+
     if (!temAcesso(perfil, nextView)) {
       alert("Sem permissão para aceder a este módulo.");
       return;
@@ -78,6 +85,7 @@ export default function App() {
   }
 
   const screens = {
+    home: <Home />,
     fluxo: temAcesso(perfil, 'fluxo') ? <Fluxo user={user} onAbrirLead={abrirFichaLead} /> : <div>Sem permissão.</div>,
     dashboard: temAcesso(perfil, 'dashboard') ? <Dashboard onAbrirLead={abrirFichaLead} /> : <div>Sem permissão.</div>,
     quente: temAcesso(perfil, 'quente') ? <LeadsPorTipo tipo="quente" user={user} onAbrirLead={abrirFichaLead} /> : <div>Sem permissão.</div>,
@@ -92,7 +100,13 @@ export default function App() {
   return (
     <Layout
       collapsed={sidebarCollapsed}
-      header={<div>OSFlow - Fluxo inteligente | Resultados reais.</div>}
+      header={
+        <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+          <span style={{ color: "#F97316" }}>OSFlow</span>
+          <span style={{ color: "rgba(255,255,255,0.9)", fontSize: "0.9rem", textTransform: "none", letterSpacing: "0.02em" }}>Fluxo inteligente | Resultados reais</span>
+        </div>
+      }
+      footer={<span>OSFlow • Gestão operacional</span>}
       sidebar={
         <Sidebar
           setView={mudarView}

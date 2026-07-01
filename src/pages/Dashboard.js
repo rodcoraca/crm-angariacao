@@ -3,12 +3,98 @@ import { supabase } from "../supabase";
 import { useTheme } from "../theme/ThemeContext";
 import Button from "../components/Button";
 import Input from "../Input";
-import Card from "../components/Card";
+import Card from "../components/ui/Card";
+import Badge from "../components/ui/Badge";
+import Table from "../components/ui/Table";
+import EmptyState from "../components/ui/EmptyState";
+import Loading from "../components/ui/Loading";
 
 export default function Dashboard({ onAbrirLead }) {
   const theme = useTheme();
 
   const styles = {
+    page: {
+      display: "grid",
+      gap: theme.spacing.lg
+    },
+    executiveHeader: {
+      display: "flex",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: theme.spacing.md,
+      padding: theme.spacing.lg
+    },
+    executiveTitleBlock: {
+      display: "grid",
+      gap: theme.spacing.xs
+    },
+    executiveTitle: {
+      margin: 0,
+      color: theme.colors.text,
+      fontSize: "1.9rem",
+      lineHeight: 1.1
+    },
+    executiveSubtitle: {
+      margin: 0,
+      color: theme.colors.muted,
+      lineHeight: 1.45
+    },
+    executiveKpiGrid: {
+      display: "grid",
+      gap: theme.spacing.md,
+      gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))"
+    },
+    executiveKpiCard: {
+      padding: theme.spacing.md,
+      display: "grid",
+      gap: theme.spacing.xs
+    },
+    executiveKpiLabel: {
+      margin: 0,
+      color: theme.colors.muted,
+      fontSize: "0.85rem",
+      textTransform: "uppercase",
+      letterSpacing: "0.04em",
+      fontWeight: 700
+    },
+    executiveKpiValue: {
+      margin: 0,
+      color: theme.colors.text,
+      fontSize: "1.75rem",
+      lineHeight: 1,
+      fontWeight: 700
+    },
+    executiveLayout: {
+      display: "grid",
+      gap: theme.spacing.md,
+      gridTemplateColumns: "2fr 1fr"
+    },
+    executiveSide: {
+      display: "grid",
+      gap: theme.spacing.md
+    },
+    sectionCard: {
+      padding: theme.spacing.lg,
+      display: "grid",
+      gap: theme.spacing.sm,
+      minHeight: "220px"
+    },
+    sectionTitle: {
+      margin: 0,
+      color: theme.colors.text,
+      fontSize: "1.05rem"
+    },
+    sectionDescription: {
+      margin: 0,
+      color: theme.colors.muted,
+      fontSize: "0.95rem"
+    },
+    dividerTitle: {
+      margin: 0,
+      color: theme.colors.text,
+      fontSize: "1.15rem"
+    },
     headerContainer: {
       display: "flex",
       flexWrap: "wrap",
@@ -189,6 +275,77 @@ export default function Dashboard({ onAbrirLead }) {
   }
 
   const dados = filtrarLeads();
+  const isLoading = false;
+  const emptyStateMessage = (
+    <EmptyState
+      title="Sem leads para mostrar"
+      description="Não existem registos para os filtros aplicados."
+      style={{ padding: theme.spacing.md, boxShadow: "none", border: "none", background: "transparent" }}
+    />
+  );
+
+  const getInteractiveCellProps = (lead) => ({
+    onClick: () => onAbrirLead?.(lead.id),
+    onMouseEnter: (event) => {
+      const row = event.currentTarget.closest("tr");
+      if (row) row.style.background = theme.colors.surfaceSoft;
+    },
+    onMouseLeave: (event) => {
+      const row = event.currentTarget.closest("tr");
+      if (row) row.style.background = theme.colors.surface;
+    }
+  });
+
+  const tableColumns = [
+    {
+      key: "nome",
+      title: "Nome",
+      render: (lead) => (
+        <span
+          style={{ ...styles.tdNome, padding: 0, cursor: "pointer" }}
+          {...getInteractiveCellProps(lead)}
+        >
+          {lead.nome}
+        </span>
+      )
+    },
+    {
+      key: "telefone",
+      title: "Telefone",
+      render: (lead) => (
+        <span
+          style={{ ...styles.td, padding: 0, cursor: "pointer" }}
+          {...getInteractiveCellProps(lead)}
+        >
+          {lead.telefone}
+        </span>
+      )
+    },
+    {
+      key: "tipo",
+      title: "Tipo",
+      render: (lead) => (
+        <span
+          style={{ ...styles.td, padding: 0, cursor: "pointer" }}
+          {...getInteractiveCellProps(lead)}
+        >
+          {renderTipo(lead.tipo)}
+        </span>
+      )
+    },
+    {
+      key: "updated_at",
+      title: "Data",
+      render: (lead) => (
+        <span
+          style={{ ...styles.td, padding: 0, cursor: "pointer" }}
+          {...getInteractiveCellProps(lead)}
+        >
+          {formatarData(lead.updated_at)}
+        </span>
+      )
+    }
+  ];
 
   function formatarData(data) {
     if (!data) return "-";
@@ -206,22 +363,22 @@ export default function Dashboard({ onAbrirLead }) {
     };
 
     if (tipo === "quente") {
-      return <span style={{ ...base, background: "#dcfce7", color: "#166534" }}>🔥 Quente</span>;
+      return <Badge style={{ ...base, background: "#dcfce7", color: "#166534" }}>🔥 Quente</Badge>;
     }
 
     if (tipo === "morno") {
-      return <span style={{ ...base, background: "#fef9c3", color: "#92400e" }}>🟡 Morno</span>;
+      return <Badge style={{ ...base, background: "#fef9c3", color: "#92400e" }}>🟡 Morno</Badge>;
     }
 
-    return <span style={{ ...base, background: "#fee2e2", color: "#991b1b" }}>❄️ Frio</span>;
+    return <Badge style={{ ...base, background: "#fee2e2", color: "#991b1b" }}>❄️ Frio</Badge>;
   }
 
   return (
-    <div>
+    <div style={styles.page}>
       <div style={styles.headerContainer}>
         <div style={styles.titleWrapper}>
           <h2 style={styles.pageTitle}>📊 Painel Admin</h2>
-          <p style={styles.pageSubtitle}>Visão geral das leads e métricas de conversão.</p>
+          <p style={styles.pageSubtitle}>Gestão operacional das leads.</p>
         </div>
 
         <Button color="success" style={styles.btnExport} onClick={exportarCSV}>
@@ -249,13 +406,6 @@ export default function Dashboard({ onAbrirLead }) {
         </select>
       </div>
 
-      <div style={styles.grid}>
-        <Card style={styles.card}>Total: {dados.length}</Card>
-        <Card style={styles.card}>Quentes: {dados.filter(l => l.tipo === "quente").length}</Card>
-        <Card style={styles.card}>Mornos: {dados.filter(l => l.tipo === "morno").length}</Card>
-        <Card style={styles.card}>Frios: {dados.filter(l => l.tipo === "frio").length}</Card>
-      </div>
-
       {leadSelecionado && (
         <Card style={styles.cardDetalhe}>
           <div style={styles.headerDetalhe}>
@@ -279,32 +429,11 @@ export default function Dashboard({ onAbrirLead }) {
       )}
 
       <div style={styles.tableWrapper}>
-        <table style={styles.table}>
-          <thead>
-            <tr>
-              <th style={styles.th}>Nome</th>
-              <th style={styles.th}>Telefone</th>
-              <th style={styles.th}>Tipo</th>
-              <th style={styles.th}>Data</th>
-            </tr>
-          </thead>
-          <tbody>
-            {dados.map((lead) => (
-              <tr
-                key={lead.id}
-                style={{ ...styles.tr, cursor: "pointer" }}
-                onClick={() => onAbrirLead?.(lead.id)}
-                onMouseEnter={(e) => e.currentTarget.style.background = theme.colors.surfaceSoft}
-                onMouseLeave={(e) => e.currentTarget.style.background = theme.colors.surface}
-              >
-                <td style={styles.tdNome}>{lead.nome}</td>
-                <td style={styles.td}>{lead.telefone}</td>
-                <td style={styles.td}>{renderTipo(lead.tipo)}</td>
-                <td style={styles.td}>{formatarData(lead.updated_at)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {isLoading ? (
+          <Loading label="A carregar leads..." />
+        ) : (
+          <Table columns={tableColumns} rows={dados} emptyMessage={emptyStateMessage} />
+        )}
       </div>
     </div>
   );

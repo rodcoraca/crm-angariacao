@@ -1,7 +1,12 @@
 import { useState } from "react";
 import { supabase } from "../supabase";
+import { useTheme } from "../theme/ThemeContext";
+import Button from "../components/ui/Button";
+import Input from "../components/ui/Input";
+import Card from "../components/ui/Card";
 
 export default function Login({ setUser, onLogin }) {
+  const theme = useTheme();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [modoBootstrap, setModoBootstrap] = useState(false);
@@ -88,62 +93,63 @@ export default function Login({ setUser, onLogin }) {
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h2 style={styles.title}>CRM Angariação</h2>
-        <p style={styles.subtitle}>Acesso de agentes</p>
+    <div style={{ ...styles.container, background: theme.colors.brandGradient }}>
+      <Card style={styles.card}>
+        <div style={{ ...styles.badge, background: `${theme.colors.secondary}14`, color: theme.colors.primary }}>OSFlow</div>
+        <h2 style={{ ...styles.title, color: theme.colors.primary }}>Acesso seguro</h2>
+        <p style={{ ...styles.subtitle, color: theme.colors.muted }}>Gestão operacional com controlo total</p>
 
         {!modoBootstrap ? (
           <>
-            <input
+            <Input
               style={styles.input}
               placeholder="Email ou User name"
               onChange={(e) => setUsername(e.target.value)}
             />
 
-            <input
+            <Input
               style={styles.input}
               type="password"
               placeholder="Password"
               onChange={(e) => setPassword(e.target.value)}
             />
 
-            <button style={styles.button} onClick={login}>
+            <Button variant="secondary" style={styles.button} onClick={login}>
               Entrar
-            </button>
+            </Button>
 
-            <button style={styles.secondaryButton} onClick={() => setModoBootstrap(true)}>
+            <Button variant="ghost" style={styles.secondaryButton} onClick={() => setModoBootstrap(true)}>
               Criar primeiro administrador
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <input
+            <Input
               style={styles.input}
               placeholder="Nome"
               onChange={(e) => setBootstrapNome(e.target.value)}
             />
-            <input
+            <Input
               style={styles.input}
               placeholder="Email"
               onChange={(e) => setBootstrapEmail(e.target.value)}
             />
-            <input
+            <Input
               style={styles.input}
               type="password"
               placeholder="Password"
               onChange={(e) => setBootstrapPassword(e.target.value)}
             />
 
-            <button style={styles.button} onClick={criarPrimeiroAdmin}>
+            <Button variant="primary" style={styles.button} onClick={criarPrimeiroAdmin}>
               Criar administrador
-            </button>
-            <button style={styles.secondaryButton} onClick={() => setModoBootstrap(false)}>
+            </Button>
+            <Button variant="ghost" style={styles.secondaryButton} onClick={() => setModoBootstrap(false)}>
               Voltar ao login
-            </button>
+            </Button>
           </>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -151,60 +157,63 @@ export default function Login({ setUser, onLogin }) {
 const styles = {
   container: {
     height: "100vh",
-    background: "linear-gradient(135deg, #1e293b, #3b82f6)",
     display: "flex",
     justifyContent: "center",
-    alignItems: "center"
+    alignItems: "center",
+    padding: "24px"
   },
 
   card: {
-    background: "white",
     padding: "40px",
-    borderRadius: "12px",
-    width: "350px",
-    boxShadow: "0 10px 30px rgba(0,0,0,0.2)",
+    borderRadius: "16px",
+    width: "360px",
     textAlign: "center"
   },
 
+  badge: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "6px 12px",
+    borderRadius: "999px",
+    fontSize: "12px",
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    marginBottom: "12px"
+  },
+
   title: {
-    marginBottom: "5px"
+    marginBottom: "5px",
+    fontSize: "24px"
   },
 
   subtitle: {
-    marginBottom: "20px",
-    color: "#666"
+    marginBottom: "20px"
   },
 
   input: {
     width: "100%",
     padding: "12px",
     marginBottom: "15px",
-    borderRadius: "8px",
-    border: "1px solid #ddd",
-    fontSize: "14px"
+    borderRadius: "10px",
+    fontSize: "14px",
+    outline: "none"
   },
 
   button: {
     width: "100%",
     padding: "12px",
-    borderRadius: "8px",
-    border: "none",
-    background: "#3b82f6",
-    color: "white",
+    borderRadius: "10px",
     fontSize: "16px",
-    fontWeight: "bold",
-    cursor: "pointer"
+    fontWeight: "bold"
   },
 
   secondaryButton: {
     width: "100%",
     padding: "10px",
-    borderRadius: "8px",
-    border: "1px solid #d1d5db",
-    background: "white",
-    color: "#334155",
+    borderRadius: "10px",
     fontSize: "14px",
-    marginTop: "10px",
-    cursor: "pointer"
+    marginTop: "10px"
   }
 };

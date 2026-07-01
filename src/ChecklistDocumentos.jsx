@@ -1,7 +1,18 @@
 import React from "react";
+import { useTheme } from "./theme/ThemeContext";
 
 export default function ChecklistDocumentos({ cmi, setCmi, cadernetaPredial, setCadernetaPredial, plantas, setPlantas, certificadoEnergetico, setCertificadoEnergetico, cartaoCidadao, setCartaoCidadao, estacionamento, setEstacionamento }) {
-  const labelStyle = { display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 8 };
+  const theme = useTheme();
+  const labelStyle = {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: "8px 12px",
+    background: theme.colors.surfaceSoft,
+    border: `1px solid ${theme.colors.border}`,
+    borderRadius: 8,
+    color: theme.colors.text
+  };
   return (
     <div style={{ display: "flex", flexWrap: "wrap", gap: 10, marginBottom: 15 }}>
       <label style={labelStyle}><input type="checkbox" checked={cmi} onChange={(e) => setCmi(e.target.checked)} /> CMI</label>

@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import FichaLead from "../FichaLead";
+import { useTheme } from "../theme/ThemeContext";
 
 export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
+  const theme = useTheme();
   const [leads, setLeads] = useState([]);
   const [agentes, setAgentes] = useState([]);
   const [leadSelecionadoId, setLeadSelecionadoId] = useState(null);
@@ -128,7 +130,7 @@ function formatarData(data) {
   if (leadSelecionadoId) {
     return (
       <div>
-        <button style={btnVoltar} onClick={() => setLeadSelecionadoId(null)}>
+        <button style={{ ...btnVoltar, background: theme.colors.surfaceSoft, border: `1px solid ${theme.colors.border}`, color: theme.colors.text }} onClick={() => setLeadSelecionadoId(null)}>
           ← Voltar para a lista
         </button>
         <FichaLead
@@ -145,7 +147,7 @@ function formatarData(data) {
 
   return (
     <div>
-      <h2>{emojiTipo(tipo)} {tipo.toUpperCase()}</h2>
+      <h2 style={{ color: theme.colors.primary }}>{emojiTipo(tipo)} {tipo.toUpperCase()}</h2>
 
       <div style={wrapper}>
         <div style={grid}>
@@ -183,7 +185,7 @@ function formatarData(data) {
               </p>
 
               <textarea
-                style={textarea}
+                style={{ ...textarea, border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}
                 value={lead.observacoes || ""}
                 onChange={(e) => atualizarObsLocal(lead.id, e.target.value)}
                 onBlur={(e) => salvarObservacao(lead.id, e.target.value)}
@@ -195,7 +197,7 @@ function formatarData(data) {
                 value={lead.tipo}
                 onChange={(e) => alterarTipo(lead.id, e.target.value)}
                 onClick={(event) => event.stopPropagation()}
-                style={select}
+                style={{ ...select, border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}
               >
                 <option value="quente">🔥 Quente</option>
                 <option value="morno">🟡 Morno</option>
@@ -203,7 +205,7 @@ function formatarData(data) {
               </select>
 
               <button
-                style={btnFicha}
+                style={{ ...btnFicha, background: theme.colors.primary }}
                 onClick={(event) => {
                   event.stopPropagation();
                   abrirFicha(lead.id);
@@ -268,11 +270,10 @@ const wrapper = {
 
 const textarea = {
   width: "100%",
-  boxSizing: "border-box",   // 👈 ESSENCIAL
+  boxSizing: "border-box",
   marginTop: "10px",
   padding: "8px",
   borderRadius: "6px",
-  border: "1px solid #ddd",
   fontSize: "13px",
   resize: "none",
   overflowY: "auto",
@@ -283,7 +284,6 @@ const btnFicha = {
   marginTop: "10px",
   width: "100%",
   padding: "8px",
-  background: "#2563eb",
   color: "white",
   border: "none",
   borderRadius: "6px",
@@ -296,9 +296,6 @@ const btnVoltar = {
   marginBottom: "16px",
   padding: "8px 12px",
   borderRadius: "6px",
-  border: "1px solid #cbd5e1",
-  background: "#f8fafc",
-  color: "#0f172a",
   cursor: "pointer",
   fontWeight: "600"
 };

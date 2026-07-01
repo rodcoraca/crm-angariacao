@@ -1,4 +1,13 @@
+import { useTheme } from "../theme/ThemeContext";
+import Button from "../components/ui/Button";
+import Card from "../components/ui/Card";
+import Badge from "../components/ui/Badge";
+import EmptyState from "../components/ui/EmptyState";
+import Loading from "../components/ui/Loading";
+
 export default function MensagensPadrao({ voltar }) {
+  const theme = useTheme();
+  const isLoading = false;
 
   const mensagens = [
     {
@@ -55,39 +64,72 @@ export default function MensagensPadrao({ voltar }) {
     alert("Mensagem copiada!");
   }
 
+  if (isLoading) {
+    return (
+      <div style={container}>
+        <Loading label="A carregar mensagens..." />
+      </div>
+    );
+  }
+
+  if (mensagens.length === 0) {
+    return (
+      <div style={container}>
+        <Button
+          variant="ghost"
+          style={btnVoltar}
+          onClick={voltar}
+        >
+          ↩️ Voltar
+        </Button>
+        <h2 style={{ ...titulo, color: theme.colors.primary }}>
+          📩 Mensagens Padrão
+        </h2>
+        <EmptyState
+          title="Sem mensagens padrão"
+          description="Não existem mensagens configuradas de momento."
+        />
+      </div>
+    );
+  }
+
   return (
     <div style={container}>
-      <button
+      <Button
+        variant="ghost"
         style={btnVoltar}
         onClick={voltar}
       >
-        ↩️ Voltar  
-      </button>
-      <h2 style={titulo}>
+        ↩️ Voltar
+      </Button>
+      <h2 style={{ ...titulo, color: theme.colors.primary }}>
         📩 Mensagens Padrão
       </h2>
 
       <div style={grid}>
 
         {mensagens.map((msg, index) => (
-          <div key={index} style={card}>
+          <Card key={index} style={card}>
 
-            <h3 style={cardTitulo}>
-              {msg.titulo}
+            <h3 style={{ ...cardTitulo, color: theme.colors.primary }}>
+              <Badge variant="primary">
+                {msg.titulo}
+              </Badge>
             </h3>
 
-            <div style={texto}>
+            <div style={{ ...texto, background: theme.colors.surfaceSoft, color: theme.colors.muted }}>
               {msg.texto}
             </div>
 
-            <button
+            <Button
+              variant="secondary"
               style={botao}
               onClick={() => copiarTexto(msg.texto)}
             >
               📋 Copiar
-            </button>
+            </Button>
 
-          </div>
+          </Card>
         ))}
 
       </div>
@@ -104,8 +146,7 @@ const container = {
 };
 
 const titulo = {
-  marginBottom: "20px",
-  color: "#1e293b"
+  marginBottom: "20px"
 };
 
 const grid = {
@@ -115,10 +156,8 @@ const grid = {
 };
 
 const card = {
-  background: "white",
   borderRadius: "12px",
   padding: "20px",
-  boxShadow: "0 5px 15px rgba(0,0,0,0.06)",
   display: "flex",
   flexDirection: "column",
   justifyContent: "space-between"
@@ -126,36 +165,26 @@ const card = {
 
 const cardTitulo = {
   marginBottom: "15px",
-  color: "#0f172a",
   fontSize: "16px"
 };
 
 const texto = {
-  background: "#f8fafc",
   padding: "15px",
   borderRadius: "8px",
   fontSize: "14px",
   lineHeight: "1.6",
-  color: "#334155",
   marginBottom: "15px",
   whiteSpace: "pre-line"
 };
 
 const botao = {
-  background: "#2563eb",
-  color: "white",
-  border: "none",
   padding: "10px",
-  borderRadius: "8px",
-  cursor: "pointer",
-  fontWeight: "600"
+  borderRadius: "8px"
 };
 
 const btnVoltar = {
-  border: "none",
   padding: "10px 14px",
   borderRadius: "8px",
-  cursor: "pointer",
   marginBottom: "15px",
   fontWeight: "600"
 };
