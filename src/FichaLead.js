@@ -2,6 +2,7 @@
 import { supabase } from "./supabase";
 import { normalizarTelefone, validarTelefone, telefonesCoincidem } from "./telefone";
 import { useTheme } from "./theme/ThemeContext";
+import { formatarNomeApresentacao } from "./utils/nomes";
 import Button from "./components/Button";
 import Input from "./Input";
 import Card from "./components/Card";
@@ -218,8 +219,8 @@ export default function FichaLead({ leadId, user, voltar }) {
 
   function nomeAgente(id) {
     const agente = agentes.find((a) => a.id === id);
-    if (agente) return agente.email ? `${agente.nome} (${agente.email})` : agente.nome;
-    if (id === user?.id) return nomeUtilizadorAtual();
+    if (agente) return formatarNomeApresentacao(agente.nome);
+    if (id === user?.id) return formatarNomeApresentacao(nomeUtilizadorAtual());
     return id || "Sem agente";
   }
 
@@ -355,7 +356,7 @@ export default function FichaLead({ leadId, user, voltar }) {
             <option value="">Sem agente</option>
             {agentes.map((agente) => (
               <option key={agente.id} value={agente.id}>
-                {agente.email ? `${agente.nome} - ${agente.email}` : agente.nome}
+                {formatarNomeApresentacao(agente.nome)}
               </option>
             ))}
           </select>

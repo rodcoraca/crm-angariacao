@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 import FichaLead from "../FichaLead";
 import { useTheme } from "../theme/ThemeContext";
+import { formatarNomeApresentacao } from "../utils/nomes";
 
 export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
   const theme = useTheme();
@@ -63,8 +64,8 @@ export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
 
   function nomeAgente(id) {
     const agente = agentes.find((a) => a.id === id);
-    if (agente) return agente.email ? `${agente.nome} (${agente.email})` : agente.nome;
-    if (id === user?.id) return nomeUtilizadorAtual();
+    if (agente) return formatarNomeApresentacao(agente.nome);
+    if (id === user?.id) return formatarNomeApresentacao(nomeUtilizadorAtual());
     return "Sem agente";
   }
 

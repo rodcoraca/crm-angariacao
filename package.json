@@ -2,6 +2,7 @@
   "name": "crm-angariacao",
   "version": "0.1.0",
   "private": true,
+  "homepage": "/app",
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",
     "@testing-library/dom": "^10.4.1",

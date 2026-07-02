@@ -1,9 +1,27 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import { MODULOS, normalizarPermissoes } from '../utils/usuarios';
+import { useTheme } from '../theme/ThemeContext';
+import UserPersonalSection from '../components/users/UserPersonalSection';
+import UserAccountSection from '../components/users/UserAccountSection';
+import UserProfileSection from '../components/users/UserProfileSection';
+import UserAccessSection from '../components/users/UserAccessSection';
+import UserActivitySection from '../components/users/UserActivitySection';
+import UserOrganizationSection from '../components/users/UserOrganizationSection';
+import UserPreferencesSection from '../components/users/UserPreferencesSection';
+import { criarUsuariosViewModel } from '../viewmodels/usuariosViewModel';
 
 export default function Usuarios({ currentUser }) {
+  const theme = useTheme();
   const [usuarios, setUsuarios] = useState([]);
+  // Arquitetura SaaS (futuro): quando houver persistencia multi-tenant,
+  // este estado/formulario deve passar a acomodar identificadores de contexto organizacional:
+  // - empresaId
+  // - roleId
+  // - departamentoId
+  // - equipaId
+  // - supervisorId
+  // Nesta fase, manter fora do payload e sem impacto funcional.
   const [form, setForm] = useState({
     nome: '',
     apelido: '',
@@ -19,6 +37,8 @@ export default function Usuarios({ currentUser }) {
   const [erro, setErro] = useState('');
   const [modoEdicao, setModoEdicao] = useState(false);
   const [usuarioSelecionadoId, setUsuarioSelecionadoId] = useState(null);
+  const [perfilOrganizacional, setPerfilOrganizacional] = useState('');
+  const [usuarioSelecionadoMeta, setUsuarioSelecionadoMeta] = useState(null);
 
   useEffect(() => {
     carregarUsuarios();
@@ -47,6 +67,8 @@ export default function Usuarios({ currentUser }) {
     });
     setModoEdicao(false);
     setUsuarioSelecionadoId(null);
+    setPerfilOrganizacional('');
+    setUsuarioSelecionadoMeta(null);
   }
 
   function atualizarCampo(campo, valor) {
@@ -128,6 +150,11 @@ export default function Usuarios({ currentUser }) {
   function iniciarEdicao(usuario) {
     setModoEdicao(true);
     setUsuarioSelecionadoId(usuario.id);
+    // Arquitetura SaaS (futuro): aqui sera o ponto de hidratacao dos IDs organizacionais
+    // vindos do modelo de utilizador (empresaId/roleId/departamentoId/equipaId/supervisorId),
+    // mantendo a separacao entre camada de dados e camada de apresentacao.
+    setUsuarioSelecionadoMeta(usuario);
+    setPerfilOrganizacional(usuario.perfil || '');
     setForm({
       nome: usuario.nome || '',
       apelido: usuario.apelido || '',
@@ -146,6 +173,173 @@ export default function Usuarios({ currentUser }) {
     ativos: usuarios.filter((u) => u.ativo).length,
   }), [usuarios]);
 
+  const utilizadorVM = useMemo(
+    () =>
+      criarUsuariosViewModel({
+        form,
+        perfilOrganizacional,
+        usuarioSelecionadoMeta,
+        modoEdicao,
+        modulos: MODULOS,
+      }),
+    [form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao]
+  );
+
+  const styles = useMemo(() => ({
+    page: { display: 'grid', gap: theme.spacing.md, fontFamily: theme.typography.fontFamily },
+    title: {
+      margin: 0,
+      color: theme.colors.text,
+      fontSize: `calc(${theme.typography.fontSize} * 1.6)`,
+      fontWeight: theme.typography.headingWeight,
+      lineHeight: 1.1,
+    },
+    subtitle: {
+      margin: `0 0 ${theme.spacing.sm}`,
+      color: theme.colors.text,
+      fontSize: `calc(${theme.typography.fontSize} * 1.05)`,
+      fontWeight: theme.typography.headingWeight,
+    },
+    card: {
+      background: theme.colors.surface,
+      borderRadius: theme.borderRadius.lg,
+      padding: theme.spacing.md,
+      boxShadow: theme.shadow.md,
+      border: `1px solid ${theme.colors.border}`,
+    },
+    sectionsWrap: { display: 'grid', gap: theme.spacing.sm },
+    sectionCard: {
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.sm,
+      background: theme.colors.surfaceSoft,
+    },
+    sectionHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.sm,
+      gap: theme.spacing.sm,
+      flexWrap: 'wrap',
+    },
+    sectionTitle: {
+      margin: `0 0 ${theme.spacing.xs}`,
+      fontSize: `calc(${theme.typography.fontSize} * 0.88)`,
+      letterSpacing: '0.02em',
+      color: theme.colors.text,
+      fontWeight: theme.typography.headingWeight,
+    },
+    helperText: {
+      margin: `0 0 ${theme.spacing.xs}`,
+      color: theme.colors.muted,
+      fontSize: `calc(${theme.typography.fontSize} * 0.8)`,
+      lineHeight: theme.typography.lineHeight,
+    },
+    grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: theme.spacing.sm },
+    fieldLabel: {
+      display: 'grid',
+      gap: theme.spacing.xs,
+      fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
+      color: theme.colors.muted,
+    },
+    input: {
+      padding: `${theme.spacing.sm} ${theme.spacing.sm}`,
+      borderRadius: theme.borderRadius.sm,
+      border: `1px solid ${theme.colors.border}`,
+      background: theme.colors.inputBackground,
+      color: theme.colors.text,
+      fontSize: theme.typography.fontSize,
+      fontFamily: theme.typography.fontFamily,
+      outline: 'none',
+    },
+    readOnlyInput: { background: theme.colors.surfaceSoft, color: theme.colors.muted },
+    permissoesHeader: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: theme.spacing.sm,
+      gap: theme.spacing.sm,
+      flexWrap: 'wrap',
+    },
+    linkButton: {
+      border: 'none',
+      background: 'transparent',
+      color: theme.colors.primary,
+      cursor: 'pointer',
+      fontWeight: theme.typography.headingWeight,
+      fontFamily: theme.typography.fontFamily,
+      fontSize: `calc(${theme.typography.fontSize} * 0.9)`,
+      padding: 0,
+    },
+    checkGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: theme.spacing.xs },
+    checkboxItem: {
+      display: 'flex',
+      gap: theme.spacing.xs,
+      alignItems: 'center',
+      fontSize: `calc(${theme.typography.fontSize} * 0.88)`,
+      color: theme.colors.text,
+    },
+    placeholderGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: theme.spacing.xs },
+    placeholderBox: {
+      border: `1px dashed ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.sm,
+      padding: theme.spacing.sm,
+      display: 'grid',
+      gap: theme.spacing.xs,
+      background: theme.colors.surface,
+      color: theme.colors.muted,
+      fontSize: `calc(${theme.typography.fontSize} * 0.8)`,
+    },
+    button: {
+      marginTop: theme.spacing.sm,
+      padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+      borderRadius: theme.borderRadius.sm,
+      border: 'none',
+      background: theme.colors.primary,
+      color: theme.colors.textLight,
+      cursor: 'pointer',
+      fontFamily: theme.typography.fontFamily,
+      fontWeight: theme.typography.headingWeight,
+      fontSize: `calc(${theme.typography.fontSize} * 0.95)`,
+    },
+    error: {
+      color: theme.colors.danger,
+      marginBottom: theme.spacing.sm,
+      fontSize: `calc(${theme.typography.fontSize} * 0.88)`,
+    },
+    list: { display: 'grid', gap: theme.spacing.xs },
+    userRow: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      padding: `${theme.spacing.sm} ${theme.spacing.sm}`,
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.sm,
+      gap: theme.spacing.sm,
+      background: theme.colors.surface,
+    },
+    userActions: { display: 'flex', gap: theme.spacing.xs, alignItems: 'center' },
+    muted: { color: theme.colors.muted, fontSize: `calc(${theme.typography.fontSize} * 0.82)` },
+    badge: {
+      background: `${theme.colors.success}22`,
+      color: theme.colors.success,
+      padding: `4px ${theme.spacing.xs}`,
+      borderRadius: '999px',
+      fontSize: `calc(${theme.typography.fontSize} * 0.75)`,
+      fontWeight: theme.typography.headingWeight,
+    },
+    smallButton: {
+      border: `1px solid ${theme.colors.border}`,
+      background: theme.colors.surface,
+      borderRadius: theme.borderRadius.sm,
+      padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+      cursor: 'pointer',
+      color: theme.colors.text,
+      fontFamily: theme.typography.fontFamily,
+      fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
+    },
+  }), [theme]);
+
   return (
     <div style={styles.page}>
       <h2 style={styles.title}>Gestão de Utilizadores</h2>
@@ -156,29 +350,28 @@ export default function Usuarios({ currentUser }) {
           {modoEdicao ? <button style={styles.linkButton} onClick={resetForm}>Cancelar</button> : null}
         </div>
         {erro ? <div style={styles.error}>{erro}</div> : null}
-        <div style={styles.grid}>
-          <input style={styles.input} placeholder="Nome" value={form.nome} onChange={(e) => atualizarCampo('nome', e.target.value)} />
-          <input style={styles.input} placeholder="Apelido" value={form.apelido} onChange={(e) => atualizarCampo('apelido', e.target.value)} />
-          <input style={styles.input} placeholder="Email" value={form.email} onChange={(e) => atualizarCampo('email', e.target.value)} />
-          <input style={styles.input} placeholder="Telemóvel" value={form.telefone} onChange={(e) => atualizarCampo('telefone', e.target.value)} />
-          <input style={styles.input} placeholder="User name" value={form.username} onChange={(e) => atualizarCampo('username', e.target.value)} />
-          <input style={styles.input} type="password" placeholder="Password" value={form.password} onChange={(e) => atualizarCampo('password', e.target.value)} />
-          <input style={styles.input} type="password" placeholder="Confirmar Password" value={form.confirmarPassword} onChange={(e) => atualizarCampo('confirmarPassword', e.target.value)} />
-        </div>
 
-        <div style={styles.permissoesBox}>
-          <div style={styles.permissoesHeader}>
-            <strong>Controlo de acesso por módulos</strong>
-            <button style={styles.linkButton} onClick={alternarTodos}>Selecionar tudo</button>
-          </div>
-          <div style={styles.checkGrid}>
-            {MODULOS.map((modulo) => (
-              <label key={modulo.key} style={styles.checkboxItem}>
-                <input type="checkbox" checked={Boolean(form.permissoes?.[modulo.key])} onChange={() => alternarModulo(modulo.key)} />
-                <span>{modulo.label}</span>
-              </label>
-            ))}
-          </div>
+        <div style={styles.sectionsWrap}>
+          <UserPersonalSection dadosPessoais={utilizadorVM.dadosPessoais} onChange={atualizarCampo} styles={styles} />
+
+          <UserAccountSection
+            conta={utilizadorVM.conta}
+            onChange={atualizarCampo}
+            styles={styles}
+          />
+
+          <UserProfileSection perfil={utilizadorVM.perfil} onChangePerfil={setPerfilOrganizacional} styles={styles} />
+
+          <UserAccessSection
+            controloAcesso={utilizadorVM.controloAcesso}
+            onToggleModulo={alternarModulo}
+            onToggleTodos={alternarTodos}
+            styles={styles}
+          />
+
+          <UserActivitySection atividade={utilizadorVM.atividade} styles={styles} />
+          <UserOrganizationSection organizacao={utilizadorVM.organizacao} styles={styles} />
+          <UserPreferencesSection preferencias={utilizadorVM.preferencias} styles={styles} />
         </div>
 
         <button style={styles.button} onClick={guardarUsuario}>{modoEdicao ? 'Atualizar utilizador' : 'Guardar utilizador'}</button>
@@ -211,25 +404,3 @@ export default function Usuarios({ currentUser }) {
     </div>
   );
 }
-
-const styles = {
-  page: { display: 'grid', gap: '16px' },
-  title: { margin: 0, fontSize: '1.6rem' },
-  subtitle: { margin: '0 0 12px' },
-  card: { background: 'white', borderRadius: '12px', padding: '16px', boxShadow: '0 6px 18px rgba(0,0,0,0.06)' },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px' },
-  input: { padding: '10px 12px', borderRadius: '8px', border: '1px solid #d1d5db' },
-  permissoesBox: { marginTop: '16px', padding: '12px', border: '1px solid #e5e7eb', borderRadius: '10px' },
-  permissoesHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' },
-  linkButton: { border: 'none', background: 'transparent', color: '#2563eb', cursor: 'pointer', fontWeight: 600 },
-  checkGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '8px' },
-  checkboxItem: { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '14px' },
-  button: { marginTop: '14px', padding: '10px 14px', borderRadius: '8px', border: 'none', background: '#2563eb', color: 'white', cursor: 'pointer' },
-  error: { color: '#dc2626', marginBottom: '10px' },
-  list: { display: 'grid', gap: '8px' },
-  userRow: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 12px', border: '1px solid #e5e7eb', borderRadius: '8px' },
-  userActions: { display: 'flex', gap: '8px', alignItems: 'center' },
-  muted: { color: '#64748b', fontSize: '13px' },
-  badge: { background: '#dcfce7', color: '#166534', padding: '4px 8px', borderRadius: '999px', fontSize: '12px' },
-  smallButton: { border: '1px solid #d1d5db', background: 'white', borderRadius: '6px', padding: '6px 10px', cursor: 'pointer' },
-};
