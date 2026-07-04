@@ -27,10 +27,10 @@ export async function fetchCockpitActions() {
         .limit(limite)
     ),
     fetchRows(
-      supabase
+    supabase
         .from("leads")
         .select(camposBase)
-        .or("agente_id.is.null,agente_id.eq.")
+        .is("agente_id", null)
         .order("created_at", { ascending: true })
         .limit(limite)
     ),
