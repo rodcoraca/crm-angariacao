@@ -11,8 +11,8 @@ export async function fetchRows(query) {
 }
 
 export async function fetchLeadsConfirmacaoVisitas(supabaseClient, limite) {
-  const camposComDataVisita = "id,nome,telefone,created_at,data_visita";
-  const camposSemDataVisita = "id,nome,telefone,created_at";
+  const camposComDataVisita = "id,nome,telefone,created_at,data_visita,hora_visita,local_visita,status_visita";
+  const camposSemDataVisita = "id,nome,telefone,created_at,hora_visita,local_visita,status_visita";
 
   let base = [];
 

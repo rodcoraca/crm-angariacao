@@ -3,6 +3,8 @@ import { fetchLeadsConfirmacaoVisitas, fetchRows } from "./sharedQueries";
 
 export async function fetchCockpitActions() {
   const limite = 5;
+  const camposBase = "id,nome,telefone,created_at,data_visita,hora_visita,local_visita,status_visita";
+  const camposFollowup = "id,nome,telefone,updated_at,data_visita,hora_visita,local_visita,status_visita";
   const dataLimiteFollowup = new Date();
   dataLimiteFollowup.setDate(dataLimiteFollowup.getDate() - 3);
 
@@ -10,7 +12,7 @@ export async function fetchCockpitActions() {
     fetchRows(
       supabase
         .from("leads")
-        .select("id,nome,telefone,created_at")
+        .select(camposBase)
         .eq("status", "novo")
         .order("created_at", { ascending: true })
         .limit(limite)
@@ -18,7 +20,7 @@ export async function fetchCockpitActions() {
     fetchRows(
       supabase
         .from("leads")
-        .select("id,nome,telefone,updated_at")
+        .select(camposFollowup)
         .eq("status", "contactado")
         .lt("updated_at", dataLimiteFollowup.toISOString())
         .order("updated_at", { ascending: true })
@@ -27,7 +29,7 @@ export async function fetchCockpitActions() {
     fetchRows(
       supabase
         .from("leads")
-        .select("id,nome,telefone,created_at")
+        .select(camposBase)
         .or("agente_id.is.null,agente_id.eq.")
         .order("created_at", { ascending: true })
         .limit(limite)

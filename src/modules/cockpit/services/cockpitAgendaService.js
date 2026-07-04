@@ -3,6 +3,7 @@ import { fetchRows } from "./sharedQueries";
 
 export async function fetchCockpitAgenda() {
   const limite = 5;
+  const camposAgenda = "id,nome,telefone,status,data_visita,hora_visita,local_visita,status_visita,created_at";
   const inicioHoje = new Date();
   inicioHoje.setHours(0, 0, 0, 0);
   const inicioAmanha = new Date(inicioHoje);
@@ -12,7 +13,7 @@ export async function fetchCockpitAgenda() {
     fetchRows(
       supabase
         .from("leads")
-        .select("id,nome,telefone,status,data_visita,created_at")
+        .select(camposAgenda)
         .eq("status", "agendado")
         .gte("data_visita", inicioHoje.toISOString())
         .lt("data_visita", inicioAmanha.toISOString())
@@ -22,7 +23,7 @@ export async function fetchCockpitAgenda() {
     fetchRows(
       supabase
         .from("leads")
-        .select("id,nome,telefone,status,data_visita,created_at")
+        .select(camposAgenda)
         .eq("status", "agendado")
         .gte("data_visita", inicioAmanha.toISOString())
         .order("data_visita", { ascending: true })
@@ -31,7 +32,7 @@ export async function fetchCockpitAgenda() {
     fetchRows(
       supabase
         .from("leads")
-        .select("id,nome,telefone,status,data_visita,created_at")
+        .select(camposAgenda)
         .eq("status", "agendado")
         .is("data_visita", null)
         .order("created_at", { ascending: true })
