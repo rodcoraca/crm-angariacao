@@ -3,39 +3,16 @@ import { useTheme } from "../../theme/ThemeContext";
 export default function KpiCard({
   titulo,
   valor,
-  variacao,
   icone,
   cor,
-  trend = "neutral",
+  variacao,
+  descricao,
   style,
   ...props
 }) {
   const theme = useTheme();
 
   const tone = cor || theme.colors.primary;
-
-  const trendMap = {
-    up: {
-      label: "Subida",
-      background: `${theme.colors.success}14`,
-      color: theme.colors.success,
-      border: `${theme.colors.success}33`
-    },
-    down: {
-      label: "Descida",
-      background: `${theme.colors.danger}14`,
-      color: theme.colors.danger,
-      border: `${theme.colors.danger}33`
-    },
-    neutral: {
-      label: "Estavel",
-      background: theme.colors.surfaceSoft,
-      color: theme.colors.muted,
-      border: theme.colors.border
-    }
-  };
-
-  const trendTone = trendMap[trend] || trendMap.neutral;
 
   return (
     <section
@@ -103,25 +80,27 @@ export default function KpiCard({
         </span>
       </header>
 
-      <footer style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: theme.spacing.sm }}>
+      <footer style={{ display: "grid", gap: theme.spacing.xs }}>
         <span
           style={{
             display: "inline-flex",
             alignItems: "center",
-            gap: theme.spacing.xs,
             borderRadius: "999px",
-            border: `1px solid ${trendTone.border}`,
-            background: trendTone.background,
-            color: trendTone.color,
+            border: `1px solid ${tone}33`,
+            background: `${tone}14`,
+            color: tone,
             fontSize: "0.78rem",
             fontWeight: 700,
-            padding: `${theme.spacing.xs} ${theme.spacing.sm}`
+            padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+            width: "fit-content"
           }}
         >
-          {trend === "up" ? "+" : trend === "down" ? "-" : "="} {variacao || "Sem variacao"}
+          {variacao || "Sem variacao"}
         </span>
 
-        <small style={{ color: theme.colors.muted, fontSize: "0.78rem" }}>{trendTone.label}</small>
+        {descricao ? (
+          <small style={{ color: theme.colors.muted, fontSize: "0.78rem", lineHeight: 1.4 }}>{descricao}</small>
+        ) : null}
       </footer>
     </section>
   );
