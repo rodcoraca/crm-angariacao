@@ -4,6 +4,7 @@ import { useTheme } from "../theme/ThemeContext";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import Card from "../components/ui/Card";
+import { registrarLogin } from "../modules/audit/services";
 
 export default function Login({ setUser, onLogin }) {
   const theme = useTheme();
@@ -46,6 +47,18 @@ export default function Login({ setUser, onLogin }) {
         username: data.username,
       },
     };
+
+    await registrarLogin({
+      userId: data.id,
+      empresaId: data.empresa_id || null,
+      modulo: "auth",
+      entidade: "usuarios",
+      entidadeId: data.id,
+      metadata: {
+        username: data.username || null,
+        email: data.email || null
+      }
+    });
 
     (setUser || onLogin)?.(usuarioSessao);
   }

@@ -1,11 +1,11 @@
 ﻿import { useState } from "react";
-import { temAcesso } from "../utils/usuarios";
 import { useTheme } from "../theme/ThemeContext";
 import SidebarLogo from "./SidebarLogo";
 import SidebarToggle from "./SidebarToggle";
 import SidebarItem from "./SidebarItem";
 import SidebarGroup from "./SidebarGroup";
 import SidebarLogout from "./SidebarLogout";
+import { getRequiredPermission, hasPermission } from "../modules/auth/services";
 
 export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, onSelectLogsView }) {
   const theme = useTheme();
@@ -14,8 +14,23 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
   const [menuEstoqueAberto, setMenuEstoqueAberto] = useState(true);
   const [menuGestaoAberto, setMenuGestaoAberto] = useState(true);
   const [menuLogsAberto, setMenuLogsAberto] = useState(true);
+  const [menuAdministracaoAberto, setMenuAdministracaoAberto] = useState(true);
+  const [menuDocumentacaoAberto, setMenuDocumentacaoAberto] = useState(true);
 
-  const podeVer = (modulo) => temAcesso(perfil, modulo);
+  const podeVerRota = (viewKey) => {
+    const requiredPermission = getRequiredPermission(viewKey);
+    return hasPermission(perfil, requiredPermission);
+  };
+
+  const podeVer = (permissionCode) => hasPermission(perfil, permissionCode);
+  const podeVerAdministracao = [
+    "admin_docs_arquitetura",
+    "admin_docs_banco_dados",
+    "admin_docs_roadmap",
+    "admin_docs_saas",
+    "admin_docs_seguranca",
+    "admin_docs_changelog"
+  ].some((modulo) => podeVerRota(modulo));
 
   function handleSelectView(view) {
     setActiveView(view);
@@ -73,21 +88,37 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
       </div>
 
       <div style={menuList}>
-        {(() => {
+        {podeVerRota("home") ? (() => {
           const menuStyles = getMenuStyles(activeView === "home");
           return (
-        <SidebarItem
-          collapsed={collapsed}
-          onClick={() => handleSelectView("home")}
-          style={menuStyles.style}
-          collapsedStyle={menuStyles.collapsedStyle}
-        >
-          {collapsed ? "I" : "Início"}
-        </SidebarItem>
+            <SidebarItem
+              collapsed={collapsed}
+              onClick={() => handleSelectView("home")}
+              style={menuStyles.style}
+              collapsedStyle={menuStyles.collapsedStyle}
+            >
+              {collapsed ? "I" : "Início"}
+            </SidebarItem>
           );
-        })()}
+        })() : null}
 
-        {podeVer('fluxo') ? (
+        {podeVerRota("radar") ? (
+          (() => {
+            const menuStyles = getMenuStyles(activeView === "radar");
+            return (
+              <SidebarItem
+                collapsed={collapsed}
+                onClick={() => handleSelectView("radar")}
+                style={menuStyles.style}
+                collapsedStyle={menuStyles.collapsedStyle}
+              >
+                {collapsed ? "R" : "Radar"}
+              </SidebarItem>
+            );
+          })()
+        ) : null}
+
+        {podeVerRota('fluxo') ? (
           (() => {
             const menuStyles = getMenuStyles(activeView === "fluxo");
             return (
@@ -103,7 +134,7 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
           })()
         ) : null}
 
-        {podeVer('dashboard') || podeVer('quente') || podeVer('morno') || podeVer('frio') ? (
+        {podeVerRota('dashboard') || podeVerRota('quente') || podeVerRota('morno') || podeVerRota('frio') ? (
           <>
             {(() => {
               const isLeadsActive = ["dashboard", "quente", "morno", "frio"].includes(activeView);
@@ -121,16 +152,16 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
             })()}
             {menuLeadsAberto && !collapsed && (
               <div style={subMenu}>
-                {podeVer('dashboard') ? <SidebarItem style={getSubMenuStyle(activeView === "dashboard")} onClick={() => handleSelectView("dashboard")}>Todos</SidebarItem> : null}
-                {podeVer('quente') ? <SidebarItem style={getSubMenuStyle(activeView === "quente")} onClick={() => handleSelectView("quente")}>Quentes</SidebarItem> : null}
-                {podeVer('morno') ? <SidebarItem style={getSubMenuStyle(activeView === "morno")} onClick={() => handleSelectView("morno")}>Mornos</SidebarItem> : null}
-                {podeVer('frio') ? <SidebarItem style={getSubMenuStyle(activeView === "frio")} onClick={() => handleSelectView("frio")}>Frios</SidebarItem> : null}
+                {podeVerRota('dashboard') ? <SidebarItem style={getSubMenuStyle(activeView === "dashboard")} onClick={() => handleSelectView("dashboard")}>Todos</SidebarItem> : null}
+                {podeVerRota('quente') ? <SidebarItem style={getSubMenuStyle(activeView === "quente")} onClick={() => handleSelectView("quente")}>Quentes</SidebarItem> : null}
+                {podeVerRota('morno') ? <SidebarItem style={getSubMenuStyle(activeView === "morno")} onClick={() => handleSelectView("morno")}>Mornos</SidebarItem> : null}
+                {podeVerRota('frio') ? <SidebarItem style={getSubMenuStyle(activeView === "frio")} onClick={() => handleSelectView("frio")}>Frios</SidebarItem> : null}
               </div>
             )}
           </>
         ) : null}
 
-        {podeVer('estoque_np') ? (
+        {podeVerRota('estoque_np') ? (
           <>
             {(() => {
               const menuStyles = getMenuStyles(activeView === "estoque_np");
@@ -153,7 +184,7 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
           </>
         ) : null}
 
-        {podeVer('mensagens') ? (
+        {podeVerRota('mensagens') ? (
           (() => {
             const menuStyles = getMenuStyles(activeView === "mensagens");
             return (
@@ -169,7 +200,53 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
           })()
         ) : null}
 
-        {(podeVer('usuarios') || podeVer('logs')) && (
+        {podeVerAdministracao ? (
+          <>
+            {(() => {
+              const isAdministracaoActive = [
+                "admin_documentacao",
+                "admin_docs_arquitetura",
+                "admin_docs_banco_dados",
+                "admin_docs_roadmap",
+                "admin_docs_saas",
+                "admin_docs_seguranca",
+                "admin_docs_changelog"
+              ].includes(activeView);
+              const menuStyles = getMenuStyles(isAdministracaoActive);
+              return (
+                <SidebarItem
+                  collapsed={collapsed}
+                  onClick={() => setMenuAdministracaoAberto((v) => !v)}
+                  style={menuStyles.style}
+                  collapsedStyle={menuStyles.collapsedStyle}
+                >
+                  {collapsed ? "A" : `Administração ${menuAdministracaoAberto ? "▾" : "▸"}`}
+                </SidebarItem>
+              );
+            })()}
+
+            {menuAdministracaoAberto && !collapsed && (
+              <div style={subMenu}>
+                <SidebarItem style={getSubMenuStyle(activeView.startsWith("admin_docs_"))} onClick={() => setMenuDocumentacaoAberto((v) => !v)}>
+                  Documentação {menuDocumentacaoAberto ? "▾" : "▸"}
+                </SidebarItem>
+
+                {menuDocumentacaoAberto ? (
+                  <div style={nestedSubMenu}>
+                    {podeVerRota("admin_docs_arquitetura") ? <SidebarItem style={getSubMenuStyle(activeView === "admin_docs_arquitetura", true)} onClick={() => handleSelectView("admin_docs_arquitetura")}>Arquitetura</SidebarItem> : null}
+                    {podeVerRota("admin_docs_banco_dados") ? <SidebarItem style={getSubMenuStyle(activeView === "admin_docs_banco_dados", true)} onClick={() => handleSelectView("admin_docs_banco_dados")}>Banco de Dados</SidebarItem> : null}
+                    {podeVerRota("admin_docs_roadmap") ? <SidebarItem style={getSubMenuStyle(activeView === "admin_docs_roadmap", true)} onClick={() => handleSelectView("admin_docs_roadmap")}>Roadmap</SidebarItem> : null}
+                    {podeVerRota("admin_docs_saas") ? <SidebarItem style={getSubMenuStyle(activeView === "admin_docs_saas", true)} onClick={() => handleSelectView("admin_docs_saas")}>SaaS</SidebarItem> : null}
+                    {podeVerRota("admin_docs_seguranca") ? <SidebarItem style={getSubMenuStyle(activeView === "admin_docs_seguranca", true)} onClick={() => handleSelectView("admin_docs_seguranca")}>Segurança</SidebarItem> : null}
+                    {podeVerRota("admin_docs_changelog") ? <SidebarItem style={getSubMenuStyle(activeView === "admin_docs_changelog", true)} onClick={() => handleSelectView("admin_docs_changelog")}>Changelog</SidebarItem> : null}
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </>
+        ) : null}
+
+        {(podeVerRota('usuarios') || podeVerRota('logs')) && (
           <>
             {(() => {
               const isGestaoActive = ["usuarios", "logs"].includes(activeView);
@@ -187,8 +264,8 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
             })()}
             {menuGestaoAberto && !collapsed && (
               <div style={subMenu}>
-                {podeVer('usuarios') ? <SidebarItem style={getSubMenuStyle(activeView === "usuarios")} onClick={() => handleSelectView("usuarios")}>Utilizadores</SidebarItem> : null}
-                {podeVer('logs') ? (
+                {podeVerRota('usuarios') ? <SidebarItem style={getSubMenuStyle(activeView === "usuarios")} onClick={() => handleSelectView("usuarios")}>Utilizadores</SidebarItem> : null}
+                {podeVerRota('logs') ? (
                   <>
                     <SidebarItem style={getSubMenuStyle(activeView === "logs")} onClick={() => setMenuLogsAberto((v) => !v)}>
                       Logs {menuLogsAberto ? "▾" : "▸"}

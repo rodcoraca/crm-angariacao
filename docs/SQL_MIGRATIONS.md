@@ -4,10 +4,10 @@
 Estabelecer este documento como o repositório oficial de todas as migrações SQL da plataforma OSFlow, centralizando o histórico estrutural da base de dados e a preparação das futuras alterações.
 
 ## Última revisão
-2026-07-04
+2026-07-05
 
 ## Versão do documento
-1.1.0
+1.2.0
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -65,7 +65,12 @@ Cada migração deverá possuir, no mínimo, os seguintes campos:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | DB-001 |  | Campos de Visita nas Leads | Adição dos campos `data_visita`, `hora_visita`, `local_visita` e `status_visita`. | 🟢 Executada |  |  | Registar referência do script quando disponível. | Registo documental da alteração já considerada executada. |
 | DB-002 |  | Preparação da arquitetura de Utilizadores | Preparação para Perfil, Organização e Preferências. | 🟢 Executada |  | 0.9.0 Beta | Registar referência do script quando disponível. | Estrutura de Utilizadores e Preferências em utilização na plataforma. |
+| DB-006 | 2026-07-05 | Perfis | Estrutura de perfis com ligação a permissões e associação N:N com Utilizadores. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260705_db010_authz_core.sql](../sql/migrations/20260705_db010_authz_core.sql) | Implementação base de perfis (`roles`) e relação `user_roles` preparada para múltiplas empresas. |
 | DB-005 |  | Auditoria | Registo de Login, Logout, Alteração de permissões, Criação de Utilizadores, Eliminação e Eventos críticos. | 🟢 Executada |  | 0.9.0 Beta | Registar referência do script quando disponível. | Registo de logs operacionais e rastreabilidade já em utilização na plataforma. |
+| DB-010 | 2026-07-05 | Núcleo de Autorização (RBAC) | Criação das tabelas `roles`, `permissions`, `role_permissions` e `user_roles` com índices e escopo por `empresa_id`. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260705_db010_authz_core.sql](../sql/migrations/20260705_db010_authz_core.sql) | Infraestrutura de autenticação/autorização preparada para reutilização por todos os módulos sem alteração funcional imediata. |
+| DB-011 | 2026-07-05 | Auditoria Central | Criação da tabela `audit_logs` para eventos automáticos de login, logout, create, update, delete e access_denied. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260705_db011_audit_logs.sql](../sql/migrations/20260705_db011_audit_logs.sql) | Infraestrutura central para trilha de auditoria reutilizável por serviços e módulos. |
+| DB-012 | 2026-07-05 | Seed de Permissões | Inserção idempotente das permissões padrão (`view`, `create`, `edit`, `delete`) para todos os módulos existentes e permissões adicionais de gestão. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260705_db012_permission_seeds.sql](../sql/migrations/20260705_db012_permission_seeds.sql) | Regularização do catálogo de permissões para integração completa com Gestão de Utilizadores e controlo central de acesso. |
+| DB-013 | 2026-07-05 | Hierarquia de Permissões | Adição de colunas `module_name`, `group_key`, `group_name` e `permission_name` na tabela `permissions` para suportar estrutura módulo→grupo→permissão. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260705_db013_permissions_hierarchy_columns.sql](../sql/migrations/20260705_db013_permissions_hierarchy_columns.sql) | Compatibilidade preservada com modelo atual (`module`, `action`, `code`) sem remoção de dados. |
 
 ## 4. Migrações Pendentes
 
@@ -79,7 +84,6 @@ Cada migração deverá possuir, no mínimo, os seguintes campos:
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | DB-003 |  | Preparação SaaS | Preparação dos campos `empresa_id`, `role_id`, `departamento_id`, `equipa_id` e `supervisor_id`. | 🔵 Planeada |  |  | Documentar antes da execução. | Base estrutural para isolamento organizacional e Multi-Tenant. |
 | DB-004 |  | Sessões de Utilizador | Criação da tabela `user_sessions` com registo de IP, User Agent, Dispositivo, Login, Logout e Última atividade. | 🔵 Planeada |  |  | Documentar antes da execução. | Preparação da camada de sessão e auditoria operacional. |
-| DB-006 |  | Perfis | Tabela de Perfis com ligação por `role_id`. | 🔵 Planeada |  |  | Documentar antes da execução. | Preparação da separação entre Utilizador, permissões e perfis. |
 | DB-007 |  | Empresas | Tabela Empresas para suporte à arquitetura Multi-Tenant. | 🔵 Planeada |  |  | Documentar antes da execução. | Base estrutural para segregação por Empresa. |
 | DB-008 |  | Planos | Planos SaaS: Starter, Professional e Enterprise. | 🔵 Planeada |  |  | Documentar antes da execução. | Preparação da lógica comercial e contratual da plataforma. |
 | DB-009 |  | Assinaturas | Estrutura para Subscrições, Pagamento, Renovação e Estado. | 🔵 Planeada |  |  | Documentar antes da execução. | Suporte à gestão do ciclo de vida de assinatura SaaS. |
@@ -104,6 +108,10 @@ Toda mudança estrutural futura deverá ser documentada aqui antes da implementa
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.2.3 | 2026-07-05 | Engenharia da Plataforma OSFlow | Registo da execução de DB-013 com adaptação hierárquica da tabela `permissions` para módulo, grupo e permissão com retrocompatibilidade. |
+| 1.2.2 | 2026-07-05 | Engenharia da Plataforma OSFlow | Registo da execução de DB-012 com seed idempotente de permissões por módulo (`module.view/create/edit/delete`) e permissões adicionais. |
+| 1.2.1 | 2026-07-05 | Engenharia da Plataforma OSFlow | Registo da execução de DB-011 com infraestrutura de auditoria central (`audit_logs`) e referência de script SQL. |
+| 1.2.0 | 2026-07-05 | Engenharia da Plataforma OSFlow | Registo da execução de DB-006 e DB-010 com criação do núcleo RBAC (`roles`, `permissions`, `role_permissions`, `user_roles`) e referência do script SQL. |
 | 1.1.0 | 2026-07-04 | Engenharia da Plataforma OSFlow | Atualização do estado das migrações para a versão 0.9.0 Beta, marcando como executadas as migrações efetivamente já refletidas na plataforma. |
 | 1.0.0 | 2026-07-03 | Engenharia da Plataforma OSFlow | Consolidação do repositório oficial de migrações SQL com padronização documental e reorganização por estado. |
 

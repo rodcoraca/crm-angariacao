@@ -4,10 +4,10 @@
 Organizar a documentação oficial sobre estrutura de dados, entidades, relacionamentos, convenções e princípios de persistência da plataforma OSFlow.
 
 ## Última revisão
-2026-07-03
+2026-07-05
 
 ## Versão do documento
-1.0.0
+1.1.0
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -61,6 +61,7 @@ Este documento descreve o modelo lógico de dados da plataforma OSFlow e a forma
 | DB-007 | Empresas | Base de isolamento Multi-Tenant. |
 | DB-008 | Planos | Estrutura de planos SaaS. |
 | DB-009 | Assinaturas | Ciclo de vida contratual e financeiro. |
+| DB-010 | Autorização (RBAC) | Perfis, permissões e relações N:N para autorização por módulo e por empresa. |
 
 ## 4. Relacionamentos Nucleares
 
@@ -88,6 +89,7 @@ As seguintes estruturas encontram-se oficialmente previstas, sem implicar implem
 - `user_sessions` para controlo de sessão.
 - estrutura de Auditoria para eventos críticos.
 - estrutura de Perfis ligada por `role_id`.
+- tabelas `roles`, `permissions`, `role_permissions` e `user_roles` com `empresa_id` opcional para escopo multiempresa.
 - estrutura de Empresas, Planos e Assinaturas para SaaS.
 
 ## 7. Rastreabilidade com Migrações SQL
@@ -95,6 +97,8 @@ As seguintes estruturas encontram-se oficialmente previstas, sem implicar implem
 | Documento | Decisão | Migração | Estado |
 | --- | --- | --- | --- |
 | [OSFLOW_ARCHITECTURE.md](./OSFLOW_ARCHITECTURE.md) | DEC-004 | DB-002 | Planeada |
+| [OSFLOW_ARCHITECTURE.md](./OSFLOW_ARCHITECTURE.md) | DEC-004 | DB-006 | Executada |
+| [SECURITY.md](./SECURITY.md) | DEC-005 | DB-010 | Executada |
 | [SECURITY.md](./SECURITY.md) | DEC-005 | DB-004 | Planeada |
 | [SECURITY.md](./SECURITY.md) | DEC-005 | DB-005 | Planeada |
 | [SAAS.md](./SAAS.md) | DEC-007 | DB-007 | Planeada |
@@ -109,6 +113,7 @@ Este documento define a visão lógica oficial da base de dados da OSFlow e deve
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-05 | Engenharia da Plataforma OSFlow | Inclusão do domínio DB-010 (Autorização RBAC), registo das tabelas de perfis/permissões e atualização da rastreabilidade com migrações executadas. |
 | 1.0.0 | 2026-07-03 | Engenharia da Plataforma OSFlow | Consolidação do modelo lógico de dados, convenções e rastreabilidade estrutural. |
 
 ## Próximas Revisões

@@ -7,7 +7,7 @@ const PERFIS_DISPONIVEIS = [
   "Outro",
 ];
 
-export function criarUsuariosViewModel({ form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao, modulos }) {
+export function criarUsuariosViewModel({ form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao, estruturaPermissoes }) {
   const dataCriacao =
     modoEdicao && usuarioSelecionadoMeta?.created_at
       ? new Date(usuarioSelecionadoMeta.created_at).toLocaleString("pt-PT")
@@ -40,7 +40,7 @@ export function criarUsuariosViewModel({ form, perfilOrganizacional, usuarioSele
     },
 
     controloAcesso: {
-      modulos,
+      modulos: estruturaPermissoes,
       permissoes: form.permissoes,
     },
 

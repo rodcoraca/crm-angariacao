@@ -24,6 +24,7 @@ DOC-001
 - [SAAS.md](./SAAS.md)
 - [CHANGELOG.md](./CHANGELOG.md)
 - [DECISIONS.md](./DECISIONS.md)
+- [IMPLEMENTATION_STANDARD.md](./IMPLEMENTATION_STANDARD.md)
 
 ## Índice
 - 1. Introdução
@@ -90,6 +91,11 @@ Repositório oficial das alterações estruturais da base de dados, com históri
 | ID | Data | Título | Estado | Versão | Responsável | Documento relacionado |
 | --- | --- | --- | --- | --- | --- | --- |
 | DB-001 |  | Campos de Visita nas Leads | Executada |  |  | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
+| DB-006 | 2026-07-05 | Perfis | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
+| DB-010 | 2026-07-05 | Núcleo de Autorização (RBAC) | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
+| DB-011 | 2026-07-05 | Auditoria Central | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
+| DB-012 | 2026-07-05 | Seed de Permissões | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
+| DB-013 | 2026-07-05 | Hierarquia de Permissões | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
 | DB-004 |  | Sessões de Utilizador | Planeada |  |  | [SECURITY.md](./SECURITY.md) |
 
 ## 6. Segurança
@@ -189,6 +195,7 @@ Funcionalidades aprovadas mas ainda não implementadas ou sem documentação ded
 | DEC-002 | [DATABASE.md](./DATABASE.md) | DB-003 | CRM-010 Utilizadores | ROAD-002 |
 | DEC-004 | [SECURITY.md](./SECURITY.md) | DB-004 | CRM-010 Utilizadores | ROAD-001 |
 | DEC-005 | [SECURITY.md](./SECURITY.md) | DB-005 | CRM-011 Logs | ROAD-001 |
+| DEC-005 | [SECURITY.md](./SECURITY.md) | DB-010 | CRM-010 Utilizadores | ROAD-001 |
 | DEC-007 | [SAAS.md](./SAAS.md) | DB-007 | SAAS-002 Empresa | ROAD-003 |
 | DEC-008 | [OSFLOW_ARCHITECTURE.md](./OSFLOW_ARCHITECTURE.md) | DB-008 | CRM-006 Cockpit Executivo | ROAD-004 |
 

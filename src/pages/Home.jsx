@@ -20,19 +20,36 @@ import { createCockpitViewModel } from "../modules/cockpit/viewmodels";
 import {
   formatarDescricaoAcao,
   formatarDescricaoAgenda,
-  formatarResumoSaudeImovel,
-  obterNomeUtilizador
+  formatarResumoSaudeImovel
 } from "../modules/cockpit/utils/formatters";
 import "./Home.css";
 
-export default function Home() {
+export default function Home({ user }) {
   const theme = useTheme();
 
   const agora = new Date();
   const hora = agora.getHours();
-  const nomeUtilizador = obterNomeUtilizador();
 
-  const saudacao = hora < 12 ? "Bom dia" : hora < 18 ? "Boa tarde" : "Boa noite";
+  function obterNomeApelidoUtilizadorAutenticado() {
+    const nome = (user?.user_metadata?.nome || "").trim();
+    const apelido = (user?.user_metadata?.apelido || "").trim();
+
+    if (nome || apelido) return `${nome} ${apelido}`.trim();
+
+    const fullName = (user?.user_metadata?.full_name || user?.user_metadata?.name || "").trim();
+    return fullName;
+  }
+
+  function obterSaudacaoPorPeriodo(h) {
+    if (h >= 0 && h <= 11) return "Bom dia";
+    if (h >= 12 && h <= 18) return "Boa tarde";
+    return "Boa noite";
+  }
+
+  const nomeUtilizador = obterNomeApelidoUtilizadorAutenticado();
+  const saudacao = nomeUtilizador
+    ? `${obterSaudacaoPorPeriodo(hora)}, ${nomeUtilizador}`
+    : "Bem-vindo.";
   const dataAtual = agora.toLocaleDateString("pt-PT", {
     weekday: "long",
     day: "2-digit",
@@ -40,12 +57,7 @@ export default function Home() {
     year: "numeric"
   });
 
-  const mensagemDinamica =
-    hora < 12
-      ? "Hoje e um excelente dia para gerar novos negocios."
-      : hora < 18
-        ? "A tarde esta perfeita para acelerar o funil comercial."
-        : "Feche o dia com foco nas prioridades operacionais.";
+  const mensagemInstitucional = "Organize toda a sua operação imobiliária num único lugar.";
 
   const {
     kpis,
@@ -137,14 +149,12 @@ export default function Home() {
       {/* ARQ-COCKPIT: TOPO - bind futuro com dados de sessao (usuarios) e configuracao de mensagens. */}
       <Card style={styles.hero}>
         <div style={styles.topRow}>
-          <p style={styles.saudacao}>
-            {saudacao}, {nomeUtilizador}
-          </p>
+          <p style={styles.saudacao}>{saudacao}</p>
           <Badge variant="primary">{dataAtual}</Badge>
         </div>
 
         <h1 style={styles.title}>Cockpit Executivo OSFlow</h1>
-        <p style={styles.subtitle}>{mensagemDinamica}</p>
+        <p style={styles.subtitle}>{mensagemInstitucional}</p>
       </Card>
 
       {/* ARQ-COCKPIT: KPIs - integrar agregacoes de leads/logs/imoveis mantendo contrato visual do KpiCard. */}

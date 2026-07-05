@@ -2,6 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from '../supabase';
 import { MODULOS, normalizarPermissoes } from '../utils/usuarios';
 import { useTheme } from '../theme/ThemeContext';
+import { usePermissions } from '../modules/auth/hooks';
+import { PERMISSION_MODULES } from '../modules/auth/services/permissionCatalog';
+import { registrarAcessoNegado, registrarCriacao, registrarEdicao } from '../modules/audit/services';
 import UserPersonalSection from '../components/users/UserPersonalSection';
 import UserAccountSection from '../components/users/UserAccountSection';
 import UserProfileSection from '../components/users/UserProfileSection';
@@ -13,6 +16,7 @@ import { criarUsuariosViewModel } from '../viewmodels/usuariosViewModel';
 
 export default function Usuarios({ currentUser }) {
   const theme = useTheme();
+  const { can } = usePermissions();
   const [usuarios, setUsuarios] = useState([]);
   // Arquitetura SaaS (futuro): quando houver persistencia multi-tenant,
   // este estado/formulario deve passar a acomodar identificadores de contexto organizacional:
@@ -76,19 +80,60 @@ export default function Usuarios({ currentUser }) {
   }
 
   function alternarModulo(modulo) {
+    const moduloConfigurado = PERMISSION_MODULES.find((item) => item.key === modulo);
+    if (!moduloConfigurado) return;
+
+    const permissionCodes = moduloConfigurado.groups.flatMap((grupo) => grupo.permissions.map((permission) => permission.code));
+    const allSelected = permissionCodes.every((code) => form.permissoes?.[code]);
+
+    setForm((prev) => {
+      const next = { ...prev.permissoes };
+      permissionCodes.forEach((code) => {
+        next[code] = !allSelected;
+      });
+
+      return {
+        ...prev,
+        permissoes: next,
+      };
+    });
+  }
+
+  function alternarGrupo(moduloKey, grupoKey) {
+    const moduloConfigurado = PERMISSION_MODULES.find((item) => item.key === moduloKey);
+    const grupo = moduloConfigurado?.groups?.find((item) => item.key === grupoKey);
+    if (!grupo) return;
+
+    const permissionCodes = grupo.permissions.map((permission) => permission.code);
+    const allSelected = permissionCodes.every((code) => form.permissoes?.[code]);
+
+    setForm((prev) => ({
+      ...prev,
+      permissoes: permissionCodes.reduce((acc, code) => {
+        acc[code] = !allSelected;
+        return acc;
+      }, { ...prev.permissoes }),
+    }));
+  }
+
+  function alternarPermissao(permissao) {
     setForm((prev) => ({
       ...prev,
       permissoes: {
         ...prev.permissoes,
-        [modulo]: !prev.permissoes?.[modulo],
+        [permissao]: !prev.permissoes?.[permissao],
       },
     }));
   }
 
   function alternarTodos() {
-    const todosAtivos = MODULOS.every((modulo) => form.permissoes?.[modulo.key]);
-    const next = MODULOS.reduce((acc, modulo) => {
-      acc[modulo.key] = !todosAtivos;
+    const permissionCodes = PERMISSION_MODULES.flatMap((modulo) =>
+      modulo.groups.flatMap((grupo) => grupo.permissions.map((permission) => permission.code))
+    );
+
+    const todosAtivos = permissionCodes.every((permissionCode) => form.permissoes?.[permissionCode]);
+    const next = permissionCodes.reduce((acc, permissionCode) => {
+      acc[permissionCode] = !todosAtivos;
       return acc;
     }, {});
     setForm((prev) => ({ ...prev, permissoes: next }));
@@ -96,6 +141,24 @@ export default function Usuarios({ currentUser }) {
 
   async function guardarUsuario() {
     setErro('');
+
+    const requiredPermission = modoEdicao ? 'users.edit' : 'users.create';
+    if (!can(requiredPermission)) {
+      setErro('Sem permissão para executar esta ação.');
+      await registrarAcessoNegado({
+        userId: currentUser?.id || null,
+        empresaId: currentUser?.user_metadata?.empresa_id || null,
+        modulo: 'users',
+        entidade: 'usuarios',
+        entidadeId: usuarioSelecionadoId || null,
+        metadata: {
+          requiredPermission,
+          action: modoEdicao ? 'update_user' : 'create_user'
+        }
+      });
+      return;
+    }
+
     if (!form.nome || !form.email || !form.username) {
       setErro('Preencha os campos obrigatórios.');
       return;
@@ -143,6 +206,24 @@ export default function Usuarios({ currentUser }) {
       return;
     }
 
+    const auditoriaBase = {
+      userId: currentUser?.id || null,
+      empresaId: currentUser?.user_metadata?.empresa_id || null,
+      modulo: 'users',
+      entidade: 'usuarios',
+      entidadeId: usuarioSelecionadoId || null,
+      metadata: {
+        perfilOrganizacional,
+        permissoesSelecionadas: Object.keys(normalizarPermissoes(form.permissoes)).filter((key) => normalizarPermissoes(form.permissoes)[key])
+      }
+    };
+
+    if (modoEdicao) {
+      await registrarEdicao(auditoriaBase);
+    } else {
+      await registrarCriacao(auditoriaBase);
+    }
+
     resetForm();
     carregarUsuarios();
   }
@@ -180,7 +261,7 @@ export default function Usuarios({ currentUser }) {
         perfilOrganizacional,
         usuarioSelecionadoMeta,
         modoEdicao,
-        modulos: MODULOS,
+        estruturaPermissoes: PERMISSION_MODULES,
       }),
     [form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao]
   );
@@ -365,6 +446,8 @@ export default function Usuarios({ currentUser }) {
           <UserAccessSection
             controloAcesso={utilizadorVM.controloAcesso}
             onToggleModulo={alternarModulo}
+            onToggleGrupo={alternarGrupo}
+            onTogglePermissao={alternarPermissao}
             onToggleTodos={alternarTodos}
             styles={styles}
           />
