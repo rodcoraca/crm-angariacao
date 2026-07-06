@@ -228,7 +228,7 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
             {menuAdministracaoAberto && !collapsed && (
               <div style={subMenu}>
                 <SidebarItem style={getSubMenuStyle(activeView.startsWith("admin_docs_"))} onClick={() => setMenuDocumentacaoAberto((v) => !v)}>
-                  Documentação {menuDocumentacaoAberto ? "▾" : "▸"}
+                  Documentos {menuDocumentacaoAberto ? "▾" : "▸"}
                 </SidebarItem>
 
                 {menuDocumentacaoAberto ? (
@@ -268,11 +268,11 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
                 {podeVerRota('logs') ? (
                   <>
                     <SidebarItem style={getSubMenuStyle(activeView === "logs")} onClick={() => setMenuLogsAberto((v) => !v)}>
-                      Logs {menuLogsAberto ? "▾" : "▸"}
+                      Auditoria {menuLogsAberto ? "▾" : "▸"}
                     </SidebarItem>
                     {menuLogsAberto ? (
                       <div style={nestedSubMenu}>
-                        <SidebarItem style={getSubMenuStyle(activeView === "logs", true)} onClick={() => handleSelectLogsView('geral')}>Lista de logs</SidebarItem>
+                        <SidebarItem style={getSubMenuStyle(activeView === "logs", true)} onClick={() => handleSelectLogsView('geral')}>Lista de auditoria</SidebarItem>
                         <SidebarItem style={getSubMenuStyle(activeView === "logs", true)} onClick={() => handleSelectLogsView('utilizadores')}>Por utilizador</SidebarItem>
                       </div>
                     ) : null}

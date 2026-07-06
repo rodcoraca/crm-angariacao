@@ -1,32 +1,12 @@
-import { supabase } from "../../../supabase";
+import { queryCountLeadsByStatus } from "../repositories";
 import { countRows } from "./sharedQueries";
 
 export async function fetchCockpitPipeline() {
   const [novoCount, contactadoCount, agendadoCount, fechadoCount] = await Promise.all([
-    countRows(
-      supabase
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "novo")
-    ),
-    countRows(
-      supabase
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "contactado")
-    ),
-    countRows(
-      supabase
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "agendado")
-    ),
-    countRows(
-      supabase
-        .from("leads")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "fechado")
-    )
+    countRows(queryCountLeadsByStatus("novo")),
+    countRows(queryCountLeadsByStatus("contactado")),
+    countRows(queryCountLeadsByStatus("agendado")),
+    countRows(queryCountLeadsByStatus("fechado"))
   ]);
 
   return {

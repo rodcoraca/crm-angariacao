@@ -1,22 +1,28 @@
-﻿import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
-import { normalizarTelefone, validarTelefone, telefonesCoincidem } from "./telefone";
+﻿import { useMemo } from "react";
 import { useTheme } from "./theme/ThemeContext";
 import { formatarNomeApresentacao } from "./utils/nomes";
 import Button from "./components/Button";
 import Input from "./Input";
 import Card from "./components/Card";
+import { useFichaLead } from "./modules/leads/hooks";
+import { badgeTipoFicha, labelTipoLead } from "./modules/leads/viewmodels";
 
 export default function FichaLead({ leadId, user, voltar }) {
   const theme = useTheme();
-  const [lead, setLead] = useState(null);
-  const [form, setForm] = useState(null);
-  const [agentes, setAgentes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [salvando, setSalvando] = useState(false);
-  const [telefoneErro, setTelefoneErro] = useState("");
+  const {
+    lead,
+    form,
+    agentes,
+    loading,
+    salvando,
+    telefoneErro,
+    atualizar,
+    handleTelefoneChange,
+    nomeAgente,
+    salvar
+  } = useFichaLead({ leadId, user, voltar });
 
-  const styles = {
+  const styles = useMemo(() => ({
     container: {
       position: "relative",
       background: theme.colors.surface,
@@ -121,173 +127,12 @@ export default function FichaLead({ leadId, user, voltar }) {
       color: theme.colors.muted,
       fontSize: "1rem"
     }
-  };
-
-  useEffect(() => {
-    carregarFicha();
-  }, [leadId]);
-
-  async function carregarFicha() {
-    setLoading(true);
-
-    const { data, error } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("id", leadId)
-      .single();
-
-    if (error) {
-      alert(error.message);
-      setLoading(false);
-      return;
-    }
-
-    setLead(data);
-    setForm({
-      nome: data.nome || "",
-      telefone: data.telefone || "",
-      tipo: data.tipo || "morno",
-      origem: data.origem || "",
-      observacoes: data.observacoes || "",
-      status: data.status || "novo",
-      agente_id: data.agente_id || ""
-    });
-
-    await carregarAgentes(data.agente_id);
-    setLoading(false);
-  }
-
-  async function carregarAgentes(agenteAtualId) {
-    const { data, error } = await supabase
-      .from("agentes")
-      .select("id,nome,email,ativo")
-      .eq("ativo", true)
-      .order("nome", { ascending: true });
-
-    if (!error && data?.length) {
-      setAgentes(data.map((a) => ({
-        id: a.id,
-        nome: a.nome || a.email || a.id,
-        email: a.email || ""
-      })));
-      return;
-    }
-
-    const { data: leadsData } = await supabase
-      .from("leads")
-      .select("agente_id")
-      .not("agente_id", "is", null);
-
-    const ids = [...new Set((leadsData || []).map((l) => l.agente_id).filter(Boolean))];
-    if (agenteAtualId && !ids.includes(agenteAtualId)) ids.push(agenteAtualId);
-    if (user?.id && !ids.includes(user.id)) ids.push(user.id);
-
-    setAgentes(ids.map((id) => ({
-      id,
-      nome: id === user?.id ? nomeUtilizadorAtual() : "Agente validado",
-      email: id === user?.id ? user?.email || "" : id
-    })));
-  }
-
-  function atualizar(campo, valor) {
-    setForm((prev) => ({ ...prev, [campo]: valor }));
-  }
-
-  function handleTelefoneChange(valor) {
-    const telefoneNormalizado = normalizarTelefone(valor);
-    setForm((prev) => ({ ...prev, telefone: telefoneNormalizado }));
-
-    if (!telefoneNormalizado) {
-      setTelefoneErro("");
-      return;
-    }
-
-    setTelefoneErro(
-      validarTelefone(telefoneNormalizado)
-        ? ""
-        : "Informe o telefone com 12 dígitos (indicativo + 9 dígitos)."
-    );
-  }
-
-  function nomeUtilizadorAtual() {
-    return user?.user_metadata?.nome ||
-      user?.user_metadata?.name ||
-      user?.user_metadata?.full_name ||
-      user?.email ||
-      "Agente atual";
-  }
-
-  function nomeAgente(id) {
-    const agente = agentes.find((a) => a.id === id);
-    if (agente) return formatarNomeApresentacao(agente.nome);
-    if (id === user?.id) return formatarNomeApresentacao(nomeUtilizadorAtual());
-    return id || "Sem agente";
-  }
-
-  async function salvar() {
-    setSalvando(true);
-
-    const telefoneNormalizado = normalizarTelefone(form.telefone);
-
-    if (!validarTelefone(telefoneNormalizado)) {
-      setSalvando(false);
-      alert("Informe o telefone com 12 dígitos (indicativo + 9 dígitos).");
-      return;
-    }
-
-    const { data: leadsDuplicadas, error: erroDuplicado } = await supabase
-      .from("leads")
-      .select("id, telefone")
-      .neq("id", leadId)
-      .order("created_at", { ascending: false });
-
-    if (erroDuplicado) {
-      setSalvando(false);
-      alert(erroDuplicado.message);
-      return;
-    }
-
-    const leadDuplicado = leadsDuplicadas?.find((lead) => telefonesCoincidem(telefoneNormalizado, lead.telefone));
-
-    if (leadDuplicado) {
-      setSalvando(false);
-      alert("Já existe uma lead cadastrada com este telefone.");
-      return;
-    }
-
-    const { error } = await supabase
-      .from("leads")
-      .update({
-        nome: form.nome,
-        telefone: telefoneNormalizado,
-        tipo: form.tipo,
-        origem: form.origem,
-        observacoes: form.observacoes,
-        status: form.status,
-        agente_id: form.agente_id || null,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", leadId);
-
-    setSalvando(false);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    alert("Ficha da lead atualizada!");
-    voltar?.();
-  }
+  }), [theme]);
 
   if (loading) return <Card style={styles.loading}>A carregar ficha...</Card>;
   if (!lead || !form) return <Card style={styles.loading}>Lead não encontrada.</Card>;
 
-  const badgeType = {
-    quente: { background: "#dcfce7", color: "#166534" },
-    morno: { background: "#fef9c3", color: "#92400e" },
-    frio: { background: "#fee2e2", color: "#991b1b" }
-  }[form.tipo] || { background: theme.colors.surfaceSoft, color: theme.colors.text };
+  const badgeType = badgeTipoFicha(theme, form.tipo);
 
   return (
     <Card style={styles.container}>
@@ -297,7 +142,7 @@ export default function FichaLead({ leadId, user, voltar }) {
           <p style={styles.headerSubtitle}>Criada em {formatarData(lead.created_at)}</p>
         </div>
 
-        <span style={{ ...styles.badge, ...badgeType }}>{labelTipo(form.tipo)}</span>
+        <span style={{ ...styles.badge, ...badgeType }}>{labelTipoLead(form.tipo)}</span>
       </div>
 
       <div style={styles.infoBox}>
@@ -381,10 +226,4 @@ export default function FichaLead({ leadId, user, voltar }) {
 function formatarData(data) {
   if (!data) return "-";
   return new Date(data).toLocaleString("pt-PT");
-}
-
-function labelTipo(tipo) {
-  if (tipo === "quente") return "Quente";
-  if (tipo === "morno") return "Morno";
-  return "Frio";
 }

@@ -65,7 +65,7 @@ export default function AdministracaoDocumentacao({ selectedDoc = "arquitetura" 
     <div style={styles.page}>
       <Card style={styles.hero}>
         <Badge variant="primary" style={{ width: "fit-content" }}>Administração</Badge>
-        <h1 style={styles.title}>Documentação</h1>
+        <h1 style={styles.title}>Documentos</h1>
         <p style={styles.subtitle}>
           Área institucional de referência documental da OSFlow para arquitetura, produto,
           segurança e evolução estratégica da plataforma.

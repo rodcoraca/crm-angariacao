@@ -10,31 +10,14 @@ export async function fetchRows(query) {
   return data || [];
 }
 
-export async function fetchLeadsConfirmacaoVisitas(supabaseClient, limite) {
-  const camposComDataVisita = "id,nome,telefone,created_at,data_visita,hora_visita,local_visita,status_visita";
-  const camposSemDataVisita = "id,nome,telefone,created_at,hora_visita,local_visita,status_visita";
+export async function fetchLeadsConfirmacaoVisitas({ queryComData, querySemData, limite }) {
 
   let base = [];
 
   try {
-    base = await fetchRows(
-      supabaseClient
-        .from("leads")
-        .select(camposComDataVisita)
-        .eq("status", "agendado")
-        .order("data_visita", { ascending: true, nullsFirst: false })
-        .order("created_at", { ascending: true })
-        .limit(50)
-    );
+    base = await fetchRows(queryComData);
   } catch {
-    base = await fetchRows(
-      supabaseClient
-        .from("leads")
-        .select(camposSemDataVisita)
-        .eq("status", "agendado")
-        .order("created_at", { ascending: true })
-        .limit(50)
-    );
+    base = await fetchRows(querySemData);
   }
 
   return [...base]

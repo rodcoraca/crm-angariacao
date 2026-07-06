@@ -1,3 +1,5 @@
+import { hasPermission as hasCompatiblePermission } from "./legacyPermissionCompatibility";
+
 export const PROTECTED_VIEW_RULES = {
   home: { permission: "crm.view" },
   radar: { permission: "radar.view" },
@@ -19,125 +21,8 @@ export const PROTECTED_VIEW_RULES = {
   admin_docs_changelog: { permission: "docs.changelog.view" }
 };
 
-const LEGACY_PERMISSION_MAP = {
-  "crm.view": ["fluxo"],
-  "crm.create": ["fluxo"],
-  "crm.edit": ["fluxo"],
-  "crm.delete": ["fluxo"],
-  "dashboard.view": ["dashboard"],
-  "dashboard.create": ["dashboard"],
-  "dashboard.edit": ["dashboard"],
-  "dashboard.delete": ["dashboard"],
-  "dashboard.manage": ["dashboard"],
-  "leads.hot.view": ["quente"],
-  "leads.hot.create": ["quente"],
-  "leads.hot.edit": ["quente"],
-  "leads.hot.delete": ["quente"],
-  "leads.warm.view": ["morno"],
-  "leads.warm.create": ["morno"],
-  "leads.warm.edit": ["morno"],
-  "leads.warm.delete": ["morno"],
-  "leads.cold.view": ["frio"],
-  "leads.cold.create": ["frio"],
-  "leads.cold.edit": ["frio"],
-  "leads.cold.delete": ["frio"],
-  "messages.view": ["mensagens"],
-  "messages.create": ["mensagens"],
-  "messages.edit": ["mensagens"],
-  "messages.delete": ["mensagens"],
-  "inventory.view": ["estoque_np"],
-  "inventory.create": ["estoque_np"],
-  "inventory.edit": ["estoque_np"],
-  "inventory.delete": ["estoque_np"],
-  "users.view": ["usuarios"],
-  "users.create": ["usuarios"],
-  "users.edit": ["usuarios"],
-  "users.delete": ["usuarios"],
-  "logs.view": ["logs"],
-  "logs.create": ["logs"],
-  "logs.edit": ["logs"],
-  "logs.delete": ["logs"],
-  "radar.view": ["radar"],
-  "radar.create": ["radar"],
-  "radar.edit": ["radar"],
-  "radar.delete": ["radar"],
-  "settings.view": [
-    "admin_docs_arquitetura",
-    "admin_docs_banco_dados",
-    "admin_docs_roadmap",
-    "admin_docs_saas",
-    "admin_docs_seguranca",
-    "admin_docs_changelog"
-  ],
-  "settings.create": [
-    "admin_docs_arquitetura",
-    "admin_docs_banco_dados",
-    "admin_docs_roadmap",
-    "admin_docs_saas",
-    "admin_docs_seguranca",
-    "admin_docs_changelog"
-  ],
-  "settings.edit": [
-    "admin_docs_arquitetura",
-    "admin_docs_banco_dados",
-    "admin_docs_roadmap",
-    "admin_docs_saas",
-    "admin_docs_seguranca",
-    "admin_docs_changelog"
-  ],
-  "settings.delete": [
-    "admin_docs_arquitetura",
-    "admin_docs_banco_dados",
-    "admin_docs_roadmap",
-    "admin_docs_saas",
-    "admin_docs_seguranca",
-    "admin_docs_changelog"
-  ],
-  "settings.manage": [
-    "admin_docs_arquitetura",
-    "admin_docs_banco_dados",
-    "admin_docs_roadmap",
-    "admin_docs_saas",
-    "admin_docs_seguranca",
-    "admin_docs_changelog"
-  ],
-  "docs.architecture.view": ["admin_docs_arquitetura"],
-  "docs.architecture.create": ["admin_docs_arquitetura"],
-  "docs.architecture.edit": ["admin_docs_arquitetura"],
-  "docs.architecture.delete": ["admin_docs_arquitetura"],
-  "docs.database.view": ["admin_docs_banco_dados"],
-  "docs.database.create": ["admin_docs_banco_dados"],
-  "docs.database.edit": ["admin_docs_banco_dados"],
-  "docs.database.delete": ["admin_docs_banco_dados"],
-  "docs.roadmap.view": ["admin_docs_roadmap"],
-  "docs.roadmap.create": ["admin_docs_roadmap"],
-  "docs.roadmap.edit": ["admin_docs_roadmap"],
-  "docs.roadmap.delete": ["admin_docs_roadmap"],
-  "docs.saas.view": ["admin_docs_saas"],
-  "docs.saas.create": ["admin_docs_saas"],
-  "docs.saas.edit": ["admin_docs_saas"],
-  "docs.saas.delete": ["admin_docs_saas"],
-  "docs.security.view": ["admin_docs_seguranca"],
-  "docs.security.create": ["admin_docs_seguranca"],
-  "docs.security.edit": ["admin_docs_seguranca"],
-  "docs.security.delete": ["admin_docs_seguranca"],
-  "docs.changelog.view": ["admin_docs_changelog"]
-  ,"docs.changelog.create": ["admin_docs_changelog"]
-  ,"docs.changelog.edit": ["admin_docs_changelog"]
-  ,"docs.changelog.delete": ["admin_docs_changelog"]
-};
-
 export function hasPermission(perfil, requiredPermission) {
-  if (!requiredPermission) return true;
-
-  const permissions = perfil?.permissoes || {};
-
-  if (Boolean(permissions[requiredPermission])) return true;
-
-  const legacyPermissions = LEGACY_PERMISSION_MAP[requiredPermission] || [];
-  if (legacyPermissions.some((legacyKey) => Boolean(permissions[legacyKey]))) return true;
-
-  return false;
+  return hasCompatiblePermission(perfil, requiredPermission);
 }
 
 export function getRequiredPermission(view) {

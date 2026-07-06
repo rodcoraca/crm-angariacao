@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { supabase } from '../supabase';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { listarTimelineIdentityAccess, listarUtilizadoresIdentityAccess } from '../modules/audit/services';
 
 const PAGE_SIZE = 50;
 
@@ -11,33 +11,21 @@ export default function Logs({ modo = 'geral', onModoChange }) {
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [usuarioSelecionadoId, setUsuarioSelecionadoId] = useState(null);
+  const pageRef = useRef(0);
 
   useEffect(() => {
-    carregarUsuarios();
-  }, []);
+    pageRef.current = page;
+  }, [page]);
 
-  useEffect(() => {
-    setUsuarioSelecionadoId(null);
-    carregarLogs({ reset: true, userId: null });
-  }, [modo]);
-
-  useEffect(() => {
-    if (modo !== 'utilizadores') return;
-    carregarLogs({ reset: true, userId: usuarioSelecionadoId });
-  }, [modo, usuarioSelecionadoId]);
-
-  async function carregarUsuarios() {
-    const { data, error } = await supabase
-      .from('usuarios')
-      .select('id, nome, apelido, email, username')
-      .order('nome', { ascending: true });
+  const carregarUsuarios = useCallback(async () => {
+    const { data, error } = await listarUtilizadoresIdentityAccess();
 
     if (!error) {
       setUsuarios(data || []);
     }
-  }
+  }, []);
 
-  async function carregarLogs({ reset = false, userId = null } = {}) {
+  const carregarLogs = useCallback(async ({ reset = false, userId = null } = {}) => {
     if (reset) {
       setLoading(true);
       setLogs([]);
@@ -47,49 +35,98 @@ export default function Logs({ modo = 'geral', onModoChange }) {
       setLoadingMore(true);
     }
 
-    const targetPage = reset ? 1 : page + 1;
-    const offset = (targetPage - 1) * PAGE_SIZE;
+    const targetPage = reset ? 1 : pageRef.current + 1;
 
-    let query = supabase
-      .from('logs_navegacao')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .range(offset, offset + PAGE_SIZE - 1);
+    const selectedUser = userId
+      ? usuarios.find((usuario) => usuario.id === userId) || null
+      : null;
 
-    if (userId) {
-      query = query.eq('usuario_id', userId);
-    }
-
-    const { data, error } = await query;
+    const { data, error, hasMore: nextHasMore } = await listarTimelineIdentityAccess({
+      page: targetPage,
+      pageSize: PAGE_SIZE,
+      userFilter: selectedUser
+    });
 
     if (!error) {
       const proximoBatch = data || [];
       setLogs((prev) => (reset ? proximoBatch : [...prev, ...proximoBatch]));
-      setHasMore(proximoBatch.length === PAGE_SIZE);
+      setHasMore(Boolean(nextHasMore));
       setPage(targetPage);
     }
 
     setLoading(false);
     setLoadingMore(false);
-  }
+  }, [usuarios]);
+
+  useEffect(() => {
+    carregarUsuarios();
+  }, [carregarUsuarios]);
+
+  useEffect(() => {
+    setUsuarioSelecionadoId(null);
+    carregarLogs({ reset: true, userId: null });
+  }, [carregarLogs, modo, usuarios.length]);
+
+  useEffect(() => {
+    if (modo !== 'utilizadores') return;
+    carregarLogs({ reset: true, userId: usuarioSelecionadoId });
+  }, [carregarLogs, modo, usuarioSelecionadoId]);
 
   function nomeUsuario(usuario) {
     if (!usuario) return 'Utilizador desconhecido';
     return `${usuario.nome || ''} ${usuario.apelido || ''}`.trim() || usuario.email || usuario.username || 'Utilizador desconhecido';
   }
 
-  const usuarioSelecionado = usuarios.find((usuario) => usuario.id === usuarioSelecionadoId) || null;
+  function emailUsuario(usuario) {
+    if (!usuario) return 'Sem email';
+    return usuario.email || usuario.username || 'Sem email';
+  }
+
+  function encontrarUsuarioPorLog(log) {
+    const logUserId = log?.userId || log?.usuario_id || null;
+    if (!logUserId) return null;
+
+    return (
+      usuarios.find((item) => item.id === logUserId) ||
+      usuarios.find((item) => item.auth_user_id === logUserId) ||
+      null
+    );
+  }
+
+  function formatarAcao(log) {
+    if (!log) return 'Alteração';
+
+    if (log.source === 'audit_logs') {
+      return `audit:${log.action || 'evento'}`;
+    }
+
+    if (log.source === 'user_sessions') {
+      return log.action || 'session';
+    }
+
+    return log.action || log.acao || 'Alteração';
+  }
+
+  function formatarDetalhes(log) {
+    if (!log) return 'Sem detalhes';
+    return log.details || log.detalhes || 'Sem detalhes';
+  }
+
+  function formatarData(log) {
+    const raw = log?.createdAt || log?.created_at || null;
+    return raw ? new Date(raw).toLocaleString('pt-PT') : 'Data indisponível';
+  }
 
   return (
     <div style={styles.page}>
       <div style={styles.headerRow}>
-        <h2 style={styles.title}>Logs de navegação</h2>
+        <h2 style={styles.title}>Auditoria</h2>
         <div style={styles.tabs}>
           <button
             style={{ ...styles.tab, ...(modo === 'geral' ? styles.tabActive : {}) }}
             onClick={() => onModoChange?.('geral')}
           >
-            Lista de logs
+            Lista de auditoria
           </button>
           <button
             style={{ ...styles.tab, ...(modo === 'utilizadores' ? styles.tabActive : {}) }}
@@ -112,7 +149,7 @@ export default function Logs({ modo = 'geral', onModoChange }) {
                   onClick={() => setUsuarioSelecionadoId(usuario.id)}
                 >
                   <strong>{nomeUsuario(usuario)}</strong>
-                  <span style={styles.userMeta}>{usuario.email || usuario.username || 'Sem contacto'}</span>
+                  <span style={styles.userMeta}>{emailUsuario(usuario)}</span>
                 </button>
               ))}
             </div>
@@ -126,17 +163,18 @@ export default function Logs({ modo = 'geral', onModoChange }) {
         {modo === 'utilizadores' && !usuarioSelecionadoId ? null : (
           <div style={styles.list}>
             {logs.map((log) => {
-              const usuario = usuarios.find((item) => item.id === log.usuario_id) || null;
+              const usuario = encontrarUsuarioPorLog(log);
               return (
-                <div key={log.id} style={styles.row}>
+                <div key={log.id || `${log.source}_${log.rawId}`} style={styles.row}>
                   <div style={styles.content}>
                     <div style={styles.userLine}>
                       <strong>{nomeUsuario(usuario)}</strong>
-                      <span style={styles.badge}>{log.acao || 'Alteração'}</span>
+                      {usuario ? <span style={styles.userMeta}>{emailUsuario(usuario)}</span> : null}
+                      <span style={styles.badge}>{formatarAcao(log)}</span>
                     </div>
-                    <div style={styles.muted}>{log.detalhes || 'Sem detalhes'}</div>
+                    <div style={styles.muted}>{formatarDetalhes(log)}</div>
                   </div>
-                  <div style={styles.meta}>{new Date(log.created_at).toLocaleString('pt-PT')}</div>
+                  <div style={styles.meta}>{formatarData(log)}</div>
                 </div>
               );
             })}

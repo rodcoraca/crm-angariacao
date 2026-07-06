@@ -5,6 +5,14 @@ import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import Card from "../components/ui/Card";
 import { registrarLogin } from "../modules/audit/services";
+import {
+  createAuthUserFromAdminFlow,
+  loadUserProfileByAuthUserId,
+  resolveLoginEmail,
+  signInWithPassword,
+  signOutAuthSession
+} from "../modules/auth/services";
+import { notifyError, notifySuccess } from "../components/ui/feedbackBus";
 
 export default function Login({ setUser, onLogin }) {
   const theme = useTheme();
@@ -12,97 +20,164 @@ export default function Login({ setUser, onLogin }) {
   const [password, setPassword] = useState("");
   const [modoBootstrap, setModoBootstrap] = useState(false);
   const [bootstrapNome, setBootstrapNome] = useState("");
+  const [bootstrapApelido, setBootstrapApelido] = useState("Admin");
   const [bootstrapEmail, setBootstrapEmail] = useState("");
   const [bootstrapPassword, setBootstrapPassword] = useState("");
 
-  async function login() {
-    const valor = username.trim();
-    if (!valor || !password) {
-      alert("Introduza o utilizador e a password.");
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("usuarios")
-      .select("*")
-      .or(`username.eq.${valor},email.eq.${valor}`)
-      .maybeSingle();
-
-    if (error || !data) {
-      alert("Utilizador ou password inválidos.");
-      return;
-    }
-
-    if (String(data.password_hash) !== String(password)) {
-      alert("Utilizador ou password inválidos.");
-      return;
-    }
-
-    const usuarioSessao = {
-      id: data.id,
-      email: data.email,
+  function montarUsuarioSessao(authUser, perfil) {
+    return {
+      id: authUser.id,
+      auth_user_id: authUser.id,
+      perfil_id: perfil?.id || null,
+      email: authUser.email,
       user_metadata: {
-        nome: data.nome,
-        apelido: data.apelido,
-        username: data.username,
-      },
-    };
-
-    await registrarLogin({
-      userId: data.id,
-      empresaId: data.empresa_id || null,
-      modulo: "auth",
-      entidade: "usuarios",
-      entidadeId: data.id,
-      metadata: {
-        username: data.username || null,
-        email: data.email || null
+        nome: perfil?.nome || authUser.user_metadata?.nome || authUser.user_metadata?.full_name || authUser.user_metadata?.name || "",
+        apelido: perfil?.apelido || authUser.user_metadata?.apelido || "",
+        username: perfil?.username || authUser.user_metadata?.username || authUser.email || "",
+        telefone: perfil?.telefone || authUser.user_metadata?.telefone || "",
+        perfil: authUser.user_metadata?.perfil || ""
       }
-    });
+    };
+  }
 
-    (setUser || onLogin)?.(usuarioSessao);
+  function reportError(error, origem) {
+    // Instrumentacao leve para observabilidade sem quebrar o fluxo principal.
+    console.error(`[${origem}]`, error);
+  }
+
+  async function login() {
+    try {
+      const valor = username.trim();
+      if (!valor || !password) {
+        notifyError("Introduza o utilizador e a password.");
+        return;
+      }
+
+      const resolved = await resolveLoginEmail(valor);
+      const emailAutenticacao = resolved?.email || valor;
+
+      const { data, error } = await signInWithPassword({
+        email: emailAutenticacao,
+        password
+      });
+
+      const authUser = data?.user || null;
+
+      if (error || !authUser) {
+        if (error) reportError(error, "Login.signInWithPassword");
+        notifyError("Utilizador ou password inválidos.");
+        return;
+      }
+
+      const { data: perfil, error: perfilError } = await loadUserProfileByAuthUserId(authUser.id);
+      if (perfilError) {
+        reportError(perfilError, "Login.loadUserProfileByAuthUserId");
+        notifyError("Não foi possível carregar o perfil do utilizador.");
+        return;
+      }
+
+      if (!perfil) {
+        notifyError("Conta autenticada, mas sem perfil associado.");
+        await signOutAuthSession();
+        return;
+      }
+
+      const usuarioSessao = montarUsuarioSessao(authUser, perfil);
+
+      try {
+        await registrarLogin({
+          userId: perfil.id || authUser.id,
+          empresaId: perfil.empresa_id || null,
+          userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+          device: typeof navigator !== "undefined" ? /mobile|android|iphone/i.test(navigator.userAgent || "") ? "mobile" : "desktop" : "unknown",
+          modulo: "auth",
+          entidade: "usuarios",
+          entidadeId: perfil.id || authUser.id,
+          metadata: {
+            username: perfil.email || authUser.email || null,
+            email: perfil.email || authUser.email || null
+          }
+        });
+      } catch (error) {
+        reportError(error, "Login.registrarLogin");
+      }
+
+      (setUser || onLogin)?.(usuarioSessao);
+    } catch (error) {
+      reportError(error, "Login.login");
+      notifyError(error?.message || "Ocorreu um erro inesperado no processo de autenticação.");
+      return;
+    }
   }
 
   async function criarPrimeiroAdmin() {
-    if (!bootstrapNome || !bootstrapEmail || !bootstrapPassword) {
-      alert("Preencha nome, email e password para criar o administrador.");
+    try {
+      if (!bootstrapNome || !bootstrapApelido || !bootstrapEmail || !bootstrapPassword) {
+        notifyError("Preencha nome, apelido, email e password para criar o administrador.");
+        return;
+      }
+
+      const { data: existentes } = await supabase.from("usuarios").select("id").limit(1);
+      if ((existentes || []).length > 0) {
+        notifyError("Já existe pelo menos um utilizador registado. Use a área de administração para criar novos.");
+        return;
+      }
+
+      const authCreation = await createAuthUserFromAdminFlow({
+        email: bootstrapEmail,
+        password: bootstrapPassword,
+        metadata: {
+          nome: bootstrapNome,
+          apelido: bootstrapApelido,
+          username: bootstrapEmail.split("@")[0]
+        }
+      });
+
+      const authUser = authCreation?.createdUser || null;
+
+      if (authCreation?.error || !authUser) {
+        if (authCreation?.error) {
+          reportError(authCreation.error, "Login.signUp");
+        }
+        notifyError(authCreation?.error?.message || "Não foi possível criar utilizador no Supabase Auth.");
+        return;
+      }
+
+      const { error: perfilError } = await supabase.from("usuarios").insert([{
+        auth_user_id: authUser.id,
+        nome: bootstrapNome,
+        apelido: bootstrapApelido,
+        email: bootstrapEmail,
+        telefone: "",
+        username: bootstrapEmail.split("@")[0],
+        permissoes: {
+          fluxo: true,
+          dashboard: true,
+          quente: true,
+          morno: true,
+          frio: true,
+          mensagens: true,
+          estoque_np: true,
+          usuarios: true,
+          logs: true,
+        },
+        ativo: true,
+        created_at: new Date().toISOString(),
+      }]);
+
+      if (perfilError) {
+        reportError(perfilError, "Login.criarPrimeiroAdmin.insertPerfil");
+        notifyError(perfilError.message);
+        return;
+      }
+
+      notifySuccess("Administrador criado com sucesso. Pode entrar agora.");
+      setModoBootstrap(false);
+    } catch (error) {
+      reportError(error, "Login.criarPrimeiroAdmin");
+      notifyError(error?.message || "Ocorreu um erro inesperado na criação do administrador.");
       return;
     }
-
-    const { data: existentes } = await supabase.from("usuarios").select("id").limit(1);
-    if ((existentes || []).length > 0) {
-      alert("Já existe pelo menos um utilizador registado. Use o painel de gestão para criar novos.");
-      return;
-    }
-
-    const { error } = await supabase.from("usuarios").insert([{
-      nome: bootstrapNome,
-      apelido: "Admin",
-      email: bootstrapEmail,
-      username: bootstrapEmail.split("@")[0],
-      password_hash: bootstrapPassword,
-      permissoes: {
-        fluxo: true,
-        dashboard: true,
-        quente: true,
-        morno: true,
-        frio: true,
-        mensagens: true,
-        estoque_np: true,
-        usuarios: true,
-        logs: true,
-      },
-      ativo: true,
-      created_at: new Date().toISOString(),
-    }]);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    alert("Administrador criado com sucesso. Pode entrar agora.");
-    setModoBootstrap(false);
   }
 
   return (
@@ -141,6 +216,12 @@ export default function Login({ setUser, onLogin }) {
               style={styles.input}
               placeholder="Nome"
               onChange={(e) => setBootstrapNome(e.target.value)}
+            />
+            <Input
+              style={styles.input}
+              placeholder="Apelido"
+              value={bootstrapApelido}
+              onChange={(e) => setBootstrapApelido(e.target.value)}
             />
             <Input
               style={styles.input}

@@ -4,10 +4,10 @@
 Manter um histórico oficial e organizado das mudanças relevantes da plataforma OSFlow, incluindo marcos documentais, estruturais e evolutivos da Plataforma Operacional.
 
 ## Última revisão
-2026-07-04
+2026-07-06
 
 ## Versão do documento
-1.1.0
+1.2.0
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -45,6 +45,7 @@ O histórico deve utilizar versionamento coerente com a maturidade da plataforma
 
 | Versão | Data | Identificador | Tipo | Descrição |
 | --- | --- | --- | --- | --- |
+| 0.9.1 Beta | 2026-07-06 | CRM-005 | Arquitetura | Homologação do domínio Imóveis para padrão por camadas em `src/modules/imoveis` (repositories, services, hooks, viewmodels e utils), com migração do container `EstoqueNaoPublicitado` para orquestração sem alteração de layout, regras de negócio, comportamento funcional, Cockpit ou módulo Documentos. |
 | 0.9.0 Beta | 2026-07-04 | CRM-004 | Release | OSFlow v0.9.0 Beta (Estado: Beta Interna) com Cockpit Executivo, KPIs Operacionais, Pipeline Comercial, Centro de Ações, Agenda Operacional, Índice de Saúde dos Imóveis, nova arquitetura por camadas, Design System consolidado, documentação técnica e preparação para SaaS. |
 | 0.1.0 | 2026-07-03 | DOC-001 | Documentação | Consolidação da documentação oficial da Sprint 0 e criação do índice principal da plataforma. |
 | 0.1.0 | 2026-07-03 | DOC-002 | Arquitetura | Formalização da arquitetura oficial da Plataforma Operacional OSFlow. |
@@ -91,6 +92,7 @@ Este documento é o histórico oficial de versões da plataforma OSFlow e dever�
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-06 | Engenharia da Plataforma OSFlow | Registo de rastreabilidade da homologação arquitetural do domínio Imóveis (CRM-005) sem alteração funcional de layout/regras/comportamento. |
 | 1.1.0 | 2026-07-04 | Engenharia da Plataforma OSFlow | Atualização oficial para OSFlow v0.9.0 Beta, incluindo estado Beta Interna, funcionalidades concluídas e previsão da próxima versão v0.9.1 Beta. |
 | 1.0.0 | 2026-07-03 | Engenharia da Plataforma OSFlow | Consolidação do changelog oficial com convenção, categorias e histórico inicial da Sprint 0. |
 

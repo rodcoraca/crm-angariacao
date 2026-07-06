@@ -1,19 +1,26 @@
-﻿import { useState, useEffect } from "react";
-import { supabase } from "./supabase";
-import { useTheme } from "./theme/ThemeContext";
+﻿import { useTheme } from "./theme/ThemeContext";
 import Button from "./components/Button";
 import Input from "./Input";
 import Card from "./components/Card";
+import EmptyState from "./components/ui/EmptyState";
+import { useDocumentos } from "./modules/documentos";
 
 export default function Documentos() {
   const theme = useTheme();
-
-  const [documentos, setDocumentos] = useState([]);
-  const [file, setFile] = useState(null);
-  const [nome, setNome] = useState("");
-  const [categoria, setCategoria] = useState("");
-  const [descricao, setDescricao] = useState("");
-  const [documentoSelecionado, setDocumentoSelecionado] = useState(null);
+  const {
+    documentos,
+    nome,
+    categoria,
+    descricao,
+    documentoSelecionado,
+    setFile,
+    setNome,
+    setCategoria,
+    setDescricao,
+    setDocumentoSelecionado,
+    uploadDocumento,
+    apagarDocumento
+  } = useDocumentos();
 
   const styles = {
     cardUpload: {
@@ -94,78 +101,6 @@ export default function Documentos() {
     }
   };
 
-  useEffect(() => {
-    carregarDocumentos();
-  }, []);
-
-  async function carregarDocumentos() {
-    const { data } = await supabase
-      .from("documentos")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    setDocumentos(data || []);
-  }
-
-  async function uploadDocumento() {
-    if (!file) {
-      alert("Selecione um PDF");
-      return;
-    }
-
-    const nomeArquivo = `${Date.now()}-${file.name}`;
-
-    const { data, error } = await supabase.storage
-      .from("crm-documentos")
-      .upload(nomeArquivo, file);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    const { data: publicUrl } = supabase.storage
-      .from("crm-documentos")
-      .getPublicUrl(data.path);
-
-    const { error: erroInsert } = await supabase
-      .from("documentos")
-      .insert([
-        {
-          nome,
-          categoria,
-          descricao,
-          arquivo_url: publicUrl.publicUrl,
-          arquivo_nome: file.name
-        }
-      ]);
-
-    if (erroInsert) {
-      alert(erroInsert.message);
-      return;
-    }
-
-    alert("Documento enviado!");
-    setNome("");
-    setCategoria("");
-    setDescricao("");
-    setFile(null);
-    carregarDocumentos();
-  }
-
-  async function apagarDocumento(doc) {
-    if (!window.confirm("Deseja apagar este documento?")) {
-      return;
-    }
-
-    await supabase
-      .from("documentos")
-      .delete()
-      .eq("id", doc.id);
-
-    carregarDocumentos();
-  }
-
   return (
     <div>
       <h2>📁 Biblioteca de Documentos</h2>
@@ -224,6 +159,13 @@ export default function Documentos() {
       )}
 
       <div style={styles.lista}>
+        {documentos.length === 0 ? (
+          <EmptyState
+            title="Sem documentos"
+            description="Ainda não existem documentos carregados."
+          />
+        ) : null}
+
         {documentos.map((doc) => (
           <Card key={doc.id} style={styles.cardDocumento}>
             <div>

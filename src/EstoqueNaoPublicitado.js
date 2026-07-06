@@ -1,417 +1,67 @@
-import { useEffect, useState } from "react";
-import { supabase } from "./supabase";
-import { normalizarTelefone, validarTelefone } from "./telefone";
 import CadastroImovel from "./CadastroImovel";
 import FichaImovel from "./FichaImovel";
+import { useEstoqueImoveis } from "./modules/imoveis";
+import EmptyState from "./components/ui/EmptyState";
 
 export default function EstoqueNaoPublicitado() {
-
-  const [imoveis, setImoveis] = useState([]);
-  const [busca, setBusca] = useState("");
-  const [moduloAtual, setModuloAtual] = useState("lista");
-
-  const [proprietario, setProprietario] = useState("");
-  const [telefone, setTelefone] = useState("");
-  const [telefoneErro, setTelefoneErro] = useState("");
-  const [tipologia, setTipologia] = useState("");
-  const [zona, setZona] = useState("");
-  const [valorPretendido, setValorPretendido] = useState("");
-  const [observacoes, setObservacoes] = useState("");
-
-  const [imovelSelecionado, setImovelSelecionado] = useState(null);
-  const [file, setFile] = useState(null);
-
-  const [ficheiros, setFicheiros] = useState([]);
-  const [ficheiroSelecionado, setFicheiroSelecionado] = useState(null);
-
-  const [uploading, setUploading] = useState(false);
-  const [progresso, setProgresso] = useState(0);
-
-  const [email, setEmail] = useState("");
-
-  const [valorVenda, setValorVenda] = useState("");
-  const [valorM2, setValorM2] = useState("");
-
-  const [areaBrutaPrivativa, setAreaBrutaPrivativa] = useState("");
-  const [areaUtil, setAreaUtil] = useState("");
-
-  const [numeroQuartos, setNumeroQuartos] = useState("");
-  const [casasBanho, setCasasBanho] = useState("");
-
-  const [estacionamento, setEstacionamento] = useState("");
-
-  const [precoCondominio, setPrecoCondominio] = useState("");
-
-  const [codigoPostal, setCodigoPostal] = useState("");
-  const [morada, setMorada] = useState("");
-
-  const [distrito, setDistrito] = useState("");
-  const [concelho, setConcelho] = useState("");
-  const [freguesia, setFreguesia] = useState("");
-
-  const [cmi, setCmi] = useState(false);
-  const [cadernetaPredial, setCadernetaPredial] = useState(false);
-  const [plantas, setPlantas] = useState(false);
-  const [certificadoEnergetico, setCertificadoEnergetico] = useState(false);
-  const [cartaoCidadao, setCartaoCidadao] = useState(false);
-
-  const [imovelEdicao, setImovelEdicao] = useState(null);
-
-  const isEditing = Boolean(imovelEdicao);
-
-  //////////////////////////////////////////////////////
-  // CARREGAR
-
-  useEffect(() => {
-    carregarImoveis();
-  }, []);
-
-  async function carregarImoveis() {
-
-    const { data, error } = await supabase
-      .from("estoque_nao_publicitado")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      console.log(error);
-      return;
-    }
-    console.log("DATA:", data);
-    setImoveis(data || []);
-  }
-
-  async function carregarFicheiros(imovelId) {
-
-    console.log("IMOVEL ID:", imovelId);
-
-    const { data, error } = await supabase
-      .from("imovel_ficheiros")
-      .select("*")
-      .eq("imovel_id", imovelId)
-      .order("created_at", {
-        ascending: false
-      });
-
-    console.log("FICHEIROS:", data);
-    console.log("ERRO:", error);
-
-    setFicheiros(data || []);
-  }
-
-  function carregarImovelParaEdicao(imovel) {
-    setImovelEdicao(imovel);
-    setProprietario(imovel.proprietario || "");
-    const telefoneNormalizado = normalizarTelefone(imovel.telefone || "");
-    setTelefone(telefoneNormalizado);
-    setTelefoneErro(
-      telefoneNormalizado && !validarTelefone(telefoneNormalizado)
-        ? "Informe o telefone com 12 dígitos (indicativo + 9 dígitos)."
-        : ""
-    );
-    setTipologia(imovel.tipologia || "");
-    setZona(imovel.zona || "");
-    setValorPretendido(imovel.valor_pretendido || "");
-    setValorVenda(imovel.valor_venda || "");
-    setValorM2(imovel.valor_m2 || "");
-    setAreaBrutaPrivativa(imovel.area_bruta_privativa || "");
-    setAreaUtil(imovel.area_util || "");
-    setNumeroQuartos(imovel.numero_quartos || "");
-    setCasasBanho(imovel.casas_banho || "");
-    setPrecoCondominio(imovel.preco_condominio || "");
-    setEmail(imovel.email || "");
-    setCodigoPostal(imovel.codigo_postal || "");
-    setMorada(imovel.morada || "");
-    setDistrito(imovel.distrito || "");
-    setConcelho(imovel.concelho || "");
-    setFreguesia(imovel.freguesia || "");
-    setObservacoes(imovel.observacoes || "");
-    const estacionamentoValue =
-      imovel.estacionamento === false || imovel.estacionamento === null || imovel.estacionamento === undefined
-        ? ""
-        : String(imovel.estacionamento);
-    setEstacionamento(estacionamentoValue);
-    setCmi(Boolean(imovel.cmi));
-    setCadernetaPredial(Boolean(imovel.caderneta_predial));
-    setPlantas(Boolean(imovel.plantas));
-    setCertificadoEnergetico(Boolean(imovel.certificado_energetico));
-    setCartaoCidadao(Boolean(imovel.cartao_cidadao));
-  }
-
-  function resetFormulario() {
-    setImovelEdicao(null);
-    setProprietario("");
-    setTelefone("");
-    setTelefoneErro("");
-    setTipologia("");
-    setZona("");
-    setValorPretendido("");
-    setValorVenda("");
-    setValorM2("");
-    setAreaBrutaPrivativa("");
-    setAreaUtil("");
-    setNumeroQuartos("");
-    setCasasBanho("");
-    setPrecoCondominio("");
-    setEmail("");
-    setCodigoPostal("");
-    setMorada("");
-    setDistrito("");
-    setConcelho("");
-    setFreguesia("");
-    setObservacoes("");
-    setEstacionamento("");
-    setCmi(false);
-    setCadernetaPredial(false);
-    setPlantas(false);
-    setCertificadoEnergetico(false);
-    setCartaoCidadao(false);
-  }
-
-  // Helper: convert empty or non-numeric values to null for numeric DB columns
-  function toNumberOrNull(value) {
-    if (value === "" || value === null || value === undefined) return null;
-    const n = Number(value);
-    return Number.isNaN(n) ? null : n;
-  }
-
-  function cancelarNovo() {
-    setModuloAtual("lista");
-    resetFormulario();
-  }
-
-  function handleTelefoneChange(valor) {
-    const telefoneNormalizado = normalizarTelefone(valor);
-    setTelefone(telefoneNormalizado);
-
-    if (!telefoneNormalizado) {
-      setTelefoneErro("");
-      return;
-    }
-
-    setTelefoneErro(
-      validarTelefone(telefoneNormalizado)
-        ? ""
-        : "Informe o telefone com 12 dígitos (indicativo + 9 dígitos)."
-    );
-  }
-  //////////////////////////////////////////////////////
-  // SALVAR
-
-  async function salvarImovel() {
-    const telefoneNormalizado = normalizarTelefone(telefone);
-    if (!validarTelefone(telefoneNormalizado)) {
-      setTelefoneErro("Informe o telefone com 12 dígitos (indicativo + 9 dígitos).\n");
-      alert("Informe o telefone com 12 dígitos (indicativo + 9 dígitos).\n");
-      return;
-    }
-
-    const payload = {
-      proprietario,
-      telefone: telefoneNormalizado,
-      tipologia,
-      zona,
-      valor_pretendido: toNumberOrNull(valorPretendido),
-      valor_venda: toNumberOrNull(valorVenda),
-      valor_m2: toNumberOrNull(valorM2),
-      area_bruta_privativa: toNumberOrNull(areaBrutaPrivativa),
-      area_util: toNumberOrNull(areaUtil),
-      numero_quartos: toNumberOrNull(numeroQuartos),
-      casas_banho: toNumberOrNull(casasBanho),
-      preco_condominio: toNumberOrNull(precoCondominio),
-      email: email || null,
-      codigo_postal: codigoPostal || null,
-      morada: morada || null,
-      distrito: distrito || null,
-      concelho: concelho || null,
-      freguesia: freguesia || null,
-      observacoes: observacoes || null,
-      estacionamento: toNumberOrNull(estacionamento),
-      cmi,
-      caderneta_predial: cadernetaPredial,
-      plantas,
-      certificado_energetico: certificadoEnergetico,
-      cartao_cidadao: cartaoCidadao
-    };
-
-    let error = null;
-
-    if (isEditing && imovelEdicao) {
-      const response = await supabase
-        .from("estoque_nao_publicitado")
-        .update(payload)
-        .eq("id", imovelEdicao.id);
-      error = response.error;
-    } else {
-      const response = await supabase
-        .from("estoque_nao_publicitado")
-        .insert([payload]);
-      error = response.error;
-    }
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    alert(isEditing ? "Imóvel atualizado!" : "Imóvel guardado!");
-
-    resetFormulario();
-
-    setModuloAtual("lista");
-    setImovelSelecionado(null);
-
-    carregarImoveis();
-  }
-
-  async function apagarFicheiro(ficheiro) {
-
-    if (
-      !window.confirm(
-        "Deseja apagar este ficheiro?"
-      )
-    ) {
-      return;
-    }
-
-    const { error } = await supabase
-      .from("imovel_ficheiros")
-      .delete()
-      .eq("id", ficheiro.id);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    carregarFicheiros(
-      imovelSelecionado.id
-    );
-  }
-  //////////////////////////////////////////////////////
-  // FILTRO
-
-  const filtrados = imoveis.filter((i) =>
-    i.proprietario?.toLowerCase().includes(busca.toLowerCase())
-  );
-
-  //////////////////////////////////////////////////////
-  // UI
-
-  async function uploadFicheiro(imovelId) {
-
-    if (!file) return;
-
-    setUploading(true);
-    setProgresso(10);
-
-    try {
-
-      const nomeArquivo =
-        `${Date.now()}-${file.name}`;
-
-      setProgresso(30);
-
-      const { data, error } =
-        await supabase.storage
-          .from("crm-imoveis")
-          .upload(nomeArquivo, file);
-
-      if (error) throw error;
-
-      setProgresso(70);
-
-      const { data: publicUrl } =
-        supabase.storage
-          .from("crm-imoveis")
-          .getPublicUrl(data.path);
-
-      const { data: insertData, error: insertError } =
-        await supabase
-          .from("imovel_ficheiros")
-          .insert([
-            {
-              imovel_id: imovelId,
-              nome: file.name,
-              tipo:
-                file.type.includes("pdf")
-                  ? "pdf"
-                  : "imagem",
-              url: publicUrl.publicUrl
-            }
-          ])
-          .select();
-
-      console.log("INSERT DATA:", insertData);
-      console.log("INSERT ERROR:", insertError);
-
-      if (insertError) {
-        throw insertError;
-      }
-
-      setProgresso(100);
-
-      carregarFicheiros(imovelId);
-
-    } catch (err) {
-
-      alert(err.message);
-
-    } finally {
-
-      setTimeout(() => {
-        setUploading(false);
-        setProgresso(0);
-      }, 500);
-    }
-  }
-
-  //////////////////////////////////////////////////////
-  // CÁLCULO VALOR M2
-
-  useEffect(() => {
-
-    if (
-      valorVenda &&
-      areaBrutaPrivativa &&
-      Number(areaBrutaPrivativa) > 0
-    ) {
-
-      setValorM2(
-        (
-          Number(valorVenda) /
-          Number(areaBrutaPrivativa)
-        ).toFixed(2)
-      );
-
-    }
-
-  }, [
+  const {
+    busca,
+    moduloAtual,
+    form,
+    imovelSelecionado,
+    file,
+    ficheiros,
+    ficheiroSelecionado,
+    uploading,
+    progresso,
+    isEditing,
+    filtrados,
+    setBusca,
+    setModuloAtual,
+    setField,
+    setFile,
+    setFicheiroSelecionado,
+    setImovelSelecionado,
+    abrirNovoCadastro,
+    voltarParaLista,
+    iniciarEdicaoSelecionado,
+    cancelarNovo,
+    handleTelefoneChange,
+    salvarImovel,
+    apagarFicheiro,
+    uploadFicheiro,
+    downloadFicheiro,
+    selecionarImovel
+  } = useEstoqueImoveis();
+
+  const {
+    proprietario,
+    telefone,
+    telefoneErro,
+    tipologia,
+    zona,
+    valorPretendido,
+    observacoes,
+    email,
     valorVenda,
-    areaBrutaPrivativa
-  ]);
-
-  async function downloadFicheiro(f) {
-
-    const response = await fetch(f.url);
-
-    const blob = await response.blob();
-
-    const url = window.URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-
-    a.href = url;
-    a.download = f.nome;
-
-    document.body.appendChild(a);
-
-    a.click();
-
-    a.remove();
-
-    window.URL.revokeObjectURL(url);
-  }
+    valorM2,
+    areaBrutaPrivativa,
+    areaUtil,
+    numeroQuartos,
+    casasBanho,
+    estacionamento,
+    precoCondominio,
+    codigoPostal,
+    morada,
+    distrito,
+    concelho,
+    freguesia,
+    cmi,
+    cadernetaPredial,
+    plantas,
+    certificadoEnergetico,
+    cartaoCidadao
+  } = form;
 
 
   return (
@@ -423,10 +73,7 @@ export default function EstoqueNaoPublicitado() {
         </div>
         <button
           style={btnNovo}
-          onClick={() => {
-            resetFormulario();
-            setModuloAtual("cadastro");
-          }}
+          onClick={abrirNovoCadastro}
         >
           + Novo imóvel
         </button>
@@ -451,63 +98,63 @@ export default function EstoqueNaoPublicitado() {
       {moduloAtual === "cadastro" ? (
         <div>
           <div style={barraSuperior}>
-            <button style={btnVoltar} onClick={() => setModuloAtual("lista")}>
+            <button style={btnVoltar} onClick={voltarParaLista}>
               ← Voltar para a lista
             </button>
           </div>
 
           <CadastroImovel
             proprietario={proprietario}
-            setProprietario={setProprietario}
+            setProprietario={(valor) => setField("proprietario", valor)}
             telefone={telefone}
-            setTelefone={setTelefone}
+            setTelefone={(valor) => setField("telefone", valor)}
             telefoneErro={telefoneErro}
             handleTelefoneChange={handleTelefoneChange}
             email={email}
-            setEmail={setEmail}
+            setEmail={(valor) => setField("email", valor)}
             observacoes={observacoes}
-            setObservacoes={setObservacoes}
+            setObservacoes={(valor) => setField("observacoes", valor)}
             valorPretendido={valorPretendido}
-            setValorPretendido={setValorPretendido}
+            setValorPretendido={(valor) => setField("valorPretendido", valor)}
             valorVenda={valorVenda}
-            setValorVenda={setValorVenda}
+            setValorVenda={(valor) => setField("valorVenda", valor)}
             precoCondominio={precoCondominio}
-            setPrecoCondominio={setPrecoCondominio}
+            setPrecoCondominio={(valor) => setField("precoCondominio", valor)}
             areaBrutaPrivativa={areaBrutaPrivativa}
-            setAreaBrutaPrivativa={setAreaBrutaPrivativa}
+            setAreaBrutaPrivativa={(valor) => setField("areaBrutaPrivativa", valor)}
             areaUtil={areaUtil}
-            setAreaUtil={setAreaUtil}
+            setAreaUtil={(valor) => setField("areaUtil", valor)}
             valorM2={valorM2}
             tipologia={tipologia}
-            setTipologia={setTipologia}
+            setTipologia={(valor) => setField("tipologia", valor)}
             numeroQuartos={numeroQuartos}
-            setNumeroQuartos={setNumeroQuartos}
+            setNumeroQuartos={(valor) => setField("numeroQuartos", valor)}
             casasBanho={casasBanho}
-            setCasasBanho={setCasasBanho}
+            setCasasBanho={(valor) => setField("casasBanho", valor)}
             zona={zona}
-            setZona={setZona}
+            setZona={(valor) => setField("zona", valor)}
             codigoPostal={codigoPostal}
-            setCodigoPostal={setCodigoPostal}
+            setCodigoPostal={(valor) => setField("codigoPostal", valor)}
             distrito={distrito}
-            setDistrito={setDistrito}
+            setDistrito={(valor) => setField("distrito", valor)}
             concelho={concelho}
-            setConcelho={setConcelho}
+            setConcelho={(valor) => setField("concelho", valor)}
             freguesia={freguesia}
-            setFreguesia={setFreguesia}
+            setFreguesia={(valor) => setField("freguesia", valor)}
             morada={morada}
-            setMorada={setMorada}
+            setMorada={(valor) => setField("morada", valor)}
             cmi={cmi}
-            setCmi={setCmi}
+            setCmi={(valor) => setField("cmi", valor)}
             cadernetaPredial={cadernetaPredial}
-            setCadernetaPredial={setCadernetaPredial}
+            setCadernetaPredial={(valor) => setField("cadernetaPredial", valor)}
             plantas={plantas}
-            setPlantas={setPlantas}
+            setPlantas={(valor) => setField("plantas", valor)}
             certificadoEnergetico={certificadoEnergetico}
-            setCertificadoEnergetico={setCertificadoEnergetico}
+            setCertificadoEnergetico={(valor) => setField("certificadoEnergetico", valor)}
             cartaoCidadao={cartaoCidadao}
-            setCartaoCidadao={setCartaoCidadao}
+            setCartaoCidadao={(valor) => setField("cartaoCidadao", valor)}
             estacionamento={estacionamento}
-            setEstacionamento={setEstacionamento}
+            setEstacionamento={(valor) => setField("estacionamento", valor)}
             isEditing={isEditing}
             salvarImovel={salvarImovel}
             cancelar={cancelarNovo}
@@ -540,55 +187,58 @@ export default function EstoqueNaoPublicitado() {
               setFicheiroSelecionado={setFicheiroSelecionado}
               setImovelSelecionado={setImovelSelecionado}
               cmi={cmi}
-              setCmi={setCmi}
+              setCmi={(valor) => setField("cmi", valor)}
               cadernetaPredial={cadernetaPredial}
-              setCadernetaPredial={setCadernetaPredial}
+              setCadernetaPredial={(valor) => setField("cadernetaPredial", valor)}
               plantas={plantas}
-              setPlantas={setPlantas}
+              setPlantas={(valor) => setField("plantas", valor)}
               certificadoEnergetico={certificadoEnergetico}
-              setCertificadoEnergetico={setCertificadoEnergetico}
+              setCertificadoEnergetico={(valor) => setField("certificadoEnergetico", valor)}
               cartaoCidadao={cartaoCidadao}
-              setCartaoCidadao={setCartaoCidadao}
+              setCartaoCidadao={(valor) => setField("cartaoCidadao", valor)}
               estacionamento={estacionamento}
-              setEstacionamento={setEstacionamento}
-              onEditar={() => {
-                carregarImovelParaEdicao(imovelSelecionado);
-                setModuloAtual("cadastro");
-              }}
+              setEstacionamento={(valor) => setField("estacionamento", valor)}
+              onEditar={iniciarEdicaoSelecionado}
             />
           )}
 
           <div style={tableWrapper}>
-            <table style={table}>
-              <thead>
-                <tr>
-                  <th style={th}>Proprietário</th>
-                  <th style={th}>Telefone</th>
-                  <th style={th}>Tipologia</th>
-                  <th style={th}>Zona</th>
-                  <th style={th}>Valor</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {filtrados.map((imovel) => (
-                  <tr
-                    key={imovel.id}
-                    style={{ ...tr, cursor: "pointer" }}
-                    onClick={() => {
-                      setImovelSelecionado(imovel);
-                      carregarFicheiros(imovel.id);
-                    }}
-                  >
-                    <td style={tdNome}>{imovel.proprietario}</td>
-                    <td style={td}>{imovel.telefone}</td>
-                    <td style={td}>{imovel.tipologia}</td>
-                    <td style={td}>{imovel.zona}</td>
-                    <td style={td}>{imovel.valor_pretendido} €</td>
+            {filtrados.length === 0 ? (
+              <div style={{ padding: "16px" }}>
+                <EmptyState
+                  title="Sem imóveis"
+                  description="Não existem imóveis para os filtros aplicados."
+                />
+              </div>
+            ) : (
+              <table style={table}>
+                <thead>
+                  <tr>
+                    <th style={th}>Proprietário</th>
+                    <th style={th}>Telefone</th>
+                    <th style={th}>Tipologia</th>
+                    <th style={th}>Zona</th>
+                    <th style={th}>Valor</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+
+                <tbody>
+                  {filtrados.map((imovel) => (
+                    <tr
+                      key={imovel.id}
+                      style={{ ...tr, cursor: "pointer" }}
+                      onClick={() => selecionarImovel(imovel)}
+                    >
+                      <td style={tdNome}>{imovel.proprietario}</td>
+                      <td style={td}>{imovel.telefone}</td>
+                      <td style={td}>{imovel.tipologia}</td>
+                      <td style={td}>{imovel.zona}</td>
+                      <td style={td}>{imovel.valor_pretendido} €</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}

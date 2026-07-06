@@ -1,0 +1,5 @@
+export {
+  DOCUMENTOS_STORAGE_BUCKET,
+  DOCUMENTOS_TABLE,
+  DOCUMENTOS_UPLOAD_RULES
+} from "./documentosConstants";

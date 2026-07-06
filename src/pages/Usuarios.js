@@ -1,10 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../supabase';
-import { MODULOS, normalizarPermissoes } from '../utils/usuarios';
 import { useTheme } from '../theme/ThemeContext';
 import { usePermissions } from '../modules/auth/hooks';
 import { PERMISSION_MODULES } from '../modules/auth/services/permissionCatalog';
-import { registrarAcessoNegado, registrarCriacao, registrarEdicao } from '../modules/audit/services';
+import {
+  guardarUsuarioComAuditoria,
+  listarAuditoriaPorUtilizador,
+  listarSessoesPorUtilizador,
+  listarUsuarios,
+  registrarAcaoNegadaUtilizadores,
+} from '../modules/users/services';
 import UserPersonalSection from '../components/users/UserPersonalSection';
 import UserAccountSection from '../components/users/UserAccountSection';
 import UserProfileSection from '../components/users/UserProfileSection';
@@ -14,18 +18,39 @@ import UserOrganizationSection from '../components/users/UserOrganizationSection
 import UserPreferencesSection from '../components/users/UserPreferencesSection';
 import { criarUsuariosViewModel } from '../viewmodels/usuariosViewModel';
 
+const USER_STEPS = [
+  { key: 'lista', label: 'Lista de Utilizadores' },
+  { key: 'novo', label: 'Novo Utilizador' },
+  { key: 'ficha', label: 'Ficha do Utilizador' },
+  { key: 'sessoes', label: 'Sessões' },
+  { key: 'auditoria', label: 'Auditoria' },
+  { key: 'permissoes', label: 'Permissões' },
+];
+
 export default function Usuarios({ currentUser }) {
   const theme = useTheme();
   const { can } = usePermissions();
+
   const [usuarios, setUsuarios] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [erro, setErro] = useState('');
+
+  const [etapaAtiva, setEtapaAtiva] = useState('lista');
+  const [modoEdicao, setModoEdicao] = useState(false);
+  const [usuarioSelecionadoId, setUsuarioSelecionadoId] = useState(null);
+  const [usuarioSelecionadoMeta, setUsuarioSelecionadoMeta] = useState(null);
+
+  const [filtroPesquisa, setFiltroPesquisa] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('todos');
+
+  const [perfilOrganizacional, setPerfilOrganizacional] = useState('');
+  const [sessoesUsuario, setSessoesUsuario] = useState([]);
+  const [auditoriaUsuario, setAuditoriaUsuario] = useState([]);
+  const [loadingTimeline, setLoadingTimeline] = useState(false);
+
   // Arquitetura SaaS (futuro): quando houver persistencia multi-tenant,
-  // este estado/formulario deve passar a acomodar identificadores de contexto organizacional:
-  // - empresaId
-  // - roleId
-  // - departamentoId
-  // - equipaId
-  // - supervisorId
-  // Nesta fase, manter fora do payload e sem impacto funcional.
+  // este formulario deve acomodar identificadores de contexto organizacional
+  // sem impacto funcional nesta fase.
   const [form, setForm] = useState({
     nome: '',
     apelido: '',
@@ -37,24 +62,60 @@ export default function Usuarios({ currentUser }) {
     permissoes: {},
     ativo: true,
   });
-  const [loading, setLoading] = useState(true);
-  const [erro, setErro] = useState('');
-  const [modoEdicao, setModoEdicao] = useState(false);
-  const [usuarioSelecionadoId, setUsuarioSelecionadoId] = useState(null);
-  const [perfilOrganizacional, setPerfilOrganizacional] = useState('');
-  const [usuarioSelecionadoMeta, setUsuarioSelecionadoMeta] = useState(null);
 
   useEffect(() => {
     carregarUsuarios();
   }, []);
 
+  useEffect(() => {
+    if (!usuarioSelecionadoMeta) {
+      setSessoesUsuario([]);
+      setAuditoriaUsuario([]);
+      return;
+    }
+
+    carregarTimelineUsuario(usuarioSelecionadoMeta);
+  }, [usuarioSelecionadoMeta]);
+
   async function carregarUsuarios() {
     setLoading(true);
-    const { data, error } = await supabase.from('usuarios').select('*').order('created_at', { ascending: false });
-    if (!error) {
-      setUsuarios(data || []);
+    setErro('');
+
+    const { data, error } = await listarUsuarios();
+    if (error) {
+      setErro(error.message || 'Falha ao carregar utilizadores.');
+      setUsuarios([]);
+      setLoading(false);
+      return;
     }
+
+    setUsuarios(data || []);
     setLoading(false);
+  }
+
+  async function carregarTimelineUsuario(usuario) {
+    if (!usuario?.id && !usuario?.auth_user_id) return;
+
+    setLoadingTimeline(true);
+
+    const [sessoesResult, auditoriaResult] = await Promise.all([
+      listarSessoesPorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id }),
+      listarAuditoriaPorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id }),
+    ]);
+
+    if (sessoesResult.error) {
+      setErro(sessoesResult.error.message || 'Falha ao carregar sessões do utilizador.');
+    } else {
+      setSessoesUsuario(sessoesResult.data || []);
+    }
+
+    if (auditoriaResult.error) {
+      setErro(auditoriaResult.error.message || 'Falha ao carregar auditoria do utilizador.');
+    } else {
+      setAuditoriaUsuario(auditoriaResult.data || []);
+    }
+
+    setLoadingTimeline(false);
   }
 
   function resetForm() {
@@ -71,8 +132,34 @@ export default function Usuarios({ currentUser }) {
     });
     setModoEdicao(false);
     setUsuarioSelecionadoId(null);
-    setPerfilOrganizacional('');
     setUsuarioSelecionadoMeta(null);
+    setPerfilOrganizacional('');
+    setSessoesUsuario([]);
+    setAuditoriaUsuario([]);
+  }
+
+  function iniciarNovoUtilizador() {
+    resetForm();
+    setEtapaAtiva('novo');
+  }
+
+  function iniciarEdicao(usuario) {
+    setModoEdicao(true);
+    setUsuarioSelecionadoId(usuario.id);
+    setUsuarioSelecionadoMeta(usuario);
+    setPerfilOrganizacional(usuario.perfil || '');
+
+    setForm({
+      nome: usuario.nome || '',
+      apelido: usuario.apelido || '',
+      email: usuario.email || '',
+      telefone: usuario.telefone || '',
+      username: usuario.username || '',
+      password: '',
+      confirmarPassword: '',
+      permissoes: usuario.permissoes || {},
+      ativo: usuario.ativo !== false,
+    });
   }
 
   function atualizarCampo(campo, valor) {
@@ -136,6 +223,7 @@ export default function Usuarios({ currentUser }) {
       acc[permissionCode] = !todosAtivos;
       return acc;
     }, {});
+
     setForm((prev) => ({ ...prev, permissoes: next }));
   }
 
@@ -145,16 +233,11 @@ export default function Usuarios({ currentUser }) {
     const requiredPermission = modoEdicao ? 'users.edit' : 'users.create';
     if (!can(requiredPermission)) {
       setErro('Sem permissão para executar esta ação.');
-      await registrarAcessoNegado({
-        userId: currentUser?.id || null,
-        empresaId: currentUser?.user_metadata?.empresa_id || null,
-        modulo: 'users',
-        entidade: 'usuarios',
-        entidadeId: usuarioSelecionadoId || null,
-        metadata: {
-          requiredPermission,
-          action: modoEdicao ? 'update_user' : 'create_user'
-        }
+      await registrarAcaoNegadaUtilizadores({
+        currentUser,
+        usuarioSelecionadoId,
+        requiredPermission,
+        action: modoEdicao ? 'update_user' : 'create_user',
       });
       return;
     }
@@ -176,83 +259,44 @@ export default function Usuarios({ currentUser }) {
       }
     }
 
-    const payload = {
-      nome: form.nome,
-      apelido: form.apelido,
-      email: form.email,
-      telefone: form.telefone,
-      username: form.username,
-      permissoes: normalizarPermissoes(form.permissoes),
-      ativo: form.ativo,
-      criado_por: currentUser?.id || null,
-    };
-
-    if (form.password) {
-      payload.password_hash = form.password;
-    }
-
-    let error;
-    if (modoEdicao && usuarioSelecionadoId) {
-      ({ error } = await supabase.from('usuarios').update(payload).eq('id', usuarioSelecionadoId));
-    } else {
-      ({ error } = await supabase.from('usuarios').insert([{
-        ...payload,
-        created_at: new Date().toISOString(),
-      }]));
-    }
+    const { error } = await guardarUsuarioComAuditoria({
+      form,
+      modoEdicao,
+      usuarioSelecionadoId,
+      currentUser,
+      perfilOrganizacional,
+    });
 
     if (error) {
-      setErro(error.message);
+      setErro(error.message || 'Falha ao guardar utilizador.');
       return;
     }
 
-    const auditoriaBase = {
-      userId: currentUser?.id || null,
-      empresaId: currentUser?.user_metadata?.empresa_id || null,
-      modulo: 'users',
-      entidade: 'usuarios',
-      entidadeId: usuarioSelecionadoId || null,
-      metadata: {
-        perfilOrganizacional,
-        permissoesSelecionadas: Object.keys(normalizarPermissoes(form.permissoes)).filter((key) => normalizarPermissoes(form.permissoes)[key])
-      }
-    };
-
-    if (modoEdicao) {
-      await registrarEdicao(auditoriaBase);
-    } else {
-      await registrarCriacao(auditoriaBase);
-    }
-
     resetForm();
-    carregarUsuarios();
-  }
-
-  function iniciarEdicao(usuario) {
-    setModoEdicao(true);
-    setUsuarioSelecionadoId(usuario.id);
-    // Arquitetura SaaS (futuro): aqui sera o ponto de hidratacao dos IDs organizacionais
-    // vindos do modelo de utilizador (empresaId/roleId/departamentoId/equipaId/supervisorId),
-    // mantendo a separacao entre camada de dados e camada de apresentacao.
-    setUsuarioSelecionadoMeta(usuario);
-    setPerfilOrganizacional(usuario.perfil || '');
-    setForm({
-      nome: usuario.nome || '',
-      apelido: usuario.apelido || '',
-      email: usuario.email || '',
-      telefone: usuario.telefone || '',
-      username: usuario.username || '',
-      password: '',
-      confirmarPassword: '',
-      permissoes: usuario.permissoes || {},
-      ativo: usuario.ativo !== false,
-    });
+    await carregarUsuarios();
+    setEtapaAtiva('lista');
   }
 
   const resumo = useMemo(() => ({
     total: usuarios.length,
     ativos: usuarios.filter((u) => u.ativo).length,
   }), [usuarios]);
+
+  const usuariosFiltrados = useMemo(() => {
+    const termo = filtroPesquisa.trim().toLowerCase();
+
+    return usuarios.filter((usuario) => {
+      const nomeCompleto = `${usuario.nome || ''} ${usuario.apelido || ''}`.trim().toLowerCase();
+      const email = String(usuario.email || '').toLowerCase();
+      const username = String(usuario.username || '').toLowerCase();
+      const matchPesquisa = !termo || nomeCompleto.includes(termo) || email.includes(termo) || username.includes(termo);
+
+      if (!matchPesquisa) return false;
+      if (filtroEstado === 'ativos') return usuario.ativo !== false;
+      if (filtroEstado === 'inativos') return usuario.ativo === false;
+      return true;
+    });
+  }, [usuarios, filtroPesquisa, filtroEstado]);
 
   const utilizadorVM = useMemo(
     () =>
@@ -261,9 +305,11 @@ export default function Usuarios({ currentUser }) {
         perfilOrganizacional,
         usuarioSelecionadoMeta,
         modoEdicao,
+        sessoesUsuario,
+        auditoriaUsuario,
         estruturaPermissoes: PERMISSION_MODULES,
       }),
-    [form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao]
+    [form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao, sessoesUsuario, auditoriaUsuario]
   );
 
   const styles = useMemo(() => ({
@@ -399,7 +445,7 @@ export default function Usuarios({ currentUser }) {
       gap: theme.spacing.sm,
       background: theme.colors.surface,
     },
-    userActions: { display: 'flex', gap: theme.spacing.xs, alignItems: 'center' },
+    userActions: { display: 'flex', gap: theme.spacing.xs, alignItems: 'center', flexWrap: 'wrap' },
     muted: { color: theme.colors.muted, fontSize: `calc(${theme.typography.fontSize} * 0.82)` },
     badge: {
       background: `${theme.colors.success}22`,
@@ -419,6 +465,36 @@ export default function Usuarios({ currentUser }) {
       fontFamily: theme.typography.fontFamily,
       fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
     },
+    stepNav: { display: 'flex', gap: theme.spacing.xs, flexWrap: 'wrap' },
+    stepButton: {
+      border: `1px solid ${theme.colors.border}`,
+      background: theme.colors.surface,
+      borderRadius: '999px',
+      padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+      cursor: 'pointer',
+      color: theme.colors.text,
+      fontFamily: theme.typography.fontFamily,
+      fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
+    },
+    stepButtonActive: {
+      background: theme.colors.primary,
+      color: theme.colors.textLight,
+      borderColor: theme.colors.primary,
+    },
+    filters: { display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: theme.spacing.xs, alignItems: 'center' },
+    timelineList: { display: 'grid', gap: theme.spacing.xs },
+    timelineRow: {
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.sm,
+      padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+      background: theme.colors.surface,
+      display: 'grid',
+      gap: '4px',
+    },
+    timelineMeta: {
+      color: theme.colors.muted,
+      fontSize: `calc(${theme.typography.fontSize} * 0.78)`,
+    },
   }), [theme]);
 
   return (
@@ -426,64 +502,145 @@ export default function Usuarios({ currentUser }) {
       <h2 style={styles.title}>Gestão de Utilizadores</h2>
 
       <div style={styles.card}>
-        <div style={styles.permissoesHeader}>
-          <h3 style={styles.subtitle}>{modoEdicao ? 'Editar utilizador' : 'Criar utilizador'}</h3>
-          {modoEdicao ? <button style={styles.linkButton} onClick={resetForm}>Cancelar</button> : null}
-        </div>
-        {erro ? <div style={styles.error}>{erro}</div> : null}
-
-        <div style={styles.sectionsWrap}>
-          <UserPersonalSection dadosPessoais={utilizadorVM.dadosPessoais} onChange={atualizarCampo} styles={styles} />
-
-          <UserAccountSection
-            conta={utilizadorVM.conta}
-            onChange={atualizarCampo}
-            styles={styles}
-          />
-
-          <UserProfileSection perfil={utilizadorVM.perfil} onChangePerfil={setPerfilOrganizacional} styles={styles} />
-
-          <UserAccessSection
-            controloAcesso={utilizadorVM.controloAcesso}
-            onToggleModulo={alternarModulo}
-            onToggleGrupo={alternarGrupo}
-            onTogglePermissao={alternarPermissao}
-            onToggleTodos={alternarTodos}
-            styles={styles}
-          />
-
-          <UserActivitySection atividade={utilizadorVM.atividade} styles={styles} />
-          <UserOrganizationSection organizacao={utilizadorVM.organizacao} styles={styles} />
-          <UserPreferencesSection preferencias={utilizadorVM.preferencias} styles={styles} />
-        </div>
-
-        <button style={styles.button} onClick={guardarUsuario}>{modoEdicao ? 'Atualizar utilizador' : 'Guardar utilizador'}</button>
-      </div>
-
-      <div style={styles.card}>
-        <h3 style={styles.subtitle}>Resumo</h3>
-        <p>Total: {resumo.total}</p>
-        <p>Ativos: {resumo.ativos}</p>
-      </div>
-
-      <div style={styles.card}>
-        <h3 style={styles.subtitle}>Utilizadores registados</h3>
-        {loading ? <p>A carregar...</p> : null}
-        <div style={styles.list}>
-          {usuarios.map((usuario) => (
-            <div key={usuario.id} style={styles.userRow}>
-              <div>
-                <strong>{usuario.nome} {usuario.apelido}</strong>
-                <div style={styles.muted}>{usuario.email}</div>
-              </div>
-              <div style={styles.userActions}>
-                <span style={styles.badge}>{usuario.ativo ? 'Ativo' : 'Inativo'}</span>
-                <button style={styles.smallButton} onClick={() => iniciarEdicao(usuario)}>Editar</button>
-              </div>
-            </div>
+        <div style={styles.stepNav}>
+          {USER_STEPS.map((step) => (
+            <button
+              key={step.key}
+              style={{ ...styles.stepButton, ...(etapaAtiva === step.key ? styles.stepButtonActive : {}) }}
+              onClick={() => {
+                if (step.key === 'novo') {
+                  iniciarNovoUtilizador();
+                  return;
+                }
+                setEtapaAtiva(step.key);
+              }}
+            >
+              {step.label}
+            </button>
           ))}
         </div>
       </div>
+
+      {erro ? <div style={styles.error}>{erro}</div> : null}
+
+      {etapaAtiva === 'lista' ? (
+        <>
+          <div style={styles.card}>
+            <h3 style={styles.subtitle}>Resumo</h3>
+            <p>Total: {resumo.total}</p>
+            <p>Ativos: {resumo.ativos}</p>
+          </div>
+
+          <div style={styles.card}>
+            <h3 style={styles.subtitle}>Utilizadores registados</h3>
+
+            <div style={styles.filters}>
+              <input
+                style={styles.input}
+                placeholder="Pesquisar por nome, email ou username"
+                value={filtroPesquisa}
+                onChange={(event) => setFiltroPesquisa(event.target.value)}
+              />
+              <select style={styles.input} value={filtroEstado} onChange={(event) => setFiltroEstado(event.target.value)}>
+                <option value="todos">Todos</option>
+                <option value="ativos">Ativos</option>
+                <option value="inativos">Inativos</option>
+              </select>
+              <button style={styles.smallButton} onClick={iniciarNovoUtilizador}>Novo utilizador</button>
+            </div>
+
+            {loading ? <p>A carregar...</p> : null}
+
+            <div style={styles.list}>
+              {usuariosFiltrados.map((usuario) => (
+                <div key={usuario.id} style={styles.userRow}>
+                  <div>
+                    <strong>{usuario.nome} {usuario.apelido}</strong>
+                    <div style={styles.muted}>{usuario.email}</div>
+                  </div>
+                  <div style={styles.userActions}>
+                    <span style={styles.badge}>{usuario.ativo ? 'Ativo' : 'Inativo'}</span>
+                    <button style={styles.smallButton} onClick={() => { iniciarEdicao(usuario); setEtapaAtiva('ficha'); }}>Ficha</button>
+                    <button style={styles.smallButton} onClick={() => { iniciarEdicao(usuario); setEtapaAtiva('sessoes'); }}>Sessões</button>
+                    <button style={styles.smallButton} onClick={() => { iniciarEdicao(usuario); setEtapaAtiva('auditoria'); }}>Auditoria</button>
+                    <button style={styles.smallButton} onClick={() => { iniciarEdicao(usuario); setEtapaAtiva('permissoes'); }}>Permissões</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : null}
+
+      {['novo', 'ficha', 'permissoes'].includes(etapaAtiva) ? (
+        <div style={styles.card}>
+          <div style={styles.permissoesHeader}>
+            <h3 style={styles.subtitle}>{modoEdicao ? 'Editar utilizador' : 'Criar utilizador'}</h3>
+            {modoEdicao ? <button style={styles.linkButton} onClick={resetForm}>Cancelar</button> : null}
+          </div>
+
+          <div style={styles.sectionsWrap}>
+            {['novo', 'ficha'].includes(etapaAtiva) ? <UserPersonalSection dadosPessoais={utilizadorVM.dadosPessoais} onChange={atualizarCampo} styles={styles} /> : null}
+            {['novo', 'ficha'].includes(etapaAtiva) ? <UserAccountSection conta={utilizadorVM.conta} onChange={atualizarCampo} styles={styles} /> : null}
+            {['novo', 'ficha'].includes(etapaAtiva) ? <UserProfileSection perfil={utilizadorVM.perfil} onChangePerfil={setPerfilOrganizacional} styles={styles} /> : null}
+
+            {etapaAtiva === 'permissoes' ? (
+              <UserAccessSection
+                controloAcesso={utilizadorVM.controloAcesso}
+                onToggleModulo={alternarModulo}
+                onToggleGrupo={alternarGrupo}
+                onTogglePermissao={alternarPermissao}
+                onToggleTodos={alternarTodos}
+                styles={styles}
+              />
+            ) : null}
+
+            {etapaAtiva === 'ficha' ? <UserActivitySection atividade={utilizadorVM.atividade} styles={styles} /> : null}
+            {etapaAtiva === 'ficha' ? <UserOrganizationSection organizacao={utilizadorVM.organizacao} styles={styles} /> : null}
+            {etapaAtiva === 'ficha' ? <UserPreferencesSection preferencias={utilizadorVM.preferencias} styles={styles} /> : null}
+          </div>
+
+          <button style={styles.button} onClick={guardarUsuario}>{modoEdicao ? 'Atualizar utilizador' : 'Guardar utilizador'}</button>
+        </div>
+      ) : null}
+
+      {etapaAtiva === 'sessoes' ? (
+        <div style={styles.card}>
+          <h3 style={styles.subtitle}>Sessões</h3>
+          {!usuarioSelecionadoMeta ? <p>Selecione um utilizador na lista para visualizar sessões.</p> : null}
+          {loadingTimeline ? <p>A carregar sessões...</p> : null}
+
+          <div style={styles.timelineList}>
+            {sessoesUsuario.map((sessao) => (
+              <div key={sessao.id} style={styles.timelineRow}>
+                <strong>{sessao.status || 'active'}</strong>
+                <span style={styles.timelineMeta}>Login: {sessao.login_at ? new Date(sessao.login_at).toLocaleString('pt-PT') : 'n/d'}</span>
+                <span style={styles.timelineMeta}>Última atividade: {sessao.last_activity_at ? new Date(sessao.last_activity_at).toLocaleString('pt-PT') : 'n/d'}</span>
+                <span style={styles.timelineMeta}>Logout: {sessao.logout_at ? new Date(sessao.logout_at).toLocaleString('pt-PT') : 'n/d'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {etapaAtiva === 'auditoria' ? (
+        <div style={styles.card}>
+          <h3 style={styles.subtitle}>Auditoria</h3>
+          {!usuarioSelecionadoMeta ? <p>Selecione um utilizador na lista para visualizar auditoria.</p> : null}
+          {loadingTimeline ? <p>A carregar auditoria...</p> : null}
+
+          <div style={styles.timelineList}>
+            {auditoriaUsuario.map((evento) => (
+              <div key={evento.id} style={styles.timelineRow}>
+                <strong>{evento.event_type || 'evento'}</strong>
+                <span style={styles.timelineMeta}>Status: {evento.status || 'success'}</span>
+                <span style={styles.timelineMeta}>Módulo: {evento.modulo || 'n/d'}</span>
+                <span style={styles.timelineMeta}>Data: {evento.created_at ? new Date(evento.created_at).toLocaleString('pt-PT') : 'n/d'}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

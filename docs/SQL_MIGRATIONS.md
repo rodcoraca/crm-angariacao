@@ -4,10 +4,10 @@
 Estabelecer este documento como o repositório oficial de todas as migrações SQL da plataforma OSFlow, centralizando o histórico estrutural da base de dados e a preparação das futuras alterações.
 
 ## Última revisão
-2026-07-05
+2026-07-06
 
 ## Versão do documento
-1.2.0
+1.2.5
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -71,19 +71,19 @@ Cada migração deverá possuir, no mínimo, os seguintes campos:
 | DB-011 | 2026-07-05 | Auditoria Central | Criação da tabela `audit_logs` para eventos automáticos de login, logout, create, update, delete e access_denied. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260705_db011_audit_logs.sql](../sql/migrations/20260705_db011_audit_logs.sql) | Infraestrutura central para trilha de auditoria reutilizável por serviços e módulos. |
 | DB-012 | 2026-07-05 | Seed de Permissões | Inserção idempotente das permissões padrão (`view`, `create`, `edit`, `delete`) para todos os módulos existentes e permissões adicionais de gestão. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260705_db012_permission_seeds.sql](../sql/migrations/20260705_db012_permission_seeds.sql) | Regularização do catálogo de permissões para integração completa com Gestão de Utilizadores e controlo central de acesso. |
 | DB-013 | 2026-07-05 | Hierarquia de Permissões | Adição de colunas `module_name`, `group_key`, `group_name` e `permission_name` na tabela `permissions` para suportar estrutura módulo→grupo→permissão. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260705_db013_permissions_hierarchy_columns.sql](../sql/migrations/20260705_db013_permissions_hierarchy_columns.sql) | Compatibilidade preservada com modelo atual (`module`, `action`, `code`) sem remoção de dados. |
+| DB-004 | 2026-07-06 | Sessões de Utilizador | Criação da tabela `user_sessions` com registo de IP, User Agent, Dispositivo, Login, Logout e Última atividade. | 🟢 Executada | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260706_db004_user_sessions.sql](../sql/migrations/20260706_db004_user_sessions.sql) | Infraestrutura de sessão alinhada com o runtime atual de autenticação e auditoria operacional. |
 
 ## 4. Migrações Pendentes
 
 | ID | Data | Título | Descrição | Estado | Responsável | Versão | Script SQL | Observações |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-|  |  |  |  | 🟡 Pendente |  |  |  |  |
+| DB-014 | 2026-07-06 | Homologação de Colunas Estruturais | Adição idempotente de colunas estruturais base (`id`, `created_at`, `updated_at`, `ativo`, `created_by`, `updated_by`) nas entidades principais, quando ausentes. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260706_db014_structural_contract_columns.sql](../sql/migrations/20260706_db014_structural_contract_columns.sql) | Não cria novas tabelas; aplica apenas `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. |
 
 ## 5. Migrações Planeadas
 
 | ID | Data | Título | Descrição | Estado | Responsável | Versão | Script SQL | Observações |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | DB-003 |  | Preparação SaaS | Preparação dos campos `empresa_id`, `role_id`, `departamento_id`, `equipa_id` e `supervisor_id`. | 🔵 Planeada |  |  | Documentar antes da execução. | Base estrutural para isolamento organizacional e Multi-Tenant. |
-| DB-004 |  | Sessões de Utilizador | Criação da tabela `user_sessions` com registo de IP, User Agent, Dispositivo, Login, Logout e Última atividade. | 🔵 Planeada |  |  | Documentar antes da execução. | Preparação da camada de sessão e auditoria operacional. |
 | DB-007 |  | Empresas | Tabela Empresas para suporte à arquitetura Multi-Tenant. | 🔵 Planeada |  |  | Documentar antes da execução. | Base estrutural para segregação por Empresa. |
 | DB-008 |  | Planos | Planos SaaS: Starter, Professional e Enterprise. | 🔵 Planeada |  |  | Documentar antes da execução. | Preparação da lógica comercial e contratual da plataforma. |
 | DB-009 |  | Assinaturas | Estrutura para Subscrições, Pagamento, Renovação e Estado. | 🔵 Planeada |  |  | Documentar antes da execução. | Suporte à gestão do ciclo de vida de assinatura SaaS. |
@@ -108,6 +108,8 @@ Toda mudança estrutural futura deverá ser documentada aqui antes da implementa
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.2.5 | 2026-07-06 | Engenharia da Plataforma OSFlow | Registo da DB-014 (pendente) para homologação do contrato estrutural de colunas nas entidades principais. |
+| 1.2.4 | 2026-07-06 | Engenharia da Plataforma OSFlow | Registo da execução de DB-004 com criação da tabela `user_sessions` e índices operacionais para sessão. |
 | 1.2.3 | 2026-07-05 | Engenharia da Plataforma OSFlow | Registo da execução de DB-013 com adaptação hierárquica da tabela `permissions` para módulo, grupo e permissão com retrocompatibilidade. |
 | 1.2.2 | 2026-07-05 | Engenharia da Plataforma OSFlow | Registo da execução de DB-012 com seed idempotente de permissões por módulo (`module.view/create/edit/delete`) e permissões adicionais. |
 | 1.2.1 | 2026-07-05 | Engenharia da Plataforma OSFlow | Registo da execução de DB-011 com infraestrutura de auditoria central (`audit_logs`) e referência de script SQL. |

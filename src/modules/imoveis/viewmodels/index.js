@@ -1,0 +1,1 @@
+export { filtrarImoveisPorProprietario } from "./imoveisViewModel";

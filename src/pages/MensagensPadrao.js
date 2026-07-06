@@ -4,6 +4,7 @@ import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import EmptyState from "../components/ui/EmptyState";
 import Loading from "../components/ui/Loading";
+import { notifySuccess } from "../components/ui/feedbackBus";
 
 export default function MensagensPadrao({ voltar }) {
   const theme = useTheme();
@@ -61,7 +62,7 @@ export default function MensagensPadrao({ voltar }) {
 
   function copiarTexto(texto) {
     navigator.clipboard.writeText(texto);
-    alert("Mensagem copiada!");
+    notifySuccess("Mensagem copiada com sucesso.");
   }
 
   if (isLoading) {

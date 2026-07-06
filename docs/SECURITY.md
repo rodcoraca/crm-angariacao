@@ -4,10 +4,10 @@
 Consolidar as diretrizes, práticas e decisões oficiais relacionadas com a segurança da plataforma OSFlow, incluindo autenticação, sessões, auditoria e preparação futura para mecanismos reforçados de proteção.
 
 ## Última revisão
-2026-07-03
+2026-07-06
 
 ## Versão do documento
-1.0.0
+1.2.0
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -76,6 +76,14 @@ A auditoria deverá contemplar, no mínimo:
 
 Os eventos de auditoria deverão possuir histórico persistente e ligação clara ao contexto de acesso.
 
+Contrato oficial de observabilidade e auditoria:
+
+- `audit_logs` é a fonte oficial de auditoria operacional da plataforma.
+- `logs_navegacao` é exclusivamente telemetria e analytics de navegação.
+- `logs_navegacao` não substitui nem valida requisitos de segurança/auditoria.
+- eventos críticos de segurança e mutações operacionais devem permanecer em `audit_logs`.
+- escrita de auditoria operacional deve ocorrer apenas através do serviço oficial de auditoria.
+
 ## 5. Registo de IP
 
 O registo de IP é considerado obrigatório como base de rastreabilidade operacional. A informação deverá ser tratada como parte da camada de segurança e não como dado opcional.
@@ -88,10 +96,10 @@ A plataforma deve permanecer preparada para introdução futura de 2FA sem neces
 
 | Identificador | Migração relacionada | Descrição | Estado |
 | --- | --- | --- | --- |
-| SEC-001 | DB-004 | Sessão única por Utilizador e controlo operacional de sessão. | Planeada |
-| SEC-002 | DB-004 | Registo de IP por sessão. | Planeada |
-| SEC-003 | DB-005 | Auditoria de acessos e eventos críticos. | Planeada |
-| SEC-004 | DB-004 | Histórico de login e logout. | Planeada |
+| SEC-001 | DB-004 | Sessão única por Utilizador e controlo operacional de sessão. | Executada |
+| SEC-002 | DB-004 | Registo de IP por sessão. | Executada |
+| SEC-003 | DB-005 | Auditoria de acessos e eventos críticos. | Executada |
+| SEC-004 | DB-004 | Histórico de login e logout. | Executada |
 | SEC-005 | DB-006 | Preparação estrutural para reforço de autenticação. | Planeada |
 
 ## 8. Conclusão
@@ -102,6 +110,8 @@ Este documento é a referência oficial de segurança da OSFlow e deve ser consu
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.2.0 | 2026-07-06 | Engenharia da Plataforma OSFlow | Definição oficial da separação de responsabilidades: `audit_logs` como auditoria operacional e `logs_navegacao` como telemetria/analytics. |
+| 1.1.0 | 2026-07-06 | Engenharia da Plataforma OSFlow | Atualização da rastreabilidade SEC-001/002/003/004 para estado executado em linha com DB-004 e DB-005. |
 | 1.0.0 | 2026-07-03 | Engenharia da Plataforma OSFlow | Consolidação da documentação de segurança com decisões oficiais, rastreabilidade e alinhamento arquitetural. |
 
 ## Próximas Revisões

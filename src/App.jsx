@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "./supabase";
 
 import Login from "./pages/Login";
@@ -19,7 +19,8 @@ import Sidebar from "./components/Sidebar";
 import Layout from "./components/Layout";
 import { authorizeProtectedView, isProtectedView, getRequiredPermission } from "./modules/auth/services";
 import { AuthProvider } from "./modules/auth/context";
-import { registrarLogout, registrarAcessoNegado } from "./modules/audit/services";
+import { registrarAcessoNegado, registrarLogout, registrarNavegacao } from "./modules/audit/services";
+import FeedbackHost from "./components/ui/FeedbackHost";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -32,8 +33,34 @@ export default function App() {
   const [docSelecionado, setDocSelecionado] = useState("arquitetura");
   const [forbiddenState, setForbiddenState] = useState({ requestedView: null, requiredPermission: null });
 
-  async function carregarPerfil(email) {
-    const { data } = await supabase.from("usuarios").select("*").eq("email", email).maybeSingle();
+  function getHeaderContextTitle() {
+    if (leadSelecionadoId) return "Leads";
+
+    const titles = {
+      home: "Cockpit",
+      radar: "Radar",
+      fluxo: "Leads",
+      dashboard: "Administração",
+      quente: "Leads",
+      morno: "Leads",
+      frio: "Leads",
+      estoque_np: "Imóveis",
+      admin_documentacao: "Documentos",
+      mensagens: "Mensagens",
+      usuarios: "Administração",
+      logs: "Auditoria",
+      forbidden: "Acesso"
+    };
+
+    return titles[view] || "Cockpit";
+  }
+
+  async function carregarPerfil(authUserId) {
+    const { data } = await supabase
+      .from("usuarios")
+      .select("email, empresa_id, permissoes")
+      .eq("auth_user_id", authUserId)
+      .maybeSingle();
     if (data) {
       setPerfil({ ...data, permissoes: data.permissoes || {} });
     } else {
@@ -43,11 +70,11 @@ export default function App() {
 
   async function logout() {
     await registrarLogout({
-      userId: user?.id || null,
+      userId: user?.perfil_id || user?.id || null,
       empresaId: perfil?.empresa_id || user?.user_metadata?.empresa_id || null,
       modulo: "auth",
       entidade: "usuarios",
-      entidadeId: user?.id || null,
+      entidadeId: user?.perfil_id || user?.id || null,
       metadata: {
         email: user?.email || null
       }
@@ -89,7 +116,7 @@ export default function App() {
     if (docsMap[nextView]) {
       setDocSelecionado(docsMap[nextView]);
       setView("admin_documentacao");
-      registrarLog('navegacao', `Acedeu a documentacao (${docsMap[nextView]})`);
+      registrarLog('navegacao', `Acedeu a documentos (${docsMap[nextView]})`);
       return;
     }
 
@@ -103,9 +130,8 @@ export default function App() {
       requiredPermission: requiredPermission || getRequiredPermission(requestedView)
     });
     setView("forbidden");
-    registrarLog("acesso_negado", `Tentativa de acesso a ${requestedView}. Permissao: ${requiredPermission || "n/a"}. Motivo: ${reason || "sem detalhe"}`);
     await registrarAcessoNegado({
-      userId: user?.id || null,
+      userId: user?.perfil_id || user?.id || null,
       empresaId: perfil?.empresa_id || user?.user_metadata?.empresa_id || null,
       modulo: "authz",
       entidade: "rota",
@@ -141,12 +167,17 @@ export default function App() {
 
     setLogsModo(modo);
     setView('logs');
-    registrarLog('navegacao', `Acedeu a logs (${modo === 'utilizadores' ? 'por utilizador' : 'geral'})`);
+    registrarLog('navegacao', `Acedeu a auditoria (${modo === 'utilizadores' ? 'por utilizador' : 'geral'})`);
   }
 
   async function registrarLog(acao, detalhes) {
-    if (!user?.id) return;
-    await supabase.from('logs_navegacao').insert([{ usuario_id: user.id, acao, detalhes, created_at: new Date().toISOString() }]);
+    const actorId = user?.perfil_id || user?.id || null;
+    if (!actorId) return;
+    await registrarNavegacao({
+      userId: actorId,
+      acao,
+      detalhes
+    });
   }
 
   function voltarDaFicha() {
@@ -156,7 +187,7 @@ export default function App() {
 
   function handleLogin(usuario) {
     setUser(usuario);
-    carregarPerfil(usuario.email);
+    carregarPerfil(usuario.id);
   }
 
   if (!user) {
@@ -195,6 +226,7 @@ export default function App() {
         header={
           <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
             <span style={{ color: "#F97316" }}>OSFlow</span>
+            <span style={{ color: "rgba(255,255,255,0.8)", fontSize: "0.8rem", letterSpacing: "0.06em" }}>/ {getHeaderContextTitle()}</span>
             <span style={{ color: "rgba(255,255,255,0.9)", fontSize: "0.9rem", textTransform: "none", letterSpacing: "0.02em" }}>Fluxo inteligente | Resultados reais</span>
           </div>
         }
@@ -216,6 +248,7 @@ export default function App() {
           screens[view]
         )}
       </Layout>
+      <FeedbackHost />
     </AuthProvider>
   );
 }

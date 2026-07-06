@@ -4,28 +4,20 @@ import "./LandingPage.css";
 
 const platformHighlights = [
   "CRM Comercial",
-  "Gestão de Leads",
-  "Pipeline",
+  "Cockpit Executivo",
   "Gestão de Imóveis",
-  "Documentação",
-  "Agenda",
-  "Indicadores",
-  "Centro de Ações",
+  "Gestão Documental",
+  "Segurança e Auditoria",
+  "Produtividade Operacional",
   "Inteligência Comercial",
 ];
 
 const featureCards = [
-  "CRM Inteligente",
-  "Pipeline Comercial",
+  "CRM Comercial",
+  "Cockpit Executivo",
   "Gestão de Imóveis",
-  "Checklist Documental",
-  "Dashboard Executivo",
-  "Agenda",
-  "KPIs",
-  "Logs",
-  "Utilizadores",
-  "Permissões",
-  "Automação",
+  "Gestão Documental",
+  "Segurança e Auditoria",
 ];
 
 const benefits = [
@@ -40,27 +32,33 @@ const technologies = ["React", "Supabase", "Cloud", "Segurança", "Responsividad
 const dashboardPreviewImage = "";
 const valueCards = [
   {
-    id: "crm-inteligente",
-    title: "CRM Inteligente",
-    description: "Acompanhe cada oportunidade com contexto, histórico e ações centralizadas num único fluxo.",
+    id: "crm-comercial",
+    title: "CRM Comercial",
+    description: "Acompanhe cada oportunidade com histórico, contexto e ações comerciais centralizadas.",
     icon: "crm",
+  },
+  {
+    id: "cockpit-executivo",
+    title: "Cockpit Executivo",
+    description: "Visualize indicadores, prioridades e desempenho operacional com leitura imediata.",
+    icon: "dashboard",
   },
   {
     id: "gestao-imoveis",
     title: "Gestão de Imóveis",
-    description: "Organize carteira, estado documental e detalhes comerciais com estrutura consistente.",
+    description: "Organize carteira, estado dos imóveis e dados críticos para uma operação eficiente.",
     icon: "building",
   },
   {
-    id: "dashboard-executivo",
-    title: "Dashboard Executivo",
-    description: "Visualize resultados, performance e prioridades com métricas claras para decisão rápida.",
-    icon: "dashboard",
+    id: "gestao-documental",
+    title: "Gestão Documental",
+    description: "Centralize documentos e checklist operacional com rastreabilidade e controlo.",
+    icon: "crm",
   },
   {
-    id: "inteligencia-comercial",
-    title: "Inteligência Comercial",
-    description: "Transforme dados operacionais em ações práticas para acelerar conversão e previsibilidade.",
+    id: "seguranca-auditoria",
+    title: "Segurança e Auditoria",
+    description: "Reforce permissões, proteção operacional e histórico de ações para total confiança.",
     icon: "spark",
   },
 ];
@@ -347,9 +345,9 @@ export default function LandingPage() {
 
       <header className="lp-hero" id="top">
         <div className="lp-container lp-hero-inner">
-          <h1 className="lp-hero-title">Organize toda a operação da sua imobiliária numa única plataforma.</h1>
+          <h1 className="lp-hero-title">A Plataforma Operacional Inteligente para Imobiliárias.</h1>
           <p className="lp-description lp-hero-subtitle">
-            Centralize clientes, imóveis, documentos, tarefas e indicadores numa plataforma criada para equipas imobiliárias que querem trabalhar com mais organização, velocidade e controlo.
+            Centralize CRM, gestão de imóveis, documentos, produtividade e inteligência comercial numa única plataforma moderna.
           </p>
           <p className="lp-slogan">
             <span>Menos tempo a gerir.</span>
@@ -357,18 +355,18 @@ export default function LandingPage() {
           </p>
 
           <div className="lp-actions">
-            <a className="lp-btn lp-btn-primary" href="/app">
-              Entrar no CRM
-            </a>
             <button
-              className="lp-btn lp-btn-ghost"
+              className="lp-btn lp-btn-primary"
               type="button"
               onClick={() => {
                 setIsContactModalOpen(true);
               }}
             >
-              Falar com a equipa
+              Solicitar Demonstração
             </button>
+            <a className="lp-btn lp-btn-ghost" href="/app">
+              Entrar na Plataforma
+            </a>
           </div>
         </div>
       </header>
@@ -426,8 +424,19 @@ export default function LandingPage() {
             <SectionTitle
               eyebrow="Módulos"
               title="Funcionalidades"
-              subtitle="Tudo o que a operação comercial precisa, centralizado numa experiência rápida e consistente."
+              subtitle="Tudo o que a operação comercial precisa, centralizado numa experiência rápida, segura e consistente."
             />
+
+            <article className="lp-card" style={{ marginBottom: "14px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "8px" }}>
+                <h3 style={{ margin: 0 }}>NOVO · OSFlow Radar</h3>
+                <span className="lp-status-pill lp-status-desenvolvimento">Beta</span>
+              </div>
+              <p style={{ marginBottom: "12px" }}>Encontre oportunidades antes da concorrência.</p>
+              <button className="lp-btn lp-btn-ghost" type="button" disabled>
+                Brevemente disponível
+              </button>
+            </article>
 
             <div className="lp-card-grid">
               {featureCards.map((feature) => (
@@ -476,10 +485,17 @@ export default function LandingPage() {
 
         <section className="lp-section lp-cta-wrap">
           <div className="lp-container lp-cta">
-            <h2>Experimente a nova geração de software imobiliário.</h2>
-            <a className="lp-btn lp-btn-primary" href="/app">
-              Entrar no CRM
-            </a>
+            <h2>Tudo o que a sua imobiliária precisa.</h2>
+            <p style={{ margin: "0 0 18px", lineHeight: 1.6 }}>Menos ferramentas.<br />Mais controlo.<br />Mais produtividade.</p>
+            <button
+              className="lp-btn lp-btn-primary"
+              type="button"
+              onClick={() => {
+                setIsContactModalOpen(true);
+              }}
+            >
+              Solicitar Demonstração
+            </button>
           </div>
         </section>
       </main>

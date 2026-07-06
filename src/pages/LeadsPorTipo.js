@@ -1,146 +1,40 @@
-import { useEffect, useState } from "react";
-import { supabase } from "../supabase";
 import FichaLead from "../FichaLead";
 import { useTheme } from "../theme/ThemeContext";
-import { formatarNomeApresentacao } from "../utils/nomes";
+import { useLeadsPorTipo } from "../modules/leads/hooks";
+import { emojiTipoLead, formatarDataLeadCard } from "../modules/leads/viewmodels";
+import { notifyError } from "../components/ui/feedbackBus";
+import EmptyState from "../components/ui/EmptyState";
 
 export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
   const theme = useTheme();
-  const [leads, setLeads] = useState([]);
-  const [agentes, setAgentes] = useState([]);
-  const [leadSelecionadoId, setLeadSelecionadoId] = useState(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const {
+    leads,
+    leadSelecionadoId,
+    abrirFicha,
+    fecharFicha,
+    atualizarObsLocal,
+    alterarTipo,
+    salvarObservacao,
+    nomeAgente
+  } = useLeadsPorTipo({ tipo, user, onAbrirLead });
 
-  useEffect(() => {
-    carregar();
-  }, [tipo, refreshKey]);
-
-  async function carregar() {
-    const { data, error } = await supabase
-      .from("leads")
-      .select("*")
-      .eq("tipo", tipo)
-      .order("created_at", { ascending: false });
-
-    if (!error) {
-      setLeads(data || []);
-      carregarAgentes(data || []);
+  async function handleSalvarObservacao(id, texto) {
+    const result = await salvarObservacao(id, texto);
+    if (result.error) {
+      notifyError(result.error.message);
     }
   }
-
-  async function carregarAgentes(leadsCarregadas) {
-    const { data, error } = await supabase
-      .from("agentes")
-      .select("id,nome,email,ativo")
-      .eq("ativo", true)
-      .order("nome", { ascending: true });
-
-    if (!error && data?.length) {
-      setAgentes(data.map((a) => ({
-        id: a.id,
-        nome: a.nome || a.email || a.id,
-        email: a.email || ""
-      })));
-      return;
-    }
-
-    const ids = [...new Set((leadsCarregadas || []).map((l) => l.agente_id).filter(Boolean))];
-    if (user?.id && !ids.includes(user.id)) ids.push(user.id);
-
-    setAgentes(ids.map((id) => ({
-      id,
-      nome: id === user?.id ? nomeUtilizadorAtual() : "Agente validado",
-      email: id === user?.id ? user?.email || "" : id
-    })));
-  }
-
-  function nomeUtilizadorAtual() {
-    return user?.user_metadata?.nome ||
-      user?.user_metadata?.name ||
-      user?.user_metadata?.full_name ||
-      user?.email ||
-      "Agente atual";
-  }
-
-  function nomeAgente(id) {
-    const agente = agentes.find((a) => a.id === id);
-    if (agente) return formatarNomeApresentacao(agente.nome);
-    if (id === user?.id) return formatarNomeApresentacao(nomeUtilizadorAtual());
-    return "Sem agente";
-  }
-
-  function atualizarObsLocal(id, texto) {
-    setLeads((prev) =>
-      prev.map((l) =>
-        l.id === id ? { ...l, observacoes: texto } : l
-      )
-    );
-  }
-
-  async function alterarTipo(id, novoTipo) {
-    const { error } = await supabase
-      .from("leads")
-      .update({
-        tipo: novoTipo,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", id);
-
-    if (!error) {
-      setRefreshKey((value) => value + 1);
-    }
-  }
-
-  async function salvarObservacao(id, texto) {
-    const { error } = await supabase
-      .from("leads")
-      .update({
-        observacoes: texto,
-        updated_at: new Date().toISOString()
-      })
-      .eq("id", id);
-
-    if (error) {
-      alert(error.message);
-    } else {
-      setRefreshKey((value) => value + 1);
-    }
-  }
-
-  function abrirFicha(leadId) {
-    setLeadSelecionadoId(leadId);
-    onAbrirLead?.(leadId);
-  }
-
-function formatarData(data) {
-  if (!data) return "";
-
-  const d = new Date(data);
-
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const ano = d.getFullYear();
-
-  const hora = String(d.getHours()).padStart(2, "0");
-  const min = String(d.getMinutes()).padStart(2, "0");
-  const seg = String(d.getSeconds()).padStart(2, "0");
-
-  return `${dia}/${mes}/${ano} ${hora}:${min}:${seg}`;
-}
 
   if (leadSelecionadoId) {
     return (
       <div>
-        <button style={{ ...btnVoltar, background: theme.colors.surfaceSoft, border: `1px solid ${theme.colors.border}`, color: theme.colors.text }} onClick={() => setLeadSelecionadoId(null)}>
+        <button style={{ ...btnVoltar, background: theme.colors.surfaceSoft, border: `1px solid ${theme.colors.border}`, color: theme.colors.text }} onClick={fecharFicha}>
           ← Voltar para a lista
         </button>
         <FichaLead
           leadId={leadSelecionadoId}
           user={user}
-          voltar={() => {
-            setLeadSelecionadoId(null);
-            setRefreshKey((value) => value + 1);
-          }}
+          voltar={fecharFicha}
         />
       </div>
     );
@@ -148,10 +42,18 @@ function formatarData(data) {
 
   return (
     <div>
-      <h2 style={{ color: theme.colors.primary }}>{emojiTipo(tipo)} {tipo.toUpperCase()}</h2>
+      <h2 style={{ color: theme.colors.primary }}>{emojiTipoLead(tipo)} {tipo.toUpperCase()}</h2>
 
       <div style={wrapper}>
         <div style={grid}>
+          {leads.length === 0 ? (
+            <EmptyState
+              title="Sem leads nesta categoria"
+              description="Ainda não existem registos para o filtro selecionado."
+              style={{ gridColumn: "1 / -1" }}
+            />
+          ) : null}
+
           {leads.map((lead) => (
             <div
               key={lead.id}
@@ -168,7 +70,7 @@ function formatarData(data) {
             >
               <div style={header}>
                 <strong>{lead.nome}</strong>
-                <span>{emojiTipo(lead.tipo)}</span>
+                <span>{emojiTipoLead(lead.tipo)}</span>
               </div>
 
               <p style={{ margin: "4px 0" }}>{lead.telefone}</p>
@@ -178,7 +80,7 @@ function formatarData(data) {
 	      </p>
 
               <p style={dataStyle}>
-                📅 Último contacto: {formatarData(lead.updated_at || lead.created_at)}
+                📅 Último contacto: {formatarDataLeadCard(lead.updated_at || lead.created_at)}
               </p>
 
               <p style={agenteStyle}>
@@ -189,7 +91,7 @@ function formatarData(data) {
                 style={{ ...textarea, border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}
                 value={lead.observacoes || ""}
                 onChange={(e) => atualizarObsLocal(lead.id, e.target.value)}
-                onBlur={(e) => salvarObservacao(lead.id, e.target.value)}
+                onBlur={(e) => handleSalvarObservacao(lead.id, e.target.value)}
                 onClick={(event) => event.stopPropagation()}
                 placeholder="Adicionar observações..."
               />
@@ -310,12 +212,6 @@ const btnSalvar = {
   borderRadius: "6px",
   cursor: "pointer",
   fontSize: "12px"
-};
-
-function emojiTipo(tipo) {
-  if (tipo === "quente") return "🔥";
-  if (tipo === "morno") return "🟡";
-  return "❄️";
 };
 
 const agenteStyle = {

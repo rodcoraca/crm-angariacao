@@ -7,11 +7,22 @@ const PERFIS_DISPONIVEIS = [
   "Outro",
 ];
 
-export function criarUsuariosViewModel({ form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao, estruturaPermissoes }) {
+export function criarUsuariosViewModel({
+  form,
+  perfilOrganizacional,
+  usuarioSelecionadoMeta,
+  modoEdicao,
+  sessoesUsuario = [],
+  auditoriaUsuario = [],
+  estruturaPermissoes
+}) {
   const dataCriacao =
     modoEdicao && usuarioSelecionadoMeta?.created_at
       ? new Date(usuarioSelecionadoMeta.created_at).toLocaleString("pt-PT")
       : "Novo utilizador";
+
+  const ultimaSessao = sessoesUsuario[0] || null;
+  const ultimoEvento = auditoriaUsuario[0] || null;
 
   return {
     dadosPessoais: {
@@ -23,7 +34,9 @@ export function criarUsuariosViewModel({ form, perfilOrganizacional, usuarioSele
 
     conta: {
       estado: form.ativo ? "ativo" : "inativo",
-      ultimoAcesso: "Nao disponivel",
+      ultimoAcesso: ultimaSessao?.last_activity_at
+        ? new Date(ultimaSessao.last_activity_at).toLocaleString("pt-PT")
+        : "Nao disponivel",
       dataCriacao,
       username: form.username,
       password: form.password,
@@ -45,9 +58,11 @@ export function criarUsuariosViewModel({ form, perfilOrganizacional, usuarioSele
     },
 
     atividade: {
-      ultimoAcesso: "Nao disponivel",
-      ultimaAcao: "Nao disponivel",
-      numeroAcessos: "Nao disponivel",
+      ultimoAcesso: ultimaSessao?.last_activity_at
+        ? new Date(ultimaSessao.last_activity_at).toLocaleString("pt-PT")
+        : "Nao disponivel",
+      ultimaAcao: ultimoEvento?.event_type || "Nao disponivel",
+      numeroAcessos: String(sessoesUsuario.length || 0),
     },
 
     organizacao: {

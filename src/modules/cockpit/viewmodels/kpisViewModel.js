@@ -8,10 +8,3 @@ export function createKpisViewModel(theme) {
     { id: "kpi-atividades-hoje", titulo: "Atividades Hoje", valor: "64", variacao: "em execucao", icone: "T", cor: theme.colors.accent }
   ];
 }
-
-export function composeKpis(kpisBase, kpiValues, kpiHasError) {
-  return kpisBase.map((kpi) => ({
-    ...kpi,
-    valor: kpiValues[kpi.id] || (kpiHasError ? "--" : "...")
-  }));
-}

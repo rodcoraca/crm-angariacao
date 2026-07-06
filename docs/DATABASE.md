@@ -4,10 +4,10 @@
 Organizar a documentação oficial sobre estrutura de dados, entidades, relacionamentos, convenções e princípios de persistência da plataforma OSFlow.
 
 ## Última revisão
-2026-07-05
+2026-07-06
 
 ## Versão do documento
-1.1.0
+1.3.0
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -68,6 +68,7 @@ Este documento descreve o modelo lógico de dados da plataforma OSFlow e a forma
 Os relacionamentos estruturais esperados são:
 
 - Utilizador possui autenticação, sessão, permissões, perfil e preferências.
+- Vínculo entre identidade autenticada e perfil operacional ocorre por `usuarios.auth_user_id` ↔ `auth.users.id`.
 - Agente representa função comercial associada a um Utilizador.
 - Lead pode estar associada a Agente, Imóvel, Documentos e atividades operacionais.
 - Empresa agrupa Utilizadores, Agentes, Leads, Imóveis e Documentos no contexto SaaS.
@@ -86,11 +87,43 @@ Os relacionamentos estruturais esperados são:
 As seguintes estruturas encontram-se oficialmente previstas, sem implicar implementação imediata:
 
 - `data_visita`, `hora_visita`, `local_visita`, `status_visita` para Leads.
-- `user_sessions` para controlo de sessão.
 - estrutura de Auditoria para eventos críticos.
 - estrutura de Perfis ligada por `role_id`.
 - tabelas `roles`, `permissions`, `role_permissions` e `user_roles` com `empresa_id` opcional para escopo multiempresa.
 - estrutura de Empresas, Planos e Assinaturas para SaaS.
+
+### 6.2 Contrato Oficial de Logs
+
+- `audit_logs`: fonte oficial de auditoria operacional (segurança, mutações críticas, acesso negado e rastreabilidade formal).
+- `logs_navegacao`: telemetria e analytics de navegação (métricas operacionais e comportamento de uso).
+- `logs_navegacao` não substitui `audit_logs` para requisitos de auditoria, segurança ou conformidade.
+
+### 6.1 Contrato Implementado (Identity & Access)
+
+Estado consolidado entre código e migrações executadas:
+
+| Entidade | Estado | Fonte |
+| --- | --- | --- |
+| `auth.users` | Implementada (Supabase Auth) | Infraestrutura Supabase |
+| `usuarios` | Implementada (perfil de negócio) | DB-002 (execução registada) |
+| `roles` | Implementada | DB-010 |
+| `permissions` | Implementada | DB-010, DB-012, DB-013 |
+| `role_permissions` | Implementada | DB-010 |
+| `user_roles` | Implementada | DB-010 |
+| `user_sessions` | Implementada | DB-004 |
+| `audit_logs` | Implementada | DB-011 |
+
+Contrato operacional atual em `usuarios` (código):
+
+- `auth_user_id`
+- `nome`
+- `apelido`
+- `email`
+- `telefone`
+- `username`
+- `ativo`
+- `permissoes`
+- `empresa_id`
 
 ## 7. Rastreabilidade com Migrações SQL
 
@@ -99,8 +132,8 @@ As seguintes estruturas encontram-se oficialmente previstas, sem implicar implem
 | [OSFLOW_ARCHITECTURE.md](./OSFLOW_ARCHITECTURE.md) | DEC-004 | DB-002 | Planeada |
 | [OSFLOW_ARCHITECTURE.md](./OSFLOW_ARCHITECTURE.md) | DEC-004 | DB-006 | Executada |
 | [SECURITY.md](./SECURITY.md) | DEC-005 | DB-010 | Executada |
-| [SECURITY.md](./SECURITY.md) | DEC-005 | DB-004 | Planeada |
-| [SECURITY.md](./SECURITY.md) | DEC-005 | DB-005 | Planeada |
+| [SECURITY.md](./SECURITY.md) | DEC-005 | DB-004 | Executada |
+| [SECURITY.md](./SECURITY.md) | DEC-005 | DB-005 | Executada |
 | [SAAS.md](./SAAS.md) | DEC-007 | DB-007 | Planeada |
 | [SAAS.md](./SAAS.md) | DEC-007 | DB-008 | Planeada |
 | [SAAS.md](./SAAS.md) | DEC-007 | DB-009 | Planeada |
@@ -113,6 +146,8 @@ Este documento define a visão lógica oficial da base de dados da OSFlow e deve
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-07-06 | Engenharia da Plataforma OSFlow | Formalização do contrato oficial de logs: `audit_logs` para auditoria operacional e `logs_navegacao` para telemetria/analytics. |
+| 1.2.0 | 2026-07-06 | Engenharia da Plataforma OSFlow | Sincronização do contrato com o estado executado: DB-004 marcado como executada (`user_sessions`) e vínculo oficial `usuarios.auth_user_id` ↔ `auth.users.id`. |
 | 1.1.0 | 2026-07-05 | Engenharia da Plataforma OSFlow | Inclusão do domínio DB-010 (Autorização RBAC), registo das tabelas de perfis/permissões e atualização da rastreabilidade com migrações executadas. |
 | 1.0.0 | 2026-07-03 | Engenharia da Plataforma OSFlow | Consolidação do modelo lógico de dados, convenções e rastreabilidade estrutural. |
 

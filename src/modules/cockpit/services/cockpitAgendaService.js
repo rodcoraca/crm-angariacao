@@ -1,4 +1,8 @@
-import { supabase } from "../../../supabase";
+import {
+  queryAgendaAgendadasSemData,
+  queryAgendaVisitasFuturas,
+  queryAgendaVisitasHoje
+} from "../repositories";
 import { fetchRows } from "./sharedQueries";
 
 export async function fetchCockpitAgenda() {
@@ -10,34 +14,9 @@ export async function fetchCockpitAgenda() {
   inicioAmanha.setDate(inicioAmanha.getDate() + 1);
 
   const [visitasHoje, visitasFuturas, agendadasSemData] = await Promise.all([
-    fetchRows(
-      supabase
-        .from("leads")
-        .select(camposAgenda)
-        .eq("status", "agendado")
-        .gte("data_visita", inicioHoje.toISOString())
-        .lt("data_visita", inicioAmanha.toISOString())
-        .order("data_visita", { ascending: true })
-        .limit(limite)
-    ),
-    fetchRows(
-      supabase
-        .from("leads")
-        .select(camposAgenda)
-        .eq("status", "agendado")
-        .gte("data_visita", inicioAmanha.toISOString())
-        .order("data_visita", { ascending: true })
-        .limit(limite)
-    ),
-    fetchRows(
-      supabase
-        .from("leads")
-        .select(camposAgenda)
-        .eq("status", "agendado")
-        .is("data_visita", null)
-        .order("created_at", { ascending: true })
-        .limit(limite)
-    )
+    fetchRows(queryAgendaVisitasHoje(camposAgenda, inicioHoje.toISOString(), inicioAmanha.toISOString(), limite)),
+    fetchRows(queryAgendaVisitasFuturas(camposAgenda, inicioAmanha.toISOString(), limite)),
+    fetchRows(queryAgendaAgendadasSemData(camposAgenda, limite))
   ]);
 
   return {

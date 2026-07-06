@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-import { supabase } from "../supabase";
 import { useTheme } from "../theme/ThemeContext";
 import Button from "../components/Button";
 import Input from "../Input";
@@ -8,6 +6,7 @@ import Badge from "../components/ui/Badge";
 import Table from "../components/ui/Table";
 import EmptyState from "../components/ui/EmptyState";
 import Loading from "../components/ui/Loading";
+import { useDashboardLeads } from "../modules/leads/hooks";
 
 export default function Dashboard({ onAbrirLead }) {
   const theme = useTheme();
@@ -220,61 +219,19 @@ export default function Dashboard({ onAbrirLead }) {
     }
   };
 
-  const [leads, setLeads] = useState([]);
-  const [filtroTipo, setFiltroTipo] = useState("");
-  const [busca, setBusca] = useState("");
-  const [leadSelecionado, setLeadSelecionado] = useState(null);
+  const {
+    filtroTipo,
+    busca,
+    leadSelecionado,
+    dados,
+    setFiltroTipo,
+    setBusca,
+    setLeadSelecionado,
+    exportarCSV,
+    getInteractiveCellProps,
+    formatarData
+  } = useDashboardLeads({ onAbrirLead, theme });
 
-  useEffect(() => {
-    carregarLeads();
-  }, []);
-
-  async function carregarLeads() {
-    const { data } = await supabase
-      .from("leads")
-      .select("*")
-      .order("created_at", { ascending: false });
-
-    setLeads(data || []);
-  }
-
-  function filtrarLeads() {
-    const termo = (busca || "").trim().toLowerCase();
-
-    return leads.filter((l) => {
-      const nomeMatch = l.nome?.toLowerCase().includes(termo);
-      const telefoneMatch = String(l.telefone || "").replace(/\D/g, "").includes(termo.replace(/\D/g, ""));
-
-      return (
-        (filtroTipo ? l.tipo === filtroTipo : true) &&
-        (!termo || nomeMatch || telefoneMatch)
-      );
-    });
-  }
-
-  function exportarCSV() {
-    const linhas = [
-      ["Nome", "Telefone", "Tipo", "Data"],
-      ...filtrarLeads().map((l) => [
-        l.nome,
-        l.telefone,
-        l.tipo,
-        new Date(l.created_at).toLocaleString()
-      ])
-    ];
-
-    const csv = linhas.map(l => l.join(",")).join("\n");
-
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "leads.csv";
-    a.click();
-  }
-
-  const dados = filtrarLeads();
   const isLoading = false;
   const emptyStateMessage = (
     <EmptyState
@@ -283,18 +240,6 @@ export default function Dashboard({ onAbrirLead }) {
       style={{ padding: theme.spacing.md, boxShadow: "none", border: "none", background: "transparent" }}
     />
   );
-
-  const getInteractiveCellProps = (lead) => ({
-    onClick: () => onAbrirLead?.(lead.id),
-    onMouseEnter: (event) => {
-      const row = event.currentTarget.closest("tr");
-      if (row) row.style.background = theme.colors.surfaceSoft;
-    },
-    onMouseLeave: (event) => {
-      const row = event.currentTarget.closest("tr");
-      if (row) row.style.background = theme.colors.surface;
-    }
-  });
 
   const tableColumns = [
     {
@@ -347,13 +292,6 @@ export default function Dashboard({ onAbrirLead }) {
     }
   ];
 
-  function formatarData(data) {
-    if (!data) return "-";
-    const d = new Date(data);
-    if (d.getFullYear() === 1970) return "-";
-    return d.toLocaleString("pt-PT");
-  }
-
   function renderTipo(tipo) {
     const base = {
       padding: "4px 8px",
@@ -377,7 +315,7 @@ export default function Dashboard({ onAbrirLead }) {
     <div style={styles.page}>
       <div style={styles.headerContainer}>
         <div style={styles.titleWrapper}>
-          <h2 style={styles.pageTitle}>📊 Painel Admin</h2>
+          <h2 style={styles.pageTitle}>📊 Administração</h2>
           <p style={styles.pageSubtitle}>Gestão operacional das leads.</p>
         </div>
 

@@ -6,10 +6,3 @@ export function createPipelineViewModel() {
     { id: "pipeline-fechado", label: "Fechado", value: "12", hint: "Placeholder" }
   ];
 }
-
-export function composePipeline(pipelineBase, pipelineValues, pipelineHasError) {
-  return pipelineBase.map((item) => ({
-    ...item,
-    value: pipelineValues[item.id] || (pipelineHasError ? "--" : "...")
-  }));
-}

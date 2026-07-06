@@ -1,0 +1,30 @@
+export const FORM_DEFAULTS = {
+  proprietario: "",
+  telefone: "",
+  telefoneErro: "",
+  tipologia: "",
+  zona: "",
+  valorPretendido: "",
+  observacoes: "",
+  email: "",
+  valorVenda: "",
+  valorM2: "",
+  areaBrutaPrivativa: "",
+  areaUtil: "",
+  numeroQuartos: "",
+  casasBanho: "",
+  estacionamento: "",
+  precoCondominio: "",
+  codigoPostal: "",
+  morada: "",
+  distrito: "",
+  concelho: "",
+  freguesia: "",
+  cmi: false,
+  cadernetaPredial: false,
+  plantas: false,
+  certificadoEnergetico: false,
+  cartaoCidadao: false
+};
+
+export const TELEFONE_ERROR_MESSAGE = "Informe o telefone com 12 dígitos (indicativo + 9 dígitos).";

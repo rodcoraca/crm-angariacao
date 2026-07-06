@@ -4,10 +4,10 @@
 Estabelecer este documento como o índice oficial da documentação da plataforma OSFlow, centralizando o acesso aos documentos técnicos, estruturais, operacionais e estratégicos da Plataforma Operacional.
 
 ## Última revisão
-2026-07-03
+2026-07-06
 
 ## Versão do documento
-1.0.0
+1.1.0
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -96,7 +96,7 @@ Repositório oficial das alterações estruturais da base de dados, com históri
 | DB-011 | 2026-07-05 | Auditoria Central | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
 | DB-012 | 2026-07-05 | Seed de Permissões | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
 | DB-013 | 2026-07-05 | Hierarquia de Permissões | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
-| DB-004 |  | Sessões de Utilizador | Planeada |  |  | [SECURITY.md](./SECURITY.md) |
+| DB-004 | 2026-07-06 | Sessões de Utilizador | Executada | 0.9.1 Beta | Engenharia da Plataforma OSFlow | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) |
 
 ## 6. Segurança
 
@@ -164,7 +164,6 @@ Funcionalidades aprovadas mas ainda não implementadas ou sem documentação ded
 | Prioridade | Identificador | Iniciativa | Documento de referência | Apontamento documental |
 | --- | --- | --- | --- | --- |
 | Alta prioridade | SEC-001 | Sessão única por Utilizador | [SECURITY.md](./SECURITY.md) | Coberta documentalmente |
-| Alta prioridade | DB-004 | Sessões de Utilizador | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) | Coberta documentalmente |
 | Alta prioridade | DB-005 | Auditoria | [SQL_MIGRATIONS.md](./SQL_MIGRATIONS.md) | Coberta documentalmente |
 | Média prioridade | SAAS-003 | Empresas Multi-Tenant | [SAAS.md](./SAAS.md) | Coberta documentalmente |
 | Média prioridade | SAAS-004 | Planos e Assinaturas | [SAAS.md](./SAAS.md) | Coberta documentalmente |
@@ -225,6 +224,7 @@ Funcionalidades aprovadas mas ainda não implementadas ou sem documentação ded
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.1.0 | 2026-07-06 | Engenharia da Plataforma OSFlow | Sincronização do índice com SQL: DB-004 marcada como executada e removida da lista de implementações futuras. |
 | 1.0.0 | 2026-07-03 | Engenharia da Plataforma OSFlow | Consolidação da documentação oficial da Sprint 0, com padronização estrutural, rastreabilidade e validação de consistência. |
 
 ## Próximas Revisões
