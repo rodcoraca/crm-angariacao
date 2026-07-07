@@ -4,8 +4,11 @@ import { formatarNomeApresentacao } from "./utils/nomes";
 import Button from "./components/Button";
 import Input from "./Input";
 import Card from "./components/Card";
+import Badge from "./components/ui/Badge";
 import { useFichaLead } from "./modules/leads/hooks";
 import { badgeTipoFicha, labelTipoLead } from "./modules/leads/viewmodels";
+import { criarOpcoesDropdownOrigemLead } from "./modules/leads/utils";
+import { parseRadarLeadMetadataFromObservation } from "./modules/radar/contracts/radarLeadMetadata";
 
 export default function FichaLead({ leadId, user, voltar }) {
   const theme = useTheme();
@@ -75,6 +78,20 @@ export default function FichaLead({ leadId, user, voltar }) {
       marginBottom: theme.spacing.lg,
       fontSize: "0.95rem"
     },
+    radarBox: {
+      background: theme.colors.surfaceSoft,
+      color: theme.colors.text,
+      padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+      borderRadius: theme.borderRadius.md,
+      marginBottom: theme.spacing.lg,
+      display: "grid",
+      gap: theme.spacing.xs
+    },
+    radarLine: {
+      margin: 0,
+      color: theme.colors.text,
+      fontSize: "0.9rem"
+    },
     grid: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
@@ -133,6 +150,13 @@ export default function FichaLead({ leadId, user, voltar }) {
   if (!lead || !form) return <Card style={styles.loading}>Lead não encontrada.</Card>;
 
   const badgeType = badgeTipoFicha(theme, form.tipo);
+  const radarMetadata = parseRadarLeadMetadataFromObservation(lead.observacoes || form.observacoes || "");
+  const isRadarImported = String(form.origem || lead.origem || "").toLowerCase() === "radar" || Boolean(radarMetadata);
+  const origemOptions = criarOpcoesDropdownOrigemLead({
+    includeSemOrigem: true,
+    includeOutro: false,
+    currentValue: form.origem
+  });
 
   return (
     <Card style={styles.container}>
@@ -148,6 +172,15 @@ export default function FichaLead({ leadId, user, voltar }) {
       <div style={styles.infoBox}>
         <strong>Criada por:</strong> {nomeAgente(lead.agente_id)}
       </div>
+
+      {isRadarImported && radarMetadata ? (
+        <div style={styles.radarBox}>
+          <Badge variant="primary" style={{ width: "fit-content" }}>📡 Importado pelo Radar</Badge>
+          <p style={styles.radarLine}><strong>Portal:</strong> {radarMetadata.provider || "-"}</p>
+          <p style={styles.radarLine}><strong>Score:</strong> {radarMetadata.score ?? "-"}</p>
+          <p style={styles.radarLine}><strong>Publicado:</strong> {formatarDataRadar(radarMetadata.publishedAt)}</p>
+        </div>
+      ) : null}
 
       <div style={styles.grid}>
         <label style={styles.label}>
@@ -178,10 +211,9 @@ export default function FichaLead({ leadId, user, voltar }) {
         <label style={styles.label}>
           Origem
           <select style={styles.select} value={form.origem} onChange={(e) => atualizar("origem", e.target.value)}>
-            <option value="">Sem origem</option>
-            <option value="placa">Placa na rua</option>
-            <option value="indicacao">Indicação</option>
-            <option value="site">Site de imóveis</option>
+            {origemOptions.map((option) => (
+              <option key={option.value || "sem-origem"} value={option.value}>{option.label}</option>
+            ))}
           </select>
         </label>
 
@@ -226,4 +258,15 @@ export default function FichaLead({ leadId, user, voltar }) {
 function formatarData(data) {
   if (!data) return "-";
   return new Date(data).toLocaleString("pt-PT");
+}
+
+function formatarDataRadar(data) {
+  if (!data) return "-";
+  const parsed = new Date(data);
+  if (Number.isNaN(parsed.getTime())) return data;
+  return parsed.toLocaleDateString("pt-PT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
 }

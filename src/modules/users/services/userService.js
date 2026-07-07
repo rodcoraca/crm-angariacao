@@ -47,8 +47,14 @@ export async function guardarUsuarioComAuditoria({
   const email = String(form.email || "").trim().toLowerCase();
   const telefone = String(form.telefone || "").trim();
   const username = String(form.username || "").trim();
+  const perfil = String(perfilOrganizacional || "").trim();
 
   const permissoesNormalizadas = normalizarPermissoes(form.permissoes);
+  if (perfil) {
+    permissoesNormalizadas.__perfil = perfil;
+  } else {
+    delete permissoesNormalizadas.__perfil;
+  }
 
   const payload = {
     nome,

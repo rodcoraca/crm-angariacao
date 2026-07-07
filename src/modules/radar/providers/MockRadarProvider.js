@@ -1,4 +1,5 @@
 import { RadarProvider } from "./RadarProvider";
+import { buildRadarLeadMetadata } from "../contracts/radarLeadMetadata";
 
 const MOCK_OPPORTUNITIES = [
   {
@@ -93,8 +94,25 @@ function clone(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function withMetadata(opportunity) {
+  return {
+    ...opportunity,
+    radarLeadMetadata: buildRadarLeadMetadata({
+      provider: opportunity?.origem || "MockProvider",
+      externalId: opportunity?.id_externo || opportunity?.id,
+      url: opportunity?.url_original || opportunity?.url,
+      publisherName: opportunity?.anunciante_nome || "",
+      publisherContact: opportunity?.contacto?.telefone || opportunity?.contacto?.email || "",
+      publishedAt: opportunity?.data_publicacao || opportunity?.publicado_em,
+      capturedAt: opportunity?.data_recolha || opportunity?.encontrado_em,
+      score: opportunity?.score,
+      status: opportunity?.estado
+    })
+  };
+}
+
 export class MockRadarProvider extends RadarProvider {
   async listOpportunities() {
-    return clone(MOCK_OPPORTUNITIES);
+    return clone(MOCK_OPPORTUNITIES).map((item) => withMetadata(item));
   }
 }

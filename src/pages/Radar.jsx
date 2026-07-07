@@ -29,7 +29,8 @@ export default function Radar() {
     reload,
     openDetail,
     closeDetail,
-    importSelectedToLeads
+    importSelectedToLeads,
+    updateOpportunityState
   } = useRadar();
   const [filtroCidade, setFiltroCidade] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("todos");
@@ -54,6 +55,23 @@ export default function Radar() {
     }
 
     notifyError(result?.message || "Não foi possível importar para Leads.");
+  }
+
+  async function handleChangeOperationalState(event) {
+    const nextState = event.target.value;
+    if (!selectedOpportunity?.id) return;
+
+    const result = await updateOpportunityState({
+      opportunityId: selectedOpportunity.id,
+      nextState
+    });
+
+    if (result?.ok) {
+      notifyInfo("Estado operacional atualizado e score recalculado.");
+      return;
+    }
+
+    notifyError(result?.message || "Não foi possível atualizar o estado.");
   }
 
   const kpis = useMemo(
@@ -184,11 +202,11 @@ export default function Radar() {
   const styles = {
     page: {
       display: "grid",
-      gap: theme.spacing.lg
+      gap: theme.spacing.xl
     },
     hero: {
       display: "grid",
-      gap: theme.spacing.sm,
+      gap: theme.spacing.md,
       background: `linear-gradient(135deg, ${theme.colors.surface} 0%, ${theme.colors.surfaceSoft} 100%)`
     },
     title: {
@@ -213,6 +231,17 @@ export default function Radar() {
       margin: 0,
       color: theme.colors.text,
       fontSize: "1.2rem"
+    },
+    section: {
+      display: "grid",
+      gap: theme.spacing.md
+    },
+    sectionHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      gap: theme.spacing.sm,
+      flexWrap: "wrap"
     },
     cardsGrid: {
       display: "grid",
@@ -259,6 +288,34 @@ export default function Radar() {
       gap: theme.spacing.sm,
       flexWrap: "wrap"
     },
+    tableContainer: {
+      display: "grid",
+      gap: theme.spacing.md
+    },
+    filtersGrid: {
+      display: "flex",
+      gap: theme.spacing.sm,
+      alignItems: "flex-start",
+      flexWrap: "nowrap",
+      overflowX: "auto",
+      overflowY: "hidden",
+      paddingBottom: 2
+    },
+    filterField: {
+      display: "grid",
+      gap: 6,
+      color: theme.colors.muted,
+      minWidth: "180px",
+      flex: "1 0 180px"
+    },
+    filterControl: {
+      width: "100%",
+      minWidth: 0,
+      boxSizing: "border-box",
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.sm,
+      padding: "8px 10px"
+    },
     actionsCard: {
       display: "grid",
       gap: theme.spacing.sm
@@ -291,68 +348,20 @@ export default function Radar() {
         </p>
       </Card>
 
-      <section style={{ display: "grid", gap: theme.spacing.md }}>
-        <h2 style={styles.sectionTitle}>Indicadores</h2>
-        <div style={styles.cardsGrid}>
-          {kpis.map((item) => (
-            <KpiCard
-              key={item.id}
-              titulo={item.titulo}
-              valor={item.valor}
-              variacao={item.variacao}
-              descricao={item.descricao}
-              icone={item.icone}
-              cor={item.cor}
-            />
-          ))}
+      <section style={styles.section}>
+        <div style={styles.sectionHeader}>
+          <h2 style={styles.sectionTitle}>Filtros operacionais</h2>
+          <Badge variant="neutral">Dados mock para homologação visual</Badge>
         </div>
-      </section>
-
-      <section style={{ display: "grid", gap: theme.spacing.md }}>
-        <h2 style={styles.sectionTitle}>Tabela demonstrativa</h2>
         <Card style={{ display: "grid", gap: theme.spacing.sm }}>
-          <div style={styles.tableHeader}>
-            <Badge variant="neutral">Dados mock para homologação visual</Badge>
-            <div style={{ display: "flex", gap: theme.spacing.sm, alignItems: "center" }}>
-              <Button variant="primary" onClick={handleRefreshRadar} disabled={loading}>
-                Atualizar Radar
-              </Button>
-              {loading ? <Loading label="A preparar demonstração Radar..." /> : null}
-            </div>
-          </div>
-
-          {error ? (
-            <p style={{ margin: 0, color: theme.colors.danger }}>
-              Falha ao carregar Radar: {error?.message || "erro desconhecido"}
-            </p>
-          ) : null}
-
-          <Table
-            columns={colunasTabela}
-            rows={tabela.map((row, index) => ({
-              ...row,
-              id: row.id || `radar-row-${index}`,
-              rawOpportunity:
-                (filteredOpportunities || []).find((item) => String(item?.id) === String(row?.id)) ||
-                filteredOpportunities?.[index] ||
-                null
-            }))}
-            emptyMessage="Sem oportunidades disponíveis"
-          />
-        </Card>
-      </section>
-
-      <section style={{ display: "grid", gap: theme.spacing.md }}>
-        <h2 style={styles.sectionTitle}>Filtros operacionais</h2>
-        <Card style={{ display: "grid", gap: theme.spacing.sm }}>
-          <div style={{ display: "grid", gap: theme.spacing.sm, gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))" }}>
-            <label style={{ display: "grid", gap: 6, color: theme.colors.muted }}>
+          <div style={styles.filtersGrid}>
+            <label style={styles.filterField}>
               Cidade
               <input
                 value={filtroCidade}
                 onChange={(event) => setFiltroCidade(event.target.value)}
                 placeholder="Ex.: Lisboa"
-                style={{ border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.sm, padding: "8px 10px" }}
+                style={styles.filterControl}
                 list="radar-cidades"
               />
               <datalist id="radar-cidades">
@@ -362,9 +371,9 @@ export default function Radar() {
               </datalist>
             </label>
 
-            <label style={{ display: "grid", gap: 6, color: theme.colors.muted }}>
+            <label style={styles.filterField}>
               Tipo
-              <select value={filtroTipo} onChange={(event) => setFiltroTipo(event.target.value)} style={{ border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.sm, padding: "8px 10px" }}>
+              <select value={filtroTipo} onChange={(event) => setFiltroTipo(event.target.value)} style={styles.filterControl}>
                 <option value="todos">Todos</option>
                 {filterOptions.tipos.map((tipo) => (
                   <option key={tipo} value={tipo}>{tipo}</option>
@@ -372,9 +381,9 @@ export default function Radar() {
               </select>
             </label>
 
-            <label style={{ display: "grid", gap: 6, color: theme.colors.muted }}>
+            <label style={styles.filterField}>
               Estado
-              <select value={filtroEstado} onChange={(event) => setFiltroEstado(event.target.value)} style={{ border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.sm, padding: "8px 10px" }}>
+              <select value={filtroEstado} onChange={(event) => setFiltroEstado(event.target.value)} style={styles.filterControl}>
                 <option value="todos">Todos</option>
                 {filterOptions.estados.map((estado) => (
                   <option key={estado} value={estado}>{estado}</option>
@@ -382,7 +391,7 @@ export default function Radar() {
               </select>
             </label>
 
-            <label style={{ display: "grid", gap: 6, color: theme.colors.muted }}>
+            <label style={styles.filterField}>
               Preço mínimo
               <input
                 type="number"
@@ -390,11 +399,11 @@ export default function Radar() {
                 value={filtroPrecoMin}
                 onChange={(event) => setFiltroPrecoMin(event.target.value)}
                 placeholder="0"
-                style={{ border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.sm, padding: "8px 10px" }}
+                style={styles.filterControl}
               />
             </label>
 
-            <label style={{ display: "grid", gap: 6, color: theme.colors.muted }}>
+            <label style={styles.filterField}>
               Preço máximo
               <input
                 type="number"
@@ -402,11 +411,11 @@ export default function Radar() {
                 value={filtroPrecoMax}
                 onChange={(event) => setFiltroPrecoMax(event.target.value)}
                 placeholder="900000"
-                style={{ border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.sm, padding: "8px 10px" }}
+                style={styles.filterControl}
               />
             </label>
 
-            <label style={{ display: "grid", gap: 6, color: theme.colors.muted }}>
+            <label style={styles.filterField}>
               Score mínimo
               <input
                 type="number"
@@ -415,7 +424,7 @@ export default function Radar() {
                 value={filtroScoreMin}
                 onChange={(event) => setFiltroScoreMin(event.target.value)}
                 placeholder="70"
-                style={{ border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.sm, padding: "8px 10px" }}
+                style={styles.filterControl}
               />
             </label>
           </div>
@@ -441,53 +450,66 @@ export default function Radar() {
         </Card>
       </section>
 
-      <section style={{ display: "grid", gap: theme.spacing.md }}>
-        <h2 style={styles.sectionTitle}>Fluxo operacional</h2>
-        <div style={styles.flowGrid}>
-          {fluxo.map((etapa, index) => (
-            <Card key={etapa.id} style={styles.flowCard}>
-              <Badge variant="primary" style={{ width: "fit-content", margin: "0 auto" }}>{`Etapa ${index + 1}`}</Badge>
-              <h3 style={styles.flowName}>{etapa.label}</h3>
-              {index < fluxo.length - 1 ? <Badge variant="neutral" style={{ width: "fit-content", margin: "0 auto" }}>↓</Badge> : null}
-            </Card>
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Indicadores</h2>
+        <div style={styles.cardsGrid}>
+          {kpis.map((item) => (
+            <KpiCard
+              key={item.id}
+              titulo={item.titulo}
+              valor={item.valor}
+              variacao={item.variacao}
+              descricao={item.descricao}
+              icone={item.icone}
+              cor={item.cor}
+            />
           ))}
         </div>
       </section>
 
-      <section style={{ display: "grid", gap: theme.spacing.md }}>
-        <h2 style={styles.sectionTitle}>Roadmap do Radar</h2>
-        <Card>
-          <div style={styles.roadList}>
-            {roadmap.map((item, index) => (
-              <div key={item.id} style={styles.roadItem}>
-                <Badge variant="success" style={{ minWidth: "44px" }}>{String(index + 1).padStart(2, "0")}</Badge>
-                <span>{item.label}</span>
-                {index < roadmap.length - 1 ? <Badge variant="neutral">↓</Badge> : null}
-              </div>
-            ))}
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Tabela de oportunidades</h2>
+        <Card style={styles.tableContainer}>
+          <div style={styles.tableHeader}>
+            <div style={styles.actionRow}>
+              <Button variant="primary" onClick={handleRefreshRadar} disabled={loading}>
+                Atualizar Radar
+              </Button>
+              <Button variant="ghost" onClick={() => selectedOpportunity && openDetail(selectedOpportunity)} disabled={!selectedOpportunity}>Abrir detalhe</Button>
+              <Button
+                variant="secondary"
+                onClick={() => handleImportOpportunity(selectedOpportunity)}
+                disabled={!selectedOpportunity || importingId === selectedOpportunity?.id}
+              >
+                {importingId === selectedOpportunity?.id ? "A importar..." : "Importar para Leads"}
+              </Button>
+            </div>
+            {loading ? <Loading label="A preparar demonstração Radar..." /> : null}
           </div>
-        </Card>
-      </section>
 
-      <section style={{ display: "grid", gap: theme.spacing.md }}>
-        <h2 style={styles.sectionTitle}>Ações</h2>
-        <Card style={styles.actionsCard}>
-          <div style={styles.actionRow}>
-            <Button variant="primary" onClick={handleRefreshRadar} disabled={loading}>Atualizar Radar</Button>
-            <Button variant="ghost" onClick={() => selectedOpportunity && openDetail(selectedOpportunity)} disabled={!selectedOpportunity}>Abrir detalhe</Button>
-            <Button
-              variant="secondary"
-              onClick={() => handleImportOpportunity(selectedOpportunity)}
-              disabled={!selectedOpportunity || importingId === selectedOpportunity?.id}
-            >
-              {importingId === selectedOpportunity?.id ? "A importar..." : "Importar para Leads"}
-            </Button>
-          </div>
+          {error ? (
+            <p style={{ margin: 0, color: theme.colors.danger }}>
+              Falha ao carregar Radar: {error?.message || "erro desconhecido"}
+            </p>
+          ) : null}
+
+          <Table
+            columns={colunasTabela}
+            rows={tabela.map((row, index) => ({
+              ...row,
+              id: row.id || `radar-row-${index}`,
+              rawOpportunity:
+                (filteredOpportunities || []).find((item) => String(item?.id) === String(row?.id)) ||
+                filteredOpportunities?.[index] ||
+                null
+            }))}
+            emptyMessage="Sem oportunidades disponíveis"
+          />
         </Card>
       </section>
 
       {selectedOpportunity ? (
-        <section style={{ display: "grid", gap: theme.spacing.md }}>
+        <section style={styles.section}>
           <h2 style={styles.sectionTitle}>Detalhe da oportunidade</h2>
           <Card style={{ display: "grid", gap: theme.spacing.sm }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: theme.spacing.sm, flexWrap: "wrap" }}>
@@ -503,6 +525,20 @@ export default function Radar() {
             <p style={{ margin: 0, color: theme.colors.text }}><strong>Origem:</strong> {selectedOpportunity.origem || "-"}</p>
             <p style={{ margin: 0, color: theme.colors.text }}><strong>URL:</strong> {selectedOpportunity.url || "-"}</p>
 
+            <label style={{ display: "grid", gap: 6, color: theme.colors.muted }}>
+              Estado operacional
+              <select
+                value={String(selectedOpportunity.estado || "novo").toLowerCase()}
+                onChange={handleChangeOperationalState}
+                style={{ border: `1px solid ${theme.colors.border}`, borderRadius: theme.borderRadius.sm, padding: "8px 10px", maxWidth: "240px" }}
+              >
+                <option value="novo">Nova</option>
+                <option value="analisado">Em análise</option>
+                <option value="importado">Importada</option>
+                <option value="ignorado">Ignorada</option>
+              </select>
+            </label>
+
             <div style={{ display: "flex", gap: theme.spacing.sm, flexWrap: "wrap" }}>
               <Button variant="secondary" onClick={() => handleImportOpportunity(selectedOpportunity)} disabled={importingId === selectedOpportunity.id}>
                 {importingId === selectedOpportunity.id ? "A importar..." : "Importar para Leads"}
@@ -513,7 +549,7 @@ export default function Radar() {
         </section>
       ) : null}
 
-      <section style={{ display: "grid", gap: theme.spacing.md }}>
+      <section style={styles.section}>
         <h2 style={styles.sectionTitle}>Timeline operacional</h2>
         <Card style={{ display: "grid", gap: theme.spacing.sm }}>
           {timeline.length === 0 ? (
@@ -545,6 +581,34 @@ export default function Radar() {
             })
           )}
         </Card>
+      </section>
+
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Roadmap do Radar</h2>
+        <Card>
+          <div style={styles.roadList}>
+            {roadmap.map((item, index) => (
+              <div key={item.id} style={styles.roadItem}>
+                <Badge variant="success" style={{ minWidth: "44px" }}>{String(index + 1).padStart(2, "0")}</Badge>
+                <span>{item.label}</span>
+                {index < roadmap.length - 1 ? <Badge variant="neutral">↓</Badge> : null}
+              </div>
+            ))}
+          </div>
+        </Card>
+      </section>
+
+      <section style={styles.section}>
+        <h2 style={styles.sectionTitle}>Fluxo operacional</h2>
+        <div style={styles.flowGrid}>
+          {fluxo.map((etapa, index) => (
+            <Card key={etapa.id} style={styles.flowCard}>
+              <Badge variant="primary" style={{ width: "fit-content", margin: "0 auto" }}>{`Etapa ${index + 1}`}</Badge>
+              <h3 style={styles.flowName}>{etapa.label}</h3>
+              {index < fluxo.length - 1 ? <Badge variant="neutral" style={{ width: "fit-content", margin: "0 auto" }}>↓</Badge> : null}
+            </Card>
+          ))}
+        </div>
       </section>
 
       <Card>

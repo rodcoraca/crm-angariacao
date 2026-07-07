@@ -221,10 +221,13 @@ export default function Dashboard({ onAbrirLead }) {
 
   const {
     filtroTipo,
+    filtroOrigem,
     busca,
     leadSelecionado,
     dados,
+    opcoesFiltroOrigem,
     setFiltroTipo,
+    setFiltroOrigem,
     setBusca,
     setLeadSelecionado,
     exportarCSV,
@@ -341,6 +344,19 @@ export default function Dashboard({ onAbrirLead }) {
           <option value="quente">Quente</option>
           <option value="morno">Morno</option>
           <option value="frio">Frio</option>
+        </select>
+
+        <select
+          style={styles.select}
+          value={filtroOrigem}
+          onChange={(e) => setFiltroOrigem(e.target.value)}
+        >
+          <option value="">Todas as origens</option>
+          {opcoesFiltroOrigem
+            .filter((option) => option.value)
+            .map((option) => (
+              <option key={option.value} value={option.value}>{option.label}</option>
+            ))}
         </select>
       </div>
 

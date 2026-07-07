@@ -5,6 +5,8 @@ import { criarFluxoLeads } from "../utils/flowConfig";
 import { limparLeadSelecionada, recuperarLeadSelecionada } from "../utils/leadStorage";
 import { notifyError, notifyInfo, notifySuccess } from "../../../components/ui/feedbackBus";
 
+const FLUXO_RASCUNHO_STORAGE_KEY = "osflow_fluxo_rascunho";
+
 export function useFluxoLead({ user, onAbrirLead }) {
   const [etapa, setEtapa] = useState("origem");
   const [historico, setHistorico] = useState([]);
@@ -166,6 +168,7 @@ export function useFluxoLead({ user, onAbrirLead }) {
     }
 
     notifySuccess("Lead guardada com sucesso.");
+    window.localStorage.removeItem(FLUXO_RASCUNHO_STORAGE_KEY);
     setEtapa("origem");
     setHistorico([]);
     setNome("");
@@ -179,6 +182,65 @@ export function useFluxoLead({ user, onAbrirLead }) {
     setLeadSelecionadoId(null);
     setUltimoLookupTelefone("");
     setUltimoLookupResultado(null);
+  }
+
+  function guardarEContinuarDepois() {
+    const rascunho = {
+      etapa,
+      historico,
+      nome,
+      telefone,
+      telefoneErro,
+      origem,
+      observacao,
+      mostrarObs,
+      qualificacaoVeioDaObjecao,
+      tipoSelecionado,
+      leadSelecionadoId,
+      ultimoLookupTelefone,
+      timestamp: new Date().toISOString()
+    };
+
+    try {
+      window.localStorage.setItem(FLUXO_RASCUNHO_STORAGE_KEY, JSON.stringify(rascunho));
+      notifySuccess("Fluxo guardado. Pode continuar depois.");
+    } catch (error) {
+      notifyError("Não foi possível guardar o estado atual do fluxo.");
+    }
+  }
+
+  function retomarFluxoGuardado() {
+    try {
+      const raw = window.localStorage.getItem(FLUXO_RASCUNHO_STORAGE_KEY);
+      if (!raw) {
+        notifyInfo("Não existe fluxo guardado para retomar.");
+        return false;
+      }
+
+      const rascunho = JSON.parse(raw);
+      setEtapa(rascunho.etapa || "origem");
+      setHistorico(Array.isArray(rascunho.historico) ? rascunho.historico : []);
+      setNome(rascunho.nome || "");
+      setTelefone(rascunho.telefone || "");
+      setTelefoneErro(rascunho.telefoneErro || "");
+      setOrigem(rascunho.origem || "");
+      setObservacao(rascunho.observacao || "");
+      setMostrarObs(Boolean(rascunho.mostrarObs));
+      setQualificacaoVeioDaObjecao(Boolean(rascunho.qualificacaoVeioDaObjecao));
+      setTipoSelecionado(rascunho.tipoSelecionado || "");
+      setLeadSelecionadoId(rascunho.leadSelecionadoId || null);
+      setUltimoLookupTelefone(rascunho.ultimoLookupTelefone || "");
+      setUltimoLookupResultado(null);
+      notifySuccess("Fluxo retomado a partir do estado guardado.");
+      return true;
+    } catch (error) {
+      notifyError("Não foi possível retomar o fluxo guardado.");
+      return false;
+    }
+  }
+
+  function existeFluxoGuardado() {
+    return Boolean(window.localStorage.getItem(FLUXO_RASCUNHO_STORAGE_KEY));
   }
 
   return {
@@ -198,6 +260,9 @@ export function useFluxoLead({ user, onAbrirLead }) {
     handleTelefoneChange,
     handleClick,
     voltar,
-    salvarLead
+    salvarLead,
+    guardarEContinuarDepois,
+    retomarFluxoGuardado,
+    existeFluxoGuardado
   };
 }

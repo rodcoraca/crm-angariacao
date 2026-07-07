@@ -5,10 +5,12 @@ import {
   filtrarLeadsDashboard,
   formatarDataDashboard
 } from "../viewmodels/leadsViewModel";
+import { criarOpcoesFiltroOrigemLead } from "../utils";
 
 export function useDashboardLeads({ onAbrirLead, theme }) {
   const [leads, setLeads] = useState([]);
   const [filtroTipo, setFiltroTipo] = useState("");
+  const [filtroOrigem, setFiltroOrigem] = useState("");
   const [busca, setBusca] = useState("");
   const [leadSelecionado, setLeadSelecionado] = useState(null);
 
@@ -22,8 +24,13 @@ export function useDashboardLeads({ onAbrirLead, theme }) {
   }, []);
 
   const dados = useMemo(
-    () => filtrarLeadsDashboard(leads, busca, filtroTipo),
-    [leads, busca, filtroTipo]
+    () => filtrarLeadsDashboard(leads, busca, filtroTipo, filtroOrigem),
+    [leads, busca, filtroTipo, filtroOrigem]
+  );
+
+  const opcoesFiltroOrigem = useMemo(
+    () => criarOpcoesFiltroOrigemLead(leads),
+    [leads]
   );
 
   function exportarCSV() {
@@ -53,10 +60,13 @@ export function useDashboardLeads({ onAbrirLead, theme }) {
 
   return {
     filtroTipo,
+    filtroOrigem,
     busca,
     leadSelecionado,
     dados,
+    opcoesFiltroOrigem,
     setFiltroTipo,
+    setFiltroOrigem,
     setBusca,
     setLeadSelecionado,
     exportarCSV,

@@ -60,6 +60,24 @@ export function useRadar() {
     }
   }, [selectedOpportunity]);
 
+  const updateOpportunityState = useCallback(async ({ opportunityId, nextState }) => {
+    const service = getRadarService();
+    const result = await service.updateOpportunityState(opportunityId, nextState);
+
+    if (result?.ok && result?.snapshot) {
+      setSnapshot(result.snapshot);
+
+      if (selectedOpportunity?.id) {
+        const refreshed = (result.snapshot.opportunities || []).find(
+          (item) => String(item?.id) === String(selectedOpportunity.id)
+        );
+        setSelectedOpportunity(refreshed || null);
+      }
+    }
+
+    return result;
+  }, [selectedOpportunity]);
+
   return {
     snapshot,
     loading,
@@ -69,6 +87,7 @@ export function useRadar() {
     importingId,
     openDetail,
     closeDetail,
-    importSelectedToLeads
+    importSelectedToLeads,
+    updateOpportunityState
   };
 }

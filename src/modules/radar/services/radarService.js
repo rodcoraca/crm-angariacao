@@ -1,7 +1,12 @@
-import { MockRadarProvider } from "../providers/MockRadarProvider";
 import { RadarRepository } from "../repositories/RadarRepository";
 import { createRadarViewModel } from "../viewmodels/radarViewModel";
 import { salvarLeadFluxo } from "../../leads/services";
+import { recalcularOpportunityScore } from "./radarScoreService";
+import { buildConfiguredRadarProvider } from "./radarProviderConfig";
+import {
+  appendRadarMetadataBlockOnce,
+  buildRadarLeadMetadata
+} from "../contracts/radarLeadMetadata";
 
 function normalizeNumericScore(value) {
   const parsed = Number(value);
@@ -18,10 +23,12 @@ function classifyOpportunity(opportunity) {
 }
 
 function normalizeOpportunity(opportunity) {
+  const recalculated = recalcularOpportunityScore(opportunity);
+
   return {
-    ...opportunity,
-    score: normalizeNumericScore(opportunity?.score),
-    classificacao: classifyOpportunity(opportunity)
+    ...recalculated,
+    score: normalizeNumericScore(recalculated?.score),
+    classificacao: classifyOpportunity(recalculated)
   };
 }
 
@@ -42,19 +49,43 @@ function buildRadarPhone(opportunityId) {
 }
 
 function mapOpportunityToLeadPayload(opportunity, user) {
+  const origemProvider = String(opportunity?.origem || "MockProvider");
+  const metadata = buildRadarLeadMetadata({
+    provider: opportunity?.radarLeadMetadata?.provider || origemProvider,
+    externalId: opportunity?.radarLeadMetadata?.externalId || opportunity?.id_externo || opportunity?.id,
+    url: opportunity?.radarLeadMetadata?.url || opportunity?.url_original || opportunity?.url,
+    publisherName: opportunity?.radarLeadMetadata?.publisherName || opportunity?.anunciante_nome || "",
+    publisherContact: opportunity?.radarLeadMetadata?.publisherContact || opportunity?.contacto?.telefone || opportunity?.contacto?.email || "",
+    publishedAt: opportunity?.radarLeadMetadata?.publishedAt || opportunity?.data_publicacao || opportunity?.publicado_em,
+    capturedAt: opportunity?.radarLeadMetadata?.capturedAt || opportunity?.data_recolha || opportunity?.encontrado_em,
+    score: opportunity?.score,
+    status: opportunity?.estado
+  });
+
+  const advertiserName = metadata.publisherName || null;
+  const contactPhone = opportunity?.contacto?.telefone || null;
+  const contactEmail = opportunity?.contacto?.email || null;
+  const contactLabel = [contactPhone, contactEmail].filter(Boolean).join(" | ");
+
+  const nomeLeadBase = advertiserName || opportunity?.titulo || "Lead Radar";
+  const nome = contactLabel ? `${nomeLeadBase} (${contactLabel})` : nomeLeadBase;
+  const telefoneLead = contactPhone || buildRadarPhone(opportunity?.id);
+
+  const observacaoBase = [
+    `Importado via Radar (${new Date().toISOString()})`,
+    `Título: ${opportunity?.titulo || "-"}`,
+    `Local: ${opportunity?.morada || "-"}, ${opportunity?.cidade || "-"}`,
+    `Preço: ${opportunity?.preco || "-"}`
+  ].join("\n");
+
+  const observacao = appendRadarMetadataBlockOnce(observacaoBase, metadata);
+
   return {
-    nome: opportunity?.titulo || "Lead Radar",
-    telefone: buildRadarPhone(opportunity?.id),
+    nome,
+    telefone: telefoneLead,
     tipo: opportunity?.score >= 85 ? "quente" : opportunity?.score >= 75 ? "morno" : "frio",
-    origem: `radar_${opportunity?.origem || "mock"}`,
-    observacao: [
-      `Importado via Radar (${new Date().toISOString()})`,
-      `Título: ${opportunity?.titulo || "-"}`,
-      `Local: ${opportunity?.morada || "-"}, ${opportunity?.cidade || "-"}`,
-      `Preço: ${opportunity?.preco || "-"}`,
-      `Score: ${opportunity?.score || 0}`,
-      `URL: ${opportunity?.url || "-"}`
-    ].join("\n"),
+    origem: "Radar",
+    observacao,
     user
   };
 }
@@ -62,6 +93,7 @@ function mapOpportunityToLeadPayload(opportunity, user) {
 export class RadarService {
   constructor(repository = new RadarRepository()) {
     this.repository = repository;
+    this.sessionOpportunities = null;
   }
 
   setProvider(provider) {
@@ -69,6 +101,10 @@ export class RadarService {
   }
 
   async loadOpportunities() {
+    if (Array.isArray(this.sessionOpportunities)) {
+      return [...this.sessionOpportunities];
+    }
+
     const loaded = await this.repository.listOpportunities();
     return loaded || [];
   }
@@ -79,6 +115,19 @@ export class RadarService {
 
   sortByScore(opportunities = []) {
     return sortByScore(opportunities);
+  }
+
+  createSnapshotFromOpportunities(opportunities = []) {
+    const ordered = this.sortByScore(opportunities);
+    this.sessionOpportunities = [...ordered];
+
+    const snapshot = createRadarViewModel({ opportunities: ordered });
+
+    return {
+      ...snapshot,
+      opportunities: ordered,
+      flow: this.buildOperationalFlow()
+    };
   }
 
   buildOperationalFlow() {
@@ -96,14 +145,59 @@ export class RadarService {
   async getSnapshot() {
     const loaded = await this.loadOpportunities();
     const classified = this.classifyOpportunities(loaded);
-    const ordered = this.sortByScore(classified);
+    return this.createSnapshotFromOpportunities(classified);
+  }
 
-    const snapshot = createRadarViewModel({ opportunities: ordered });
+  async updateOpportunityState(opportunityId, nextState) {
+    const targetId = String(opportunityId || "").trim();
+    const normalizedState = String(nextState || "").toLowerCase();
+
+    if (!targetId) {
+      return {
+        ok: false,
+        message: "Oportunidade inválida."
+      };
+    }
+
+    const supportedStates = ["novo", "analisado", "importado", "ignorado"];
+    if (!supportedStates.includes(normalizedState)) {
+      return {
+        ok: false,
+        message: "Estado operacional inválido."
+      };
+    }
+
+    const loaded = await this.loadOpportunities();
+    const now = new Date().toISOString();
+    const updated = loaded.map((item) => {
+      if (String(item?.id) !== targetId) return item;
+
+      const base = {
+        ...item,
+        estado: normalizedState
+      };
+
+      if (normalizedState === "analisado") {
+        base.analisado_em = now;
+      }
+
+      if (normalizedState === "importado") {
+        base.importado_em = now;
+      }
+
+      if (normalizedState === "ignorado") {
+        base.ignorado_em = now;
+      }
+
+      return base;
+    });
+
+    const classified = this.classifyOpportunities(updated);
+    const snapshot = this.createSnapshotFromOpportunities(classified);
 
     return {
-      ...snapshot,
-      opportunities: ordered,
-      flow: this.buildOperationalFlow()
+      ok: true,
+      snapshot
     };
   }
 
@@ -135,6 +229,8 @@ export class RadarService {
       };
     }
 
+    await this.updateOpportunityState(opportunity?.id, "importado");
+
     return {
       ok: true,
       message: "Oportunidade importada para Leads com sucesso."
@@ -142,7 +238,7 @@ export class RadarService {
   }
 }
 
-const radarService = new RadarService();
+const radarService = new RadarService(new RadarRepository(buildConfiguredRadarProvider()));
 
 export function registerRadarDataProvider(provider) {
   if (provider && typeof provider.listOpportunities === "function") {
@@ -156,7 +252,8 @@ export function registerRadarDataProvider(provider) {
 }
 
 export function clearRadarDataProvider() {
-  radarService.setProvider(new MockRadarProvider());
+  radarService.sessionOpportunities = null;
+  radarService.setProvider(buildConfiguredRadarProvider());
 }
 
 export async function fetchRadarSnapshot() {

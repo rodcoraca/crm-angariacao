@@ -1,8 +1,7 @@
+import { criarOpcoesFluxoOrigemLead, formatarOrigemComCatalogo } from "./leadOrigins";
+
 export function formatarOrigemLead(origem) {
-  if (origem === "placa") return "Placa na rua";
-  if (origem === "indicacao") return "Indicação";
-  if (origem === "site") return "Site de imóveis";
-  return origem || "Sem origem";
+  return formatarOrigemComCatalogo(origem);
 }
 
 export function obterEmojiOrigem(origem) {
@@ -35,11 +34,7 @@ export function criarFluxoLeads(origem, qualificacaoVeioDaObjecao) {
     origem: {
       pergunta: "Qual a origem do contacto?",
       script: "Escolha a origem inicial para seguir o guião.",
-      opcoes: [
-        { texto: "Girafada | Porta à Porta | Abordagem Física", next: "dados", origem: "placa" },
-        { texto: "Indicação", next: "dados", origem: "indicacao" },
-        { texto: "Site de imóveis", next: "dados", origem: "site" }
-      ]
+      opcoes: criarOpcoesFluxoOrigemLead()
     },
     dados: {
       pergunta: "Dados do proprietário",

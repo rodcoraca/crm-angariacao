@@ -43,15 +43,17 @@ export function badgeTipoFicha(theme, tipo) {
   return palette[tipo] || { background: theme.colors.surfaceSoft, color: theme.colors.text };
 }
 
-export function filtrarLeadsDashboard(leads, busca, filtroTipo) {
+export function filtrarLeadsDashboard(leads, busca, filtroTipo, filtroOrigem) {
   const termo = (busca || "").trim().toLowerCase();
 
   return (leads || []).filter((lead) => {
     const nomeMatch = lead.nome?.toLowerCase().includes(termo);
     const telefoneMatch = String(lead.telefone || "").replace(/\D/g, "").includes(termo.replace(/\D/g, ""));
+    const origemLead = String(lead.origem || "");
 
     return (
       (filtroTipo ? lead.tipo === filtroTipo : true) &&
+      (filtroOrigem ? origemLead === filtroOrigem : true) &&
       (!termo || nomeMatch || telefoneMatch)
     );
   });

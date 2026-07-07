@@ -27,6 +27,8 @@ const USER_STEPS = [
   { key: 'permissoes', label: 'Permissões' },
 ];
 
+const USER_STEPS_REQUIRE_SELECTION = ['ficha', 'sessoes', 'auditoria', 'permissoes'];
+
 export default function Usuarios({ currentUser }) {
   const theme = useTheme();
   const { can } = usePermissions();
@@ -144,10 +146,12 @@ export default function Usuarios({ currentUser }) {
   }
 
   function iniciarEdicao(usuario) {
+    if (!usuario) return;
+
     setModoEdicao(true);
     setUsuarioSelecionadoId(usuario.id);
     setUsuarioSelecionadoMeta(usuario);
-    setPerfilOrganizacional(usuario.perfil || '');
+    setPerfilOrganizacional(usuario?.permissoes?.__perfil || '');
 
     setForm({
       nome: usuario.nome || '',
@@ -160,6 +164,19 @@ export default function Usuarios({ currentUser }) {
       permissoes: usuario.permissoes || {},
       ativo: usuario.ativo !== false,
     });
+  }
+
+  function selecionarUtilizadorPorId(usuarioId) {
+    if (!usuarioId) {
+      setUsuarioSelecionadoId(null);
+      setUsuarioSelecionadoMeta(null);
+      return;
+    }
+
+    const utilizador = usuarios.find((item) => String(item.id) === String(usuarioId));
+    if (!utilizador) return;
+
+    iniciarEdicao(utilizador);
   }
 
   function atualizarCampo(campo, valor) {
@@ -282,6 +299,42 @@ export default function Usuarios({ currentUser }) {
     ativos: usuarios.filter((u) => u.ativo).length,
   }), [usuarios]);
 
+  const ultimoEventoSelecionado = useMemo(() => {
+    if (loadingTimeline) return 'A carregar atividade...';
+    const evento = auditoriaUsuario[0];
+    if (!evento) return 'Sem eventos recentes';
+
+    const data = evento.created_at ? new Date(evento.created_at).toLocaleString('pt-PT') : 'n/d';
+    return `${evento.event_type || 'evento'} (${data})`;
+  }, [auditoriaUsuario, loadingTimeline]);
+
+  const resumoSelecionado = useMemo(() => {
+    if (!usuarioSelecionadoMeta) {
+      return {
+        nome: 'Nenhum selecionado',
+        perfil: 'n/d',
+        estado: 'n/d',
+        ultimaAtividade: 'Selecione um utilizador',
+      };
+    }
+
+    const nome = `${usuarioSelecionadoMeta.nome || ''} ${usuarioSelecionadoMeta.apelido || ''}`.trim() || 'Sem nome';
+    const perfil = usuarioSelecionadoMeta?.permissoes?.__perfil || 'Nao definido';
+    const estado = usuarioSelecionadoMeta.ativo === false ? 'Inativo' : 'Ativo';
+
+    const ultimaSessao = sessoesUsuario[0];
+    const ultimaAtividade = ultimaSessao?.last_activity_at
+      ? new Date(ultimaSessao.last_activity_at).toLocaleString('pt-PT')
+      : ultimoEventoSelecionado;
+
+    return {
+      nome,
+      perfil,
+      estado,
+      ultimaAtividade,
+    };
+  }, [usuarioSelecionadoMeta, sessoesUsuario, ultimoEventoSelecionado]);
+
   const usuariosFiltrados = useMemo(() => {
     const termo = filtroPesquisa.trim().toLowerCase();
 
@@ -311,6 +364,14 @@ export default function Usuarios({ currentUser }) {
       }),
     [form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao, sessoesUsuario, auditoriaUsuario]
   );
+
+  const etapasVisiveis = useMemo(() => {
+    if (!usuarioSelecionadoMeta && etapaAtiva === 'lista') {
+      return USER_STEPS.filter((step) => step.key === 'novo');
+    }
+
+    return USER_STEPS;
+  }, [usuarioSelecionadoMeta, etapaAtiva]);
 
   const styles = useMemo(() => ({
     page: { display: 'grid', gap: theme.spacing.md, fontFamily: theme.typography.fontFamily },
@@ -369,6 +430,23 @@ export default function Usuarios({ currentUser }) {
       fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
       color: theme.colors.muted,
     },
+    accountGrid: {
+      display: 'flex',
+      gap: theme.spacing.sm,
+      alignItems: 'flex-start',
+      flexWrap: 'wrap',
+      overflowX: 'visible',
+      overflowY: 'visible',
+    },
+    accountFieldLabel: {
+      display: 'grid',
+      gap: theme.spacing.xs,
+      fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
+      color: theme.colors.muted,
+      minWidth: '170px',
+      flex: '1 1 170px',
+      width: '100%',
+    },
     input: {
       padding: `${theme.spacing.sm} ${theme.spacing.sm}`,
       borderRadius: theme.borderRadius.sm,
@@ -378,6 +456,8 @@ export default function Usuarios({ currentUser }) {
       fontSize: theme.typography.fontSize,
       fontFamily: theme.typography.fontFamily,
       outline: 'none',
+      width: '100%',
+      boxSizing: 'border-box',
     },
     readOnlyInput: { background: theme.colors.surfaceSoft, color: theme.colors.muted },
     permissoesHeader: {
@@ -434,7 +514,7 @@ export default function Usuarios({ currentUser }) {
       marginBottom: theme.spacing.sm,
       fontSize: `calc(${theme.typography.fontSize} * 0.88)`,
     },
-    list: { display: 'grid', gap: theme.spacing.xs },
+    list: { display: 'grid', gap: theme.spacing.xs, marginTop: theme.spacing.md },
     userRow: {
       display: 'flex',
       justifyContent: 'space-between',
@@ -465,6 +545,57 @@ export default function Usuarios({ currentUser }) {
       fontFamily: theme.typography.fontFamily,
       fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
     },
+    actionButton: {
+      minWidth: '150px',
+      height: '36px',
+      flex: '1 1 150px',
+      maxWidth: '220px',
+      borderRadius: theme.borderRadius.sm,
+      padding: `0 ${theme.spacing.sm}`,
+      border: `1px solid ${theme.colors.primary}`,
+      background: theme.colors.primary,
+      color: theme.colors.textLight,
+      cursor: 'pointer',
+      fontFamily: theme.typography.fontFamily,
+      fontSize: `calc(${theme.typography.fontSize} * 0.84)`,
+      fontWeight: theme.typography.headingWeight,
+    },
+    actionButtonSecondary: {
+      minWidth: '150px',
+      height: '36px',
+      flex: '1 1 150px',
+      maxWidth: '220px',
+      borderRadius: theme.borderRadius.sm,
+      padding: `0 ${theme.spacing.sm}`,
+      border: `1px solid ${theme.colors.border}`,
+      background: theme.colors.surface,
+      color: theme.colors.text,
+      cursor: 'pointer',
+      fontFamily: theme.typography.fontFamily,
+      fontSize: `calc(${theme.typography.fontSize} * 0.84)`,
+      fontWeight: theme.typography.headingWeight,
+    },
+    formActions: {
+      display: 'flex',
+      gap: theme.spacing.xs,
+      rowGap: theme.spacing.xs,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      flexWrap: 'wrap',
+      width: '100%',
+    },
+    formActionsFooter: {
+      display: 'flex',
+      gap: theme.spacing.xs,
+      rowGap: theme.spacing.xs,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      flexWrap: 'wrap',
+      width: '100%',
+      marginTop: theme.spacing.md,
+      paddingTop: theme.spacing.sm,
+      borderTop: `1px solid ${theme.colors.border}`,
+    },
     stepNav: { display: 'flex', gap: theme.spacing.xs, flexWrap: 'wrap' },
     stepButton: {
       border: `1px solid ${theme.colors.border}`,
@@ -476,12 +607,60 @@ export default function Usuarios({ currentUser }) {
       fontFamily: theme.typography.fontFamily,
       fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
     },
+    stepButtonDisabled: {
+      opacity: 0.45,
+      cursor: 'not-allowed',
+    },
     stepButtonActive: {
       background: theme.colors.primary,
       color: theme.colors.textLight,
       borderColor: theme.colors.primary,
     },
-    filters: { display: 'grid', gridTemplateColumns: '2fr 1fr auto', gap: theme.spacing.xs, alignItems: 'center' },
+    summaryLine: {
+      display: 'flex',
+      gap: theme.spacing.md,
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      color: theme.colors.text,
+      fontSize: `calc(${theme.typography.fontSize} * 0.9)`,
+    },
+    summaryItem: {
+      display: 'inline-flex',
+      gap: theme.spacing.xs,
+      alignItems: 'center',
+    },
+    listActions: {
+      display: 'flex',
+      gap: theme.spacing.xs,
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      marginTop: theme.spacing.md,
+      paddingTop: theme.spacing.sm,
+      borderTop: `1px solid ${theme.colors.border}`,
+    },
+    emptyActions: {
+      display: 'flex',
+      justifyContent: 'flex-end',
+      marginTop: theme.spacing.md,
+      paddingTop: theme.spacing.sm,
+      borderTop: `1px solid ${theme.colors.border}`,
+    },
+    bottomStats: {
+      display: 'flex',
+      gap: theme.spacing.md,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      flexWrap: 'wrap',
+      color: theme.colors.muted,
+      fontSize: `calc(${theme.typography.fontSize} * 0.85)`,
+      marginTop: theme.spacing.sm,
+    },
+    filters: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+      gap: theme.spacing.xs,
+      alignItems: 'center',
+    },
     timelineList: { display: 'grid', gap: theme.spacing.xs },
     timelineRow: {
       border: `1px solid ${theme.colors.border}`,
@@ -503,11 +682,23 @@ export default function Usuarios({ currentUser }) {
 
       <div style={styles.card}>
         <div style={styles.stepNav}>
-          {USER_STEPS.map((step) => (
+          {etapasVisiveis.map((step) => (
+            (() => {
+              const disabled = USER_STEPS_REQUIRE_SELECTION.includes(step.key) && !usuarioSelecionadoMeta;
+
+              return (
             <button
               key={step.key}
-              style={{ ...styles.stepButton, ...(etapaAtiva === step.key ? styles.stepButtonActive : {}) }}
+              type="button"
+              disabled={disabled}
+              style={{
+                ...styles.stepButton,
+                ...(etapaAtiva === step.key ? styles.stepButtonActive : {}),
+                ...(disabled ? styles.stepButtonDisabled : {}),
+              }}
               onClick={() => {
+                if (disabled) return;
+
                 if (step.key === 'novo') {
                   iniciarNovoUtilizador();
                   return;
@@ -517,6 +708,8 @@ export default function Usuarios({ currentUser }) {
             >
               {step.label}
             </button>
+              );
+            })()
           ))}
         </div>
       </div>
@@ -527,14 +720,32 @@ export default function Usuarios({ currentUser }) {
         <>
           <div style={styles.card}>
             <h3 style={styles.subtitle}>Resumo</h3>
-            <p>Total: {resumo.total}</p>
-            <p>Ativos: {resumo.ativos}</p>
+            <div style={styles.summaryLine}>
+              <span style={styles.summaryItem}>
+                <strong>Nome:</strong> {resumoSelecionado.nome}
+              </span>
+              <span style={styles.summaryItem}><strong>Perfil:</strong> {resumoSelecionado.perfil}</span>
+              <span style={styles.summaryItem}><strong>Estado:</strong> {resumoSelecionado.estado}</span>
+              <span style={styles.summaryItem}><strong>Ultima atividade:</strong> {resumoSelecionado.ultimaAtividade}</span>
+            </div>
           </div>
 
           <div style={styles.card}>
             <h3 style={styles.subtitle}>Utilizadores registados</h3>
 
             <div style={styles.filters}>
+              <select
+                style={styles.input}
+                value={usuarioSelecionadoId || ''}
+                onChange={(event) => selecionarUtilizadorPorId(event.target.value)}
+              >
+                <option value="">Selecionar utilizador...</option>
+                {usuarios.map((usuario) => (
+                  <option key={usuario.id} value={usuario.id}>
+                    {`${usuario.nome || ''} ${usuario.apelido || ''}`.trim()} - {usuario.email}
+                  </option>
+                ))}
+              </select>
               <input
                 style={styles.input}
                 placeholder="Pesquisar por nome, email ou username"
@@ -546,8 +757,20 @@ export default function Usuarios({ currentUser }) {
                 <option value="ativos">Ativos</option>
                 <option value="inativos">Inativos</option>
               </select>
-              <button style={styles.smallButton} onClick={iniciarNovoUtilizador}>Novo utilizador</button>
             </div>
+
+            {usuarioSelecionadoMeta ? (
+              <div style={styles.listActions}>
+                <button style={styles.smallButton} onClick={() => setEtapaAtiva('ficha')}>Ficha do Utilizador</button>
+                <button style={styles.smallButton} onClick={() => setEtapaAtiva('sessoes')}>Sessões</button>
+                <button style={styles.smallButton} onClick={() => setEtapaAtiva('auditoria')}>Auditoria</button>
+                <button style={styles.smallButton} onClick={() => setEtapaAtiva('permissoes')}>Permissões</button>
+              </div>
+            ) : (
+              <div style={styles.emptyActions}>
+                <button style={styles.smallButton} onClick={iniciarNovoUtilizador}>Novo utilizador</button>
+              </div>
+            )}
 
             {loading ? <p>A carregar...</p> : null}
 
@@ -559,14 +782,16 @@ export default function Usuarios({ currentUser }) {
                     <div style={styles.muted}>{usuario.email}</div>
                   </div>
                   <div style={styles.userActions}>
+                    {String(usuarioSelecionadoId || '') === String(usuario.id) ? <span style={{ ...styles.badge, background: `${theme.colors.primary}22`, color: theme.colors.primary }}>Selecionado</span> : null}
                     <span style={styles.badge}>{usuario.ativo ? 'Ativo' : 'Inativo'}</span>
-                    <button style={styles.smallButton} onClick={() => { iniciarEdicao(usuario); setEtapaAtiva('ficha'); }}>Ficha</button>
-                    <button style={styles.smallButton} onClick={() => { iniciarEdicao(usuario); setEtapaAtiva('sessoes'); }}>Sessões</button>
-                    <button style={styles.smallButton} onClick={() => { iniciarEdicao(usuario); setEtapaAtiva('auditoria'); }}>Auditoria</button>
-                    <button style={styles.smallButton} onClick={() => { iniciarEdicao(usuario); setEtapaAtiva('permissoes'); }}>Permissões</button>
                   </div>
                 </div>
               ))}
+            </div>
+
+            <div style={styles.bottomStats}>
+              <span><strong>Total:</strong> {resumo.total}</span>
+              <span><strong>Ativos:</strong> {resumo.ativos}</span>
             </div>
           </div>
         </>
@@ -576,7 +801,12 @@ export default function Usuarios({ currentUser }) {
         <div style={styles.card}>
           <div style={styles.permissoesHeader}>
             <h3 style={styles.subtitle}>{modoEdicao ? 'Editar utilizador' : 'Criar utilizador'}</h3>
-            {modoEdicao ? <button style={styles.linkButton} onClick={resetForm}>Cancelar</button> : null}
+            {etapaAtiva === 'ficha' ? (
+              <div style={styles.formActions}>
+                <button style={styles.actionButton} onClick={guardarUsuario}>Atualizar utilizador</button>
+                <button style={styles.actionButtonSecondary} onClick={resetForm}>Cancelar</button>
+              </div>
+            ) : modoEdicao ? <button style={styles.linkButton} onClick={resetForm}>Cancelar</button> : null}
           </div>
 
           <div style={styles.sectionsWrap}>
@@ -600,13 +830,32 @@ export default function Usuarios({ currentUser }) {
             {etapaAtiva === 'ficha' ? <UserPreferencesSection preferencias={utilizadorVM.preferencias} styles={styles} /> : null}
           </div>
 
-          <button style={styles.button} onClick={guardarUsuario}>{modoEdicao ? 'Atualizar utilizador' : 'Guardar utilizador'}</button>
+          {etapaAtiva === 'ficha' ? (
+            <div style={styles.formActionsFooter}>
+              <button style={styles.actionButton} onClick={guardarUsuario}>Atualizar utilizador</button>
+              <button style={styles.actionButtonSecondary} onClick={resetForm}>Cancelar</button>
+            </div>
+          ) : (
+            <button style={styles.button} onClick={guardarUsuario}>{modoEdicao ? 'Atualizar utilizador' : 'Guardar utilizador'}</button>
+          )}
         </div>
       ) : null}
 
       {etapaAtiva === 'sessoes' ? (
         <div style={styles.card}>
           <h3 style={styles.subtitle}>Sessões</h3>
+          <select
+            style={{ ...styles.input, maxWidth: '420px', marginBottom: theme.spacing.sm }}
+            value={usuarioSelecionadoId || ''}
+            onChange={(event) => selecionarUtilizadorPorId(event.target.value)}
+          >
+            <option value="">Selecionar utilizador...</option>
+            {usuarios.map((usuario) => (
+              <option key={usuario.id} value={usuario.id}>
+                {`${usuario.nome || ''} ${usuario.apelido || ''}`.trim()} - {usuario.email}
+              </option>
+            ))}
+          </select>
           {!usuarioSelecionadoMeta ? <p>Selecione um utilizador na lista para visualizar sessões.</p> : null}
           {loadingTimeline ? <p>A carregar sessões...</p> : null}
 
@@ -626,7 +875,19 @@ export default function Usuarios({ currentUser }) {
       {etapaAtiva === 'auditoria' ? (
         <div style={styles.card}>
           <h3 style={styles.subtitle}>Auditoria</h3>
-          {!usuarioSelecionadoMeta ? <p>Selecione um utilizador na lista para visualizar auditoria.</p> : null}
+          <select
+            style={{ ...styles.input, maxWidth: '420px', marginBottom: theme.spacing.sm }}
+            value={usuarioSelecionadoId || ''}
+            onChange={(event) => selecionarUtilizadorPorId(event.target.value)}
+          >
+            <option value="">Selecionar utilizador...</option>
+            {usuarios.map((usuario) => (
+              <option key={usuario.id} value={usuario.id}>
+                {`${usuario.nome || ''} ${usuario.apelido || ''}`.trim()} - {usuario.email}
+              </option>
+            ))}
+          </select>
+          {!usuarioSelecionadoMeta ? <p>Selecione um utilizador no dropdown para visualizar auditoria.</p> : null}
           {loadingTimeline ? <p>A carregar auditoria...</p> : null}
 
           <div style={styles.timelineList}>
