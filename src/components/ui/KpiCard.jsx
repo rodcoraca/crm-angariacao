@@ -1,18 +1,28 @@
 import { useTheme } from "../../theme/ThemeContext";
 
 export default function KpiCard({
+  title,
   titulo,
+  value,
   valor,
+  icon,
   icone,
+  tone,
   cor,
+  trend,
   variacao,
+  loading = false,
   descricao,
   style,
   ...props
 }) {
   const theme = useTheme();
 
-  const tone = cor || theme.colors.primary;
+  const resolvedTitle = title || titulo || "Indicador";
+  const resolvedValue = value || valor || "-";
+  const resolvedIcon = icon || icone || "*";
+  const resolvedTrend = trend || variacao || "Sem variacao";
+  const resolvedTone = tone || cor || theme.colors.primary;
 
   return (
     <section
@@ -22,8 +32,8 @@ export default function KpiCard({
         overflow: "hidden",
         background: theme.colors.surface,
         border: `1px solid ${theme.colors.border}`,
-        borderRadius: theme.borderRadius.lg,
-        boxShadow: theme.shadow.sm,
+        borderRadius: theme.borderRadius.md,
+        boxShadow: theme.elevation[1],
         padding: theme.spacing.md,
         display: "grid",
         gap: theme.spacing.sm,
@@ -40,8 +50,9 @@ export default function KpiCard({
           inset: "auto -40px -40px auto",
           width: "120px",
           height: "120px",
-          borderRadius: "999px",
-          background: `${tone}1a`
+          borderRadius: theme.borderRadius.full,
+          background: theme.colors.surfaceSoft,
+          opacity: 0.6
         }}
       />
 
@@ -49,16 +60,14 @@ export default function KpiCard({
         <div style={{ display: "grid", gap: theme.spacing.xs }}>
           <span
             style={{
-              fontSize: "0.82rem",
-              letterSpacing: "0.04em",
-              textTransform: "uppercase",
-              fontWeight: 700,
+              fontSize: theme.typography.caption.fontSize,
+              fontWeight: theme.typography.caption.fontWeight,
               color: theme.colors.muted
             }}
           >
-            {titulo}
+            {resolvedTitle}
           </span>
-          <strong style={{ fontSize: "1.9rem", lineHeight: 1, fontWeight: 700 }}>{valor}</strong>
+          <strong style={{ fontSize: theme.typography.h2.fontSize, lineHeight: theme.typography.h2.lineHeight, fontWeight: theme.typography.h2.fontWeight }}>{loading ? "..." : resolvedValue}</strong>
         </div>
 
         <span
@@ -70,13 +79,13 @@ export default function KpiCard({
             display: "inline-flex",
             alignItems: "center",
             justifyContent: "center",
-            background: `${tone}1a`,
-            color: tone,
-            border: `1px solid ${tone}33`,
-            fontSize: "1rem"
+            background: theme.colors.surfaceSoft,
+            color: resolvedTone,
+            border: `1px solid ${resolvedTone}`,
+            fontSize: theme.typography.cardTitle.fontSize
           }}
         >
-          {icone || "*"}
+          {resolvedIcon}
         </span>
       </header>
 
@@ -85,21 +94,21 @@ export default function KpiCard({
           style={{
             display: "inline-flex",
             alignItems: "center",
-            borderRadius: "999px",
-            border: `1px solid ${tone}33`,
-            background: `${tone}14`,
-            color: tone,
-            fontSize: "0.78rem",
-            fontWeight: 700,
+            borderRadius: theme.borderRadius.full,
+            border: `1px solid ${resolvedTone}`,
+            background: theme.colors.surfaceSoft,
+            color: resolvedTone,
+            fontSize: theme.typography.badge.fontSize,
+            fontWeight: theme.typography.badge.fontWeight,
             padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
             width: "fit-content"
           }}
         >
-          {variacao || "Sem variacao"}
+          {resolvedTrend}
         </span>
 
         {descricao ? (
-          <small style={{ color: theme.colors.muted, fontSize: "0.78rem", lineHeight: 1.4 }}>{descricao}</small>
+          <small style={{ color: theme.colors.muted, fontSize: theme.typography.caption.fontSize, lineHeight: theme.typography.caption.lineHeight, fontWeight: theme.typography.caption.fontWeight }}>{descricao}</small>
         ) : null}
       </footer>
     </section>

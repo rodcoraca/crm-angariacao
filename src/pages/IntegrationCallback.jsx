@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Card from "../components/ui/Card";
 import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
+import { useTheme } from "../theme/ThemeContext";
 import {
   buildOlxOAuthUrlFromCurrentConfig,
   clearOlxIntegrationState,
@@ -37,13 +38,14 @@ function getCurrentQueryState() {
 }
 
 export default function IntegrationCallback() {
+  const theme = useTheme();
   const query = useMemo(() => getCurrentQueryState(), []);
   const processedCodeRef = useRef(false);
   const [config, setConfig] = useState(() => loadOlxIntegrationConfig());
   const [status, setStatus] = useState("ready");
   const [message, setMessage] = useState("Configure as credenciais do OLX e conclua o OAuth nesta página.");
-  const [clientId, setClientId] = useState(config.clientId || "");
-  const [clientSecret, setClientSecret] = useState(config.clientSecret || "");
+  const [clientId, setClientId] = useState(config.clientId || "1ff6b593-3fb4-401c-81ca-0f357dbf8641");
+  const [clientSecret, setClientSecret] = useState(config.clientSecret || "fbae708c090d43fa21198cd7ee2803e3");
   const [redirectUri, setRedirectUri] = useState(config.redirectUri || getDefaultOlxCallbackUrl());
   const [scope, setScope] = useState(config.scope || "v2 read write");
 
@@ -161,10 +163,10 @@ export default function IntegrationCallback() {
 
   const fieldStyle = {
     width: "100%",
-    padding: "12px 14px",
-    borderRadius: "10px",
-    border: "1px solid rgba(15, 23, 42, 0.18)",
-    fontSize: "14px",
+    padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+    borderRadius: theme.borderRadius.md,
+    border: `1px solid ${theme.colors.border}`,
+    fontSize: theme.typography.body.fontSize,
     outline: "none"
   };
 
@@ -172,49 +174,51 @@ export default function IntegrationCallback() {
     minHeight: "100vh",
     display: "grid",
     placeItems: "center",
-    padding: "32px",
-    background: "linear-gradient(135deg, #08111f 0%, #0f172a 40%, #132238 100%)"
+    padding: theme.layout.pagePadding,
+    background: theme.colors.background
   };
 
   const shellStyle = {
     width: "min(920px, 100%)",
     display: "grid",
-    gap: "20px"
+    gap: theme.layout.gap
   };
 
   const gridStyle = {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(280px, 1fr))",
-    gap: "16px"
+    gap: theme.layout.padding
   };
 
   return (
     <div style={pageStyle}>
       <div style={shellStyle}>
-        <Card style={{ padding: "28px", display: "grid", gap: "12px" }}>
-          <div style={{ color: "#f97316", fontWeight: 800, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        <Card style={{ padding: theme.layout.padding, display: "grid", gap: theme.layout.gap }}>
+          <div style={{ color: theme.colors.accent, fontWeight: theme.typography.cardTitle.fontWeight, fontSize: theme.typography.caption.fontSize }}>
             OSFlow Integrations
           </div>
-          <h1 style={{ margin: 0, color: "#e2e8f0" }}>Callback genérica para OAuth do OLX</h1>
-          <p style={{ margin: 0, color: "rgba(226,232,240,0.8)", lineHeight: 1.6 }}>
+          <h1 style={{ margin: 0, color: theme.colors.text, fontSize: theme.typography.h1.fontSize, fontWeight: theme.typography.h1.fontWeight }}>
+            Callback genérica para OAuth do OLX
+          </h1>
+          <p style={{ margin: 0, color: theme.colors.muted, lineHeight: theme.typography.body.lineHeight, fontSize: theme.typography.body.fontSize }}>
             Esta página recebe o authorization code do OLX, conclui a troca por access token e refresh token,
             e guarda as credenciais na configuração central de integrações.
           </p>
-          <p style={{ margin: 0, color: status === "error" ? "#fca5a5" : status === "success" ? "#86efac" : "rgba(226,232,240,0.8)" }}>
+          <p style={{ margin: 0, color: status === "error" ? theme.colors.statusDangerText : status === "success" ? theme.colors.statusSuccessText : theme.colors.muted, fontSize: theme.typography.body.fontSize }}>
             {message}
           </p>
         </Card>
 
         <div style={gridStyle}>
-          <Card style={{ padding: "24px", display: "grid", gap: "14px" }}>
-            <h2 style={{ margin: 0, color: "#e2e8f0", fontSize: "1.05rem" }}>Credenciais OLX</h2>
+          <Card style={{ padding: theme.layout.padding, display: "grid", gap: theme.layout.gap }}>
+            <h2 style={{ margin: 0, color: theme.colors.text, fontSize: theme.typography.h2.fontSize, fontWeight: theme.typography.h2.fontWeight }}>Credenciais OLX</h2>
 
-            <label style={{ display: "grid", gap: "6px", color: "rgba(226,232,240,0.86)" }}>
+            <label style={{ display: "grid", gap: theme.spacing.xs, color: theme.colors.text, fontSize: theme.typography.caption.fontSize }}>
               Client ID
               <Input value={clientId} onChange={(event) => setClientId(event.target.value)} style={fieldStyle} />
             </label>
 
-            <label style={{ display: "grid", gap: "6px", color: "rgba(226,232,240,0.86)" }}>
+            <label style={{ display: "grid", gap: theme.spacing.xs, color: theme.colors.text, fontSize: theme.typography.caption.fontSize }}>
               Client Secret
               <Input
                 type="password"
@@ -224,27 +228,27 @@ export default function IntegrationCallback() {
               />
             </label>
 
-            <label style={{ display: "grid", gap: "6px", color: "rgba(226,232,240,0.86)" }}>
+            <label style={{ display: "grid", gap: theme.spacing.xs, color: theme.colors.text, fontSize: theme.typography.caption.fontSize }}>
               Redirect URI
               <Input value={redirectUri} onChange={(event) => setRedirectUri(event.target.value)} style={fieldStyle} />
             </label>
 
-            <label style={{ display: "grid", gap: "6px", color: "rgba(226,232,240,0.86)" }}>
+            <label style={{ display: "grid", gap: theme.spacing.xs, color: theme.colors.text, fontSize: theme.typography.caption.fontSize }}>
               Scope
               <Input value={scope} onChange={(event) => setScope(event.target.value)} style={fieldStyle} />
             </label>
 
-            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: theme.spacing.sm, flexWrap: "wrap" }}>
               <Button variant="primary" onClick={handleSaveCredentials}>Guardar credenciais</Button>
               <Button variant="secondary" onClick={handleStartOAuth}>Autenticar com OLX</Button>
               <Button variant="ghost" onClick={handleClear}>Limpar</Button>
             </div>
           </Card>
 
-          <Card style={{ padding: "24px", display: "grid", gap: "14px" }}>
-            <h2 style={{ margin: 0, color: "#e2e8f0", fontSize: "1.05rem" }}>Estado atual</h2>
+          <Card style={{ padding: theme.layout.padding, display: "grid", gap: theme.layout.gap }}>
+            <h2 style={{ margin: 0, color: theme.colors.text, fontSize: theme.typography.h2.fontSize, fontWeight: theme.typography.h2.fontWeight }}>Estado atual</h2>
 
-            <div style={{ display: "grid", gap: "10px", color: "rgba(226,232,240,0.88)" }}>
+            <div style={{ display: "grid", gap: theme.spacing.sm, color: theme.colors.text, fontSize: theme.typography.body.fontSize }}>
               <div><strong>Callback padrão:</strong> {getDefaultOlxCallbackUrl()}</div>
               <div><strong>Client ID:</strong> {config.clientId || "não configurado"}</div>
               <div><strong>Access token:</strong> {config.accessToken ? "configurado" : "em falta"}</div>
@@ -254,7 +258,7 @@ export default function IntegrationCallback() {
               <div><strong>State pendente:</strong> {readPendingState() || "nenhum"}</div>
             </div>
 
-            <p style={{ margin: 0, color: "rgba(226,232,240,0.72)", lineHeight: 1.6 }}>
+            <p style={{ margin: 0, color: theme.colors.muted, lineHeight: theme.typography.body.lineHeight, fontSize: theme.typography.body.fontSize }}>
               O OLX deve redirecionar para esta callback com o parâmetro <strong>code</strong>. Nesta sprint o Radar
               apenas guarda e renova tokens; não há consumo de anúncios.
             </p>

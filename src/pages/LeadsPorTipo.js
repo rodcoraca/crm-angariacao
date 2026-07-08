@@ -75,7 +75,7 @@ export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
 
               <p style={{ margin: "4px 0" }}>{lead.telefone}</p>
 
-		<p style={{ fontSize: "11px", color: "#64748b" }}>
+		<p style={{ fontSize: "11px", color: "var(--os-color-muted)" }}>
   		{new Date(lead.updated_at).toLocaleString()}
 	      </p>
 
@@ -135,10 +135,10 @@ const grid = {
 const card = (tipo) => ({
   background:
     tipo === "quente"
-      ? "#dcfce7"
+      ? "var(--os-status-success-surface)"
       : tipo === "morno"
-      ? "#fef9c3"
-      : "#fee2e2",
+      ? "var(--os-status-warning-surface)"
+      : "var(--os-status-danger-surface)",
   padding: "15px",      // 👈 mais espaço interno
   borderRadius: "10px",
   boxShadow: "0 3px 10px rgba(0,0,0,0.05)",
@@ -154,7 +154,7 @@ const header = {
 const obsBox = {
   marginTop: "8px",
   padding: "8px",
-  background: "#fef3c7",
+  background: "var(--os-status-warning-surface)",
   borderRadius: "6px",
   fontSize: "12px",
 };
@@ -206,7 +206,7 @@ const btnSalvar = {
   marginTop: "6px",
   width: "100%",
   padding: "6px",
-  background: "#2563eb",
+  background: "var(--os-status-info-text)",
   color: "white",
   border: "none",
   borderRadius: "6px",
@@ -216,12 +216,14 @@ const btnSalvar = {
 
 const agenteStyle = {
   fontSize: "12px",
-  color: "#334155",
+  color: "var(--os-color-text)",
   margin: "6px 0"
 };
 
 const dataStyle = {
   fontSize: "14px",
-  color: "#666666",
+  color: "var(--os-color-muted)",
   marginTop: "4px"
 };
+
+

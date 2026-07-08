@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTheme } from "../../theme/ThemeContext";
 import Button from "./Button";
 import Modal from "./Modal";
+import Toast from "./Toast";
 import { feedbackEvents } from "./feedbackBus";
 
 export default function FeedbackHost() {
@@ -47,32 +48,6 @@ export default function FeedbackHost() {
     };
   }, []);
 
-  const toastColors = useMemo(
-    () => ({
-      success: {
-        background: "#ecfdf3",
-        border: "#86efac",
-        text: "#166534"
-      },
-      danger: {
-        background: "#fef2f2",
-        border: "#fca5a5",
-        text: "#991b1b"
-      },
-      warning: {
-        background: "#fffbeb",
-        border: "#fcd34d",
-        text: "#92400e"
-      },
-      neutral: {
-        background: theme.colors.surface,
-        border: theme.colors.border,
-        text: theme.colors.text
-      }
-    }),
-    [theme]
-  );
-
   function closeConfirm(accepted) {
     if (confirmState?.resolve) {
       confirmState.resolve(Boolean(accepted));
@@ -94,24 +69,13 @@ export default function FeedbackHost() {
         }}
       >
         {toasts.map((toast) => {
-          const palette = toastColors[toast.variant] || toastColors.neutral;
-
           return (
-            <div
+            <Toast
               key={toast.id}
-              style={{
-                borderRadius: theme.borderRadius.md,
-                border: `1px solid ${palette.border}`,
-                background: palette.background,
-                color: palette.text,
-                padding: `${theme.spacing.sm} ${theme.spacing.md}`,
-                boxShadow: theme.shadow.sm,
-                fontFamily: theme.typography.fontFamily,
-                fontSize: "0.92rem"
-              }}
-            >
-              {toast.message}
-            </div>
+              message={toast.message}
+              variant={toast.variant}
+              onClose={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
+            />
           );
         })}
       </div>
@@ -120,18 +84,19 @@ export default function FeedbackHost() {
         open={Boolean(confirmState)}
         onClose={() => closeConfirm(false)}
         title={confirmState?.title || "Confirmar ação"}
+        size="sm"
         footer={(
           <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.spacing.sm }}>
             <Button variant="ghost" onClick={() => closeConfirm(false)}>
               {confirmState?.cancelLabel || "Cancelar"}
             </Button>
-            <Button variant="primary" onClick={() => closeConfirm(true)}>
+            <Button variant="danger" onClick={() => closeConfirm(true)}>
               {confirmState?.confirmLabel || "Confirmar"}
             </Button>
           </div>
         )}
       >
-        <p style={{ margin: 0, color: theme.colors.muted }}>
+        <p style={{ margin: 0, color: theme.colors.muted, fontSize: theme.typography.body.fontSize, lineHeight: theme.typography.body.lineHeight }}>
           {confirmState?.message || "Deseja continuar?"}
         </p>
       </Modal>

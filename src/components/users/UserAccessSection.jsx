@@ -54,7 +54,7 @@ export default function UserAccessSection({
 
           return (
             <div key={modulo.key} style={{ border: "1px solid rgba(148, 163, 184, 0.35)", borderRadius: "8px", padding: "10px", display: "grid", gap: "8px" }}>
-              <label style={{ ...styles.checkboxItem, fontWeight: 700 }}>
+              <label style={{ ...styles.checkboxItem, fontWeight: 600 }}>
                 <input
                   type="checkbox"
                   checked={moduleState.checked}
@@ -103,3 +103,4 @@ export default function UserAccessSection({
     </section>
   );
 }
+

@@ -1,4 +1,4 @@
-ï»¿import { useMemo } from "react";
+import { useMemo } from "react";
 import { useTheme } from "./theme/ThemeContext";
 import { formatarNomeApresentacao } from "./utils/nomes";
 import Button from "./components/Button";
@@ -67,7 +67,7 @@ export default function FichaLead({ leadId, user, voltar }) {
       justifyContent: "center",
       padding: "10px 16px",
       borderRadius: theme.borderRadius.lg,
-      fontWeight: 700,
+      fontWeight: 600,
       fontSize: "0.95rem"
     },
     infoBox: {
@@ -147,7 +147,7 @@ export default function FichaLead({ leadId, user, voltar }) {
   }), [theme]);
 
   if (loading) return <Card style={styles.loading}>A carregar ficha...</Card>;
-  if (!lead || !form) return <Card style={styles.loading}>Lead nÃ£o encontrada.</Card>;
+  if (!lead || !form) return <Card style={styles.loading}>Lead não encontrada.</Card>;
 
   const badgeType = badgeTipoFicha(theme, form.tipo);
   const radarMetadata = parseRadarLeadMetadataFromObservation(lead.observacoes || form.observacoes || "");
@@ -175,7 +175,7 @@ export default function FichaLead({ leadId, user, voltar }) {
 
       {isRadarImported && radarMetadata ? (
         <div style={styles.radarBox}>
-          <Badge variant="primary" style={{ width: "fit-content" }}>ðŸ“¡ Importado pelo Radar</Badge>
+          <Badge variant="primary" style={{ width: "fit-content" }}>?? Importado pelo Radar</Badge>
           <p style={styles.radarLine}><strong>Portal:</strong> {radarMetadata.provider || "-"}</p>
           <p style={styles.radarLine}><strong>Score:</strong> {radarMetadata.score ?? "-"}</p>
           <p style={styles.radarLine}><strong>Publicado:</strong> {formatarDataRadar(radarMetadata.publishedAt)}</p>
@@ -228,7 +228,7 @@ export default function FichaLead({ leadId, user, voltar }) {
         </label>
 
         <label style={styles.label}>
-          Agente responsÃ¡vel
+          Agente responsável
           <select style={styles.select} value={form.agente_id} onChange={(e) => atualizar("agente_id", e.target.value)}>
             <option value="">Sem agente</option>
             {agentes.map((agente) => (
@@ -241,14 +241,14 @@ export default function FichaLead({ leadId, user, voltar }) {
       </div>
 
       <label style={styles.label}>
-        ObservaÃ§Ãµes
+        Observações
         <Input as="textarea" style={styles.textarea} value={form.observacoes} onChange={(e) => atualizar("observacoes", e.target.value)} />
       </label>
 
       <div style={styles.footer}>
         <Button color="light" style={styles.btnSecondary} onClick={voltar}>Cancelar</Button>
         <Button color="success" style={styles.btnPrimary} onClick={salvar} disabled={salvando}>
-          {salvando ? "A guardar..." : "Guardar alteraÃ§Ãµes"}
+          {salvando ? "A guardar..." : "Guardar alterações"}
         </Button>
       </div>
     </Card>
@@ -270,3 +270,4 @@ function formatarDataRadar(data) {
     year: "numeric"
   });
 }
+

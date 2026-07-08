@@ -5,24 +5,44 @@ export const theme = {
   colors,
   typography,
 
+  radius: {
+    sm: "8px",
+    md: "12px",
+    pill: "999px"
+  },
+
   borderRadius: {
-    sm: "6px",
-    md: "10px",
-    lg: "16px",
-    xl: "22px"
+    sm: "8px",
+    md: "12px",
+    lg: "12px",
+    xl: "12px",
+    full: "999px"
+  },
+
+  elevation: {
+    0: "none",
+    1: "0 1px 2px rgba(16, 34, 45, 0.08)",
+    2: "0 4px 10px rgba(16, 34, 45, 0.10)",
+    3: "0 8px 18px rgba(16, 34, 45, 0.14)"
   },
 
   shadow: {
-    sm: "0 2px 8px rgba(0,0,0,.05)",
-    md: "0 6px 18px rgba(0,0,0,.08)",
-    lg: "0 12px 28px rgba(0,0,0,.12)"
+    sm: "0 1px 2px rgba(16, 34, 45, 0.08)",
+    md: "0 4px 10px rgba(16, 34, 45, 0.10)",
+    lg: "0 8px 18px rgba(16, 34, 45, 0.14)"
+  },
+
+  layout: {
+    gap: "12px",
+    padding: "16px",
+    pagePadding: "20px"
   },
 
   spacing: {
-    xs: "6px",
-    sm: "10px",
+    xs: "8px",
+    sm: "12px",
     md: "16px",
-    lg: "24px",
-    xl: "40px"
+    lg: "20px",
+    xl: "24px"
   }
 };

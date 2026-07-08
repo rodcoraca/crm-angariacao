@@ -77,7 +77,7 @@ const board = {
 };
 
 const column = {
-  background: "#f1f5f9",
+  background: "var(--os-color-surface-soft)",
   padding: "15px",
   borderRadius: "10px",
   minWidth: "250px"
@@ -99,8 +99,8 @@ const select = {
 const obsBox = {
   marginTop: "8px",
   padding: "8px",
-  background: "#fef3c7",
+  background: "var(--os-status-warning-surface)",
   borderRadius: "6px",
   fontSize: "12px",
-  color: "#92400e"
+  color: "var(--os-status-warning-text)"
 };

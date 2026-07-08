@@ -17,19 +17,19 @@ export default function SidebarMenu({
     width: "100%",
     justifyContent: "flex-start",
     display: "inline-flex",
-    gap: "8px",
+    gap: theme.spacing.xs,
     textAlign: "left",
-    fontWeight: "600",
-    fontSize: "14px"
+    fontWeight: theme.typography.cardTitle.fontWeight,
+    fontSize: theme.typography.body.fontSize
   };
 
   const submenuButton = {
     width: "100%",
     justifyContent: "flex-start",
     display: "inline-flex",
-    gap: "8px",
+    gap: theme.spacing.xs,
     textAlign: "left",
-    fontSize: "13px"
+    fontSize: theme.typography.caption.fontSize
   };
 
   const logoutButton = {
@@ -38,9 +38,8 @@ export default function SidebarMenu({
   };
 
   const sectionLabel = {
-    textTransform: "uppercase",
-    fontSize: "12px",
-    letterSpacing: "0.12em",
+    fontSize: theme.typography.caption.fontSize,
+    fontWeight: theme.typography.cardTitle.fontWeight,
     color: theme.colors.muted,
     marginBottom: theme.spacing.xs
   };
@@ -62,7 +61,7 @@ export default function SidebarMenu({
           padding: theme.spacing.sm,
           background: theme.colors.surface,
           borderRadius: theme.borderRadius.md,
-          boxShadow: theme.shadow.sm
+          boxShadow: theme.elevation[1]
         }}
       >
         <img

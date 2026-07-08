@@ -272,7 +272,7 @@ const pageTitle = {
 
 const pageSubtitle = {
   margin: "4px 0 0",
-  color: "#64748b"
+  color: "var(--os-color-muted)"
 };
 
 const barraSuperior = {
@@ -290,24 +290,24 @@ const submenuEstoque = {
 const btnSubmenu = {
   padding: "10px 14px",
   borderRadius: "8px",
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--os-color-border)",
   background: "white",
   cursor: "pointer"
 };
 
 const btnSubmenuAtivo = {
   ...btnSubmenu,
-  background: "#2563eb",
+  background: "var(--os-status-info-text)",
   color: "white",
-  borderColor: "#2563eb"
+  borderColor: "var(--os-status-info-text)"
 };
 
 const btnVoltar = {
   padding: "10px 14px",
   borderRadius: "8px",
-  border: "1px solid #cbd5e1",
-  background: "#f8fafc",
-  color: "#0f172a",
+  border: "1px solid var(--os-color-border)",
+  background: "var(--os-color-surface-soft)",
+  color: "var(--os-color-text)",
   cursor: "pointer",
   fontWeight: "600",
   boxShadow: "0 1px 2px rgba(15,23,42,0.05)"
@@ -317,7 +317,7 @@ const input = {
   flex: 1,
   padding: "10px",
   borderRadius: "8px",
-  border: "1px solid #d1d5db"
+  border: "1px solid var(--os-color-border)"
 };
 
 const inputForm = {
@@ -325,7 +325,7 @@ const inputForm = {
   padding: "10px",
   marginBottom: "10px",
   borderRadius: "8px",
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--os-color-border)",
   boxSizing: "border-box"
 };
 
@@ -334,12 +334,12 @@ const textarea = {
   height: "100px",
   padding: "10px",
   borderRadius: "8px",
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--os-color-border)",
   boxSizing: "border-box"
 };
 
 const btnNovo = {
-  background: "#2563eb",
+  background: "var(--os-status-info-text)",
   color: "white",
   border: "none",
   padding: "10px 15px",
@@ -349,7 +349,7 @@ const btnNovo = {
 
 const btnGuardar = {
   flex: 1,
-  background: "#16a34a",
+  background: "var(--os-color-secondary)",
   color: "white",
   border: "none",
   padding: "12px",
@@ -380,11 +380,11 @@ const table = {
 const th = {
   textAlign: "left",
   padding: "14px",
-  background: "#f1f5f9"
+  background: "var(--os-color-surface-soft)"
 };
 
 const tr = {
-  borderBottom: "1px solid #e2e8f0"
+  borderBottom: "1px solid var(--os-color-border)"
 };
 
 const td = {
@@ -419,7 +419,7 @@ const btnFechar = {
 const obsBox = {
   marginTop: "10px",
   padding: "10px",
-  background: "#fef3c7",
+  background: "var(--os-status-warning-surface)",
   borderRadius: "8px"
 };
 
@@ -431,7 +431,7 @@ const acoesForm = {
 
 const btnCancelar = {
   flex: 1,
-  background: "#64748b",
+  background: "var(--os-color-muted)",
   color: "white",
   border: "none",
   padding: "12px",
@@ -444,13 +444,13 @@ const linhaFicheiro = {
   justifyContent: "space-between",
   alignItems: "center",
   padding: "10px",
-  borderBottom: "1px solid #e2e8f0"
+  borderBottom: "1px solid var(--os-color-border)"
 };
 
 const previewBox = {
   marginTop: "20px",
   padding: "10px",
-  background: "#f8fafc",
+  background: "var(--os-color-surface-soft)",
   borderRadius: "8px"
 };
 
@@ -466,20 +466,20 @@ const uploadBox = {
 const uploadTexto = {
   marginBottom: "5px",
   fontWeight: "600",
-  color: "#334155"
+  color: "var(--os-color-text)"
 };
 
 const barraExterna = {
   width: "100%",
   height: "12px",
-  background: "#e2e8f0",
+  background: "var(--os-color-border)",
   borderRadius: "999px",
   overflow: "hidden"
 };
 
 const barraInterna = {
   height: "100%",
-  background: "#22c55e",
+  background: "var(--os-color-secondary)",
   transition: "0.3s"
 }
 
@@ -500,7 +500,7 @@ const thumb = {
   objectFit: "cover",
   borderRadius: "10px",
   cursor: "pointer",
-  border: "1px solid #e2e8f0"
+  border: "1px solid var(--os-color-border)"
 };
 
 const btnDeleteImagem = {
@@ -508,7 +508,7 @@ const btnDeleteImagem = {
   top: "5px",
   right: "5px",
 
-  background: "#ef4444",
+  background: "var(--os-color-danger)",
   color: "white",
 
   border: "none",
@@ -580,7 +580,7 @@ const nomeImagem = {
   marginTop: "8px",
   textAlign: "center",
   fontSize: "13px",
-  color: "#475569",
+  color: "var(--os-color-muted)",
 
   maxWidth: "150px",
 
@@ -622,7 +622,7 @@ const inputFormFull = {
   width: "100%",
   padding: "10px",
   borderRadius: "8px",
-  border: "1px solid #d1d5db",
+  border: "1px solid var(--os-color-border)",
   marginBottom: "12px",
   boxSizing: "border-box"
 };
@@ -642,9 +642,9 @@ const docCard = {
 
   padding: "8px 12px",
 
-  background: "#f8fafc",
+  background: "var(--os-color-surface-soft)",
 
-  border: "1px solid #e2e8f0",
+  border: "1px solid var(--os-color-border)",
 
   borderRadius: "8px",
 
@@ -669,3 +669,4 @@ const linhaDocumentos = {
   gap: "10px",
   marginBottom: "15px"
 };
+

@@ -36,15 +36,31 @@ function writeStorage(value) {
 }
 
 function mergeOlxConfig(base = {}, overrides = {}) {
+  const accessToken = safeText(
+    overrides.accessToken ?? overrides.access_token ?? base.accessToken ?? base.access_token ?? process.env.REACT_APP_OLX_ACCESS_TOKEN,
+    ""
+  );
+  const refreshToken = safeText(
+    overrides.refreshToken ?? overrides.refresh_token ?? base.refreshToken ?? base.refresh_token ?? process.env.REACT_APP_OLX_REFRESH_TOKEN,
+    ""
+  );
+  const expiresAt = safeIso(
+    overrides.expiresAt ?? overrides.expires_at ?? base.expiresAt ?? base.expires_at ?? process.env.REACT_APP_OLX_TOKEN_EXPIRES_AT,
+    ""
+  );
+
   return {
     clientId: safeText(overrides.clientId ?? base.clientId ?? process.env.REACT_APP_OLX_CLIENT_ID, ""),
     clientSecret: safeText(
       overrides.clientSecret ?? base.clientSecret ?? process.env.REACT_APP_OLX_CLIENT_SECRET,
       ""
     ),
-    accessToken: safeText(overrides.accessToken ?? base.accessToken ?? process.env.REACT_APP_OLX_ACCESS_TOKEN, ""),
-    refreshToken: safeText(overrides.refreshToken ?? base.refreshToken ?? process.env.REACT_APP_OLX_REFRESH_TOKEN, ""),
-    expiresAt: safeIso(overrides.expiresAt ?? base.expiresAt ?? process.env.REACT_APP_OLX_TOKEN_EXPIRES_AT, ""),
+    accessToken,
+    refreshToken,
+    expiresAt,
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_at: expiresAt,
     scope: safeText(overrides.scope ?? base.scope ?? process.env.REACT_APP_OLX_SCOPE ?? "v2 read write", "v2 read write"),
     redirectUri: safeText(
       overrides.redirectUri ?? base.redirectUri ?? process.env.REACT_APP_OLX_REDIRECT_URI ?? DEFAULT_OLX_CALLBACK_URL,

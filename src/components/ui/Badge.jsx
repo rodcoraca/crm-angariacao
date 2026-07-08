@@ -1,6 +1,13 @@
 import { useTheme } from "../../theme/ThemeContext";
 
-export default function Badge({ children, variant = "neutral", style, ...props }) {
+export default function Badge({
+  children,
+  variant = "neutral",
+  size = "md",
+  outlined = false,
+  style,
+  ...props
+}) {
   const theme = useTheme();
 
   const variants = {
@@ -28,6 +35,23 @@ export default function Badge({ children, variant = "neutral", style, ...props }
 
   const selected = variants[variant] || variants.neutral;
 
+  const sizes = {
+    sm: {
+      fontSize: theme.typography.badge.fontSize,
+      padding: `${theme.spacing.xs} ${theme.spacing.sm}`
+    },
+    md: {
+      fontSize: theme.typography.badge.fontSize,
+      padding: `${theme.spacing.xs} ${theme.spacing.sm}`
+    },
+    lg: {
+      fontSize: theme.typography.badge.fontSize,
+      padding: `${theme.spacing.sm} ${theme.spacing.md}`
+    }
+  };
+
+  const selectedSize = sizes[size] || sizes.md;
+
   return (
     <span
       {...props}
@@ -35,12 +59,13 @@ export default function Badge({ children, variant = "neutral", style, ...props }
         display: "inline-flex",
         alignItems: "center",
         justifyContent: "center",
-        padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
-        borderRadius: theme.borderRadius.full || "999px",
-        fontSize: "0.85rem",
-        fontWeight: 700,
+        padding: selectedSize.padding,
+        borderRadius: theme.borderRadius.full,
+        fontSize: selectedSize.fontSize,
+        fontWeight: theme.typography.badge.fontWeight,
         fontFamily: theme.typography.fontFamily,
-        background: selected.background,
+        background: outlined ? "transparent" : selected.background,
+        border: outlined ? `1px solid ${selected.color}66` : "none",
         color: selected.color,
         ...style
       }}

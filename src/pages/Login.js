@@ -254,12 +254,12 @@ const styles = {
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    padding: "24px"
+    padding: "var(--os-page-padding)"
   },
 
   card: {
-    padding: "40px",
-    borderRadius: "16px",
+    padding: "var(--os-padding)",
+    borderRadius: "var(--os-radius-md)",
     width: "360px",
     textAlign: "center"
   },
@@ -268,18 +268,17 @@ const styles = {
     display: "inline-flex",
     alignItems: "center",
     justifyContent: "center",
-    padding: "6px 12px",
-    borderRadius: "999px",
-    fontSize: "12px",
-    fontWeight: 700,
-    letterSpacing: "0.08em",
-    textTransform: "uppercase",
+    padding: "8px 12px",
+    borderRadius: "var(--os-radius-pill)",
+    fontSize: "13px",
+    fontWeight: 500,
     marginBottom: "12px"
   },
 
   title: {
     marginBottom: "5px",
-    fontSize: "24px"
+    fontSize: "24px",
+    fontWeight: 600
   },
 
   subtitle: {
@@ -288,25 +287,25 @@ const styles = {
 
   input: {
     width: "100%",
-    padding: "12px",
+    padding: "var(--os-padding)",
     marginBottom: "15px",
-    borderRadius: "10px",
+    borderRadius: "var(--os-radius-md)",
     fontSize: "14px",
     outline: "none"
   },
 
   button: {
     width: "100%",
-    padding: "12px",
-    borderRadius: "10px",
+    padding: "var(--os-padding)",
+    borderRadius: "var(--os-radius-md)",
     fontSize: "16px",
-    fontWeight: "bold"
+    fontWeight: 600
   },
 
   secondaryButton: {
     width: "100%",
-    padding: "10px",
-    borderRadius: "10px",
+    padding: "var(--os-padding)",
+    borderRadius: "var(--os-radius-md)",
     fontSize: "14px",
     marginTop: "10px"
   }

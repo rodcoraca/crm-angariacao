@@ -144,7 +144,7 @@ function DashboardPreview() {
 }
 
 function ValueCardIcon({ icon }) {
-  const iconStyle = { width: "22px", height: "22px", color: "#0e4d64" };
+  const iconStyle = { width: "22px", height: "22px", color: "var(--os-color-primary)" };
 
   if (icon === "building") {
     return (
@@ -274,14 +274,14 @@ export default function LandingPage() {
     width: "100%",
     borderRadius: "10px",
     border: "1px solid rgba(14, 77, 100, 0.2)",
-    background: "#ffffff",
+    background: "var(--os-color-surface)",
     padding: "11px 12px",
     fontSize: "0.95rem",
-    color: "#072634",
+    color: "var(--os-color-text)",
   };
 
   const errorInputStyle = {
-    border: "1px solid #f97316",
+    border: "1px solid var(--os-color-accent)",
     boxShadow: "0 0 0 3px rgba(249, 115, 22, 0.18)",
   };
 
@@ -680,3 +680,4 @@ export default function LandingPage() {
     </div>
   );
 }
+

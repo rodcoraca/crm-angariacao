@@ -80,7 +80,7 @@ export class RadarViewModel {
         variacao: "Total atual",
         descricao: "Oportunidades monitorizadas pelo Radar.",
         icone: "M",
-        cor: "#0f766e"
+        cor: "var(--os-color-primary)"
       },
       {
         id: "kpi-novas",
@@ -89,7 +89,7 @@ export class RadarViewModel {
         variacao: "Estado novo",
         descricao: "Oportunidades ainda por análise.",
         icone: "N",
-        cor: "#1d4ed8"
+        cor: "var(--os-status-info-text)"
       },
       {
         id: "kpi-importadas",
@@ -98,7 +98,7 @@ export class RadarViewModel {
         variacao: "Para Leads",
         descricao: "Oportunidades já importadas no fluxo.",
         icone: "I",
-        cor: "#b45309"
+        cor: "var(--os-status-warning-text)"
       },
       {
         id: "kpi-pontuacao-media",
@@ -107,7 +107,7 @@ export class RadarViewModel {
         variacao: "Qualificação",
         descricao: "Média de score das oportunidades monitorizadas.",
         icone: "S",
-        cor: "#166534"
+        cor: "var(--os-status-success-text)"
       }
     ];
   }
@@ -249,3 +249,4 @@ export function mapRadarTimelineViewModel(events) {
     data: formatPublishedDate(item.data)
   }));
 }
+

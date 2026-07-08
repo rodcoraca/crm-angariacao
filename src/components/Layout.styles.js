@@ -22,6 +22,6 @@ export const mainAreaStyle = {
 
 export const contentStyle = {
   flex: 1,
-  padding: "20px",
+  padding: "var(--os-page-padding)",
   overflowX: "auto"
 };

@@ -224,10 +224,10 @@ export default function App() {
       <Layout
         collapsed={sidebarCollapsed}
         header={
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-            <span style={{ color: "#F97316" }}>OSFlow</span>
-            <span style={{ color: "rgba(255,255,255,0.8)", fontSize: "0.8rem", letterSpacing: "0.06em" }}>/ {getHeaderContextTitle()}</span>
-            <span style={{ color: "rgba(255,255,255,0.9)", fontSize: "0.9rem", textTransform: "none", letterSpacing: "0.02em" }}>Fluxo inteligente | Resultados reais</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px", fontWeight: 600 }}>
+            <span style={{ color: "var(--os-color-accent)", fontSize: "16px" }}>OSFlow</span>
+            <span style={{ color: "var(--os-color-text-light)", opacity: 0.85, fontSize: "13px" }}>/ {getHeaderContextTitle()}</span>
+            <span style={{ color: "var(--os-color-text-light)", opacity: 0.92, fontSize: "14px" }}>Fluxo inteligente | Resultados reais</span>
           </div>
         }
         footer={<span>OSFlow • Gestão operacional</span>}

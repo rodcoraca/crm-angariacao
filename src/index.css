@@ -1,5 +1,57 @@
 @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap');
 
+:root {
+  --os-color-primary: #0E4D64;
+  --os-color-secondary: #16A34A;
+  --os-color-accent: #F97316;
+  --os-color-danger: #DC2626;
+  --os-color-surface: #FFFFFF;
+  --os-color-surface-soft: #F8FAFC;
+  --os-color-background: #F3F7FA;
+  --os-color-border: #D7E2EA;
+  --os-color-text: #10222D;
+  --os-color-muted: #5B6B76;
+  --os-color-text-light: #FFFFFF;
+  --os-status-success-surface: #ECFDF3;
+  --os-status-success-border: #86EFAC;
+  --os-status-success-text: #166534;
+  --os-status-warning-surface: #FFFBEB;
+  --os-status-warning-border: #FCD34D;
+  --os-status-warning-text: #92400E;
+  --os-status-danger-surface: #FEF2F2;
+  --os-status-danger-border: #FCA5A5;
+  --os-status-danger-text: #991B1B;
+  --os-status-info-surface: #EFF6FF;
+  --os-status-info-border: #BFDBFE;
+  --os-status-info-text: #1D4ED8;
+
+  --os-gap: 12px;
+  --os-padding: 16px;
+  --os-page-padding: 20px;
+
+  --os-radius-sm: 8px;
+  --os-radius-md: 12px;
+  --os-radius-pill: 999px;
+
+  --os-elevation-0: none;
+  --os-elevation-1: 0 1px 2px rgba(16, 34, 45, 0.08);
+  --os-elevation-2: 0 4px 10px rgba(16, 34, 45, 0.10);
+  --os-elevation-3: 0 8px 18px rgba(16, 34, 45, 0.14);
+
+  --os-font-h1-size: 32px;
+  --os-font-h1-weight: 600;
+  --os-font-h2-size: 24px;
+  --os-font-h2-weight: 600;
+  --os-font-card-title-size: 16px;
+  --os-font-card-title-weight: 600;
+  --os-font-body-size: 14px;
+  --os-font-body-weight: 400;
+  --os-font-caption-size: 13px;
+  --os-font-caption-weight: 400;
+  --os-font-badge-size: 13px;
+  --os-font-badge-weight: 500;
+}
+
 html, body, #root {
   margin: 0;
   padding: 0;
@@ -7,24 +59,96 @@ html, body, #root {
   font-family: 'Montserrat', 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #F3F7FA;
-  color: #10222D;
+  background: var(--os-color-background);
+  color: var(--os-color-text);
+  font-size: var(--os-font-body-size);
+  font-weight: var(--os-font-body-weight);
+  line-height: 1.5;
 }
 
 * {
   box-sizing: border-box;
 }
 
+h1, .os-h1 {
+  font-size: var(--os-font-h1-size);
+  font-weight: var(--os-font-h1-weight);
+  line-height: 1.2;
+}
+
+h2, .os-h2 {
+  font-size: var(--os-font-h2-size);
+  font-weight: var(--os-font-h2-weight);
+  line-height: 1.25;
+}
+
+.os-card-title {
+  font-size: var(--os-font-card-title-size);
+  font-weight: var(--os-font-card-title-weight);
+  line-height: 1.3;
+}
+
+.os-caption {
+  font-size: var(--os-font-caption-size);
+  font-weight: var(--os-font-caption-weight);
+  line-height: 1.45;
+}
+
+.os-badge-text {
+  font-size: var(--os-font-badge-size);
+  font-weight: var(--os-font-badge-weight);
+  line-height: 1.3;
+}
+
 button, input, textarea, select {
   font: inherit;
 }
 
-button {
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+a[href],
+button,
+[role="button"],
+input[type="button"],
+input[type="submit"],
+[data-clickable="true"] {
+  cursor: pointer;
+  transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease, background-color 200ms ease, border-color 200ms ease, color 200ms ease;
 }
 
-button:hover {
-  transform: translateY(-1px);
+a[href]:hover,
+button:hover,
+[role="button"]:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover,
+[data-clickable="true"]:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--os-elevation-1);
+}
+
+a[href]:focus-visible,
+button:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible,
+[data-clickable="true"]:focus-visible {
+  outline: 2px solid var(--os-color-primary);
+  outline-offset: 2px;
+}
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled,
+[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.65;
+  transform: none;
+  box-shadow: none;
+}
+
+[data-clickable="false"],
+.os-non-clickable {
+  cursor: default;
 }
 
 @media (max-width: 768px) {

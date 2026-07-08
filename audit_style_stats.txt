@@ -1,0 +1,49 @@
+=== fontSize values ===
+=== fontWeight values ===
+=== lineHeight values ===
+=== letterSpacing values ===
+=== padding values ===
+=== gap values ===
+=== borderRadius values ===
+=== boxShadow values ===
+=== hardcoded hex colors ===
+#e2e => 11
+#fff => 9
+#fef => 7
+#647 => 7
+#0e4 => 6
+#f97 => 6
+#f8f => 6
+#256 => 5
+#d1d => 5
+#16a => 5
+#924 => 4
+#0f1 => 4
+#166 => 4
+#991 => 3
+#f7f => 3
+#125 => 3
+#dcf => 3
+#fee => 3
+#334 => 3
+#f3f => 3
+#475 => 3
+#cbd => 3
+#eff => 2
+#1d4 => 2
+#072 => 2
+#f1f => 2
+#b45 => 2
+#86e => 2
+#102 => 2
+#fca => 2
+#ff8 => 1
+#0d6 => 1
+#f9f => 1
+#0c6 => 1
+#5b6 => 1
+#666 => 1
+#d7e => 1
+#dc2 => 1
+#3b1 => 1
+#e5e => 1

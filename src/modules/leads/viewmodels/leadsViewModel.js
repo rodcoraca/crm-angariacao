@@ -35,9 +35,9 @@ export function labelTipoLead(tipo) {
 
 export function badgeTipoFicha(theme, tipo) {
   const palette = {
-    quente: { background: "#dcfce7", color: "#166534" },
-    morno: { background: "#fef9c3", color: "#92400e" },
-    frio: { background: "#fee2e2", color: "#991b1b" }
+    quente: { background: "var(--os-status-success-surface)", color: "var(--os-status-success-text)" },
+    morno: { background: "var(--os-status-warning-surface)", color: "var(--os-status-warning-text)" },
+    frio: { background: "var(--os-status-danger-surface)", color: "var(--os-status-danger-text)" }
   };
 
   return palette[tipo] || { background: theme.colors.surfaceSoft, color: theme.colors.text };
@@ -72,3 +72,4 @@ export function construirCsvLeads(leads) {
 
   return linhas.map((linha) => linha.join(",")).join("\n");
 }
+

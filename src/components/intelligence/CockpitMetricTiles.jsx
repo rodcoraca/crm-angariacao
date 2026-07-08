@@ -17,7 +17,7 @@ export default function CockpitMetricTiles({ items = [] }) {
           key={item.id || item.key || item.label || "cockpit-metric-item"}
           style={{
             padding: theme.spacing.md,
-            boxShadow: "none",
+            boxShadow: theme.elevation[0],
             borderStyle: "dashed",
             display: "grid",
             gap: theme.spacing.xs
@@ -26,15 +26,14 @@ export default function CockpitMetricTiles({ items = [] }) {
           <small
             style={{
               color: theme.colors.muted,
-              textTransform: "uppercase",
-              fontWeight: 700,
-              letterSpacing: "0.03em"
+              fontWeight: theme.typography.caption.fontWeight,
+              fontSize: theme.typography.caption.fontSize
             }}
           >
             {item.label}
           </small>
-          <strong style={{ color: theme.colors.text, fontSize: "1.45rem", lineHeight: 1 }}>{item.value}</strong>
-          {item.hint ? <small style={{ color: theme.colors.muted }}>{item.hint}</small> : null}
+          <strong style={{ color: theme.colors.text, fontSize: theme.typography.h2.fontSize, lineHeight: theme.typography.h2.lineHeight, fontWeight: theme.typography.h2.fontWeight }}>{item.value}</strong>
+          {item.hint ? <small style={{ color: theme.colors.muted, fontSize: theme.typography.caption.fontSize, fontWeight: theme.typography.caption.fontWeight }}>{item.hint}</small> : null}
         </Card>
       ))}
     </div>

@@ -1,12 +1,12 @@
 :root {
-  --lp-primary: #0e4d64;
-  --lp-secondary: #16a34a;
-  --lp-accent: #f97316;
-  --lp-ink: #072634;
-  --lp-muted: #486575;
+  --lp-primary: var(--os-color-primary);
+  --lp-secondary: var(--os-color-secondary);
+  --lp-accent: var(--os-color-accent);
+  --lp-ink: var(--os-color-text);
+  --lp-muted: var(--os-color-muted);
   --lp-border: rgba(14, 77, 100, 0.14);
-  --lp-surface: #f6fbfd;
-  --lp-white: #ffffff;
+  --lp-surface: var(--os-color-surface-soft);
+  --lp-white: var(--os-color-surface);
 }
 
 .lp-root {
@@ -15,7 +15,7 @@
   background:
     radial-gradient(circle at 90% -10%, rgba(22, 163, 74, 0.2), transparent 40%),
     radial-gradient(circle at 10% 20%, rgba(14, 77, 100, 0.16), transparent 38%),
-    linear-gradient(180deg, #f4fbff 0%, #ffffff 50%, #f7fbf9 100%);
+    linear-gradient(180deg, var(--os-color-surface-soft) 0%, var(--os-color-surface) 50%, var(--os-color-surface-soft) 100%);
   color: var(--lp-ink);
 }
 
@@ -113,14 +113,14 @@
 }
 
 .lp-nav-link:hover {
-  color: #0c5f7e;
+  color: var(--os-color-primary);
   transform: translateY(-1px);
 }
 
 .lp-nav-cta {
   text-decoration: none;
   color: var(--lp-white);
-  background: linear-gradient(140deg, var(--lp-primary), #125e7b);
+  background: linear-gradient(140deg, var(--lp-primary), var(--os-color-primary));
   border-radius: 11px;
   padding: 11px 16px;
   font-weight: 700;
@@ -196,7 +196,7 @@
   margin: 0;
   max-width: 940px;
   font-size: clamp(1rem, 1.35vw, 1.2rem);
-  color: #3b5c6c;
+  color: var(--os-color-muted);
   line-height: 1.74;
   font-weight: 500;
 }
@@ -295,7 +295,7 @@
 }
 
 .lp-btn-primary {
-  background: linear-gradient(140deg, var(--lp-primary), #125e7b);
+  background: linear-gradient(140deg, var(--lp-primary), var(--os-color-primary));
   color: var(--lp-white);
   box-shadow: 0 14px 32px rgba(14, 77, 100, 0.26);
 }
@@ -454,7 +454,7 @@
   padding: 18px;
   border-radius: 14px;
   border: 1px solid var(--lp-border);
-  background: linear-gradient(180deg, #ffffff, #f9fdff);
+  background: linear-gradient(180deg, var(--os-color-surface), var(--os-color-surface-soft));
   box-shadow: 0 8px 24px rgba(14, 77, 100, 0.08);
   transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
 }
@@ -511,7 +511,7 @@
   border-radius: 999px;
   border: 1px solid rgba(22, 163, 74, 0.28);
   background: rgba(22, 163, 74, 0.08);
-  color: #0c6630;
+  color: var(--os-color-secondary);
   font-weight: 700;
   font-size: 0.9rem;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
@@ -527,7 +527,7 @@
 }
 
 .lp-cta {
-  background: linear-gradient(145deg, #0e4d64, #0d607d);
+  background: linear-gradient(145deg, var(--os-color-primary), var(--os-color-primary));
   border-radius: 22px;
   padding: clamp(26px, 5vw, 44px);
   color: var(--lp-white);
@@ -541,15 +541,15 @@
 }
 
 .lp-cta .lp-btn-primary {
-  background: linear-gradient(145deg, var(--lp-accent), #ff8f33);
-  color: #3b1f07;
+  background: linear-gradient(145deg, var(--lp-accent), var(--os-color-accent));
+  color: var(--os-status-warning-text);
   box-shadow: 0 16px 30px rgba(249, 115, 22, 0.35);
 }
 
 .lp-footer {
   margin-top: 72px;
   border-top: 1px solid var(--lp-border);
-  background: linear-gradient(180deg, #f7fcff, #f2f9fc);
+  background: linear-gradient(180deg, var(--os-color-surface-soft), var(--os-color-surface-soft));
 }
 
 .lp-footer-inner {
@@ -616,7 +616,7 @@
   max-height: 92vh;
   overflow-y: auto;
   border-radius: 18px;
-  background: linear-gradient(180deg, #ffffff 0%, #f7fcff 100%);
+  background: linear-gradient(180deg, var(--os-color-surface) 0%, var(--os-color-surface-soft) 100%);
   border: 1px solid rgba(14, 77, 100, 0.16);
   box-shadow: 0 28px 52px rgba(7, 38, 52, 0.28);
 }
@@ -671,7 +671,7 @@
 
 .lp-form-error-text {
   margin: 12px 0 0;
-  color: #b45309;
+  color: var(--os-status-warning-text);
   font-weight: 600;
   font-size: 0.9rem;
 }
@@ -698,13 +698,13 @@
 
 .lp-modal-btn-ghost {
   border: 1px solid rgba(14, 77, 100, 0.2);
-  background: #ffffff;
+  background: var(--os-color-surface);
   color: var(--lp-primary);
 }
 
 .lp-modal-btn-primary {
   border: 0;
-  background: linear-gradient(140deg, var(--lp-primary), #125e7b);
+  background: linear-gradient(140deg, var(--lp-primary), var(--os-color-primary));
   color: var(--lp-white);
   box-shadow: 0 12px 24px rgba(14, 77, 100, 0.25);
 }
@@ -823,3 +823,4 @@
     animation: none;
   }
 }
+

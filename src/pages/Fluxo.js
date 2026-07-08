@@ -360,13 +360,13 @@ export default function Fluxo({ user, onAbrirLead }) {
       margin: 0,
       color: theme.colors.text,
       fontSize: "0.84rem",
-      fontWeight: 700
+      fontWeight: 600
     },
     drawerFieldLabel: {
       margin: 0,
       color: theme.colors.text,
       fontSize: "0.86rem",
-      fontWeight: 700
+      fontWeight: 600
     },
     drawerFieldText: {
       margin: 0,
@@ -820,3 +820,4 @@ export default function Fluxo({ user, onAbrirLead }) {
     </>
   );
 }
+
