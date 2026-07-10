@@ -4,10 +4,10 @@
 Organizar a documentação oficial sobre estrutura de dados, entidades, relacionamentos, convenções e princípios de persistência da plataforma OSFlow.
 
 ## Última revisão
-2026-07-06
+2026-07-10
 
 ## Versão do documento
-1.3.0
+1.3.2
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -62,6 +62,7 @@ Este documento descreve o modelo lógico de dados da plataforma OSFlow e a forma
 | DB-008 | Planos | Estrutura de planos SaaS. |
 | DB-009 | Assinaturas | Ciclo de vida contratual e financeiro. |
 | DB-010 | Autorização (RBAC) | Perfis, permissões e relações N:N para autorização por módulo e por empresa. |
+| DB-025 | Discovery Engine | Anúncios normalizados por providers para futura captação de imóveis particulares. |
 
 ## 4. Relacionamentos Nucleares
 
@@ -91,6 +92,7 @@ As seguintes estruturas encontram-se oficialmente previstas, sem implicar implem
 - estrutura de Perfis ligada por `role_id`.
 - tabelas `roles`, `permissions`, `role_permissions` e `user_roles` com `empresa_id` opcional para escopo multiempresa.
 - estrutura de Empresas, Planos e Assinaturas para SaaS.
+- `provider_leads` para anúncios normalizados por provider, com unicidade em `provider` + `external_id` e preparação para processamento futuro.
 
 ### 6.2 Contrato Oficial de Logs
 
@@ -124,6 +126,10 @@ Contrato operacional atual em `usuarios` (código):
 - `ativo`
 - `permissoes`
 - `empresa_id`
+- `departamento_id` (opcional)
+- `supervisor_id` (opcional)
+- `equipa_id` (opcional)
+- `cargo_id` (opcional)
 
 ## 7. Rastreabilidade com Migrações SQL
 
@@ -146,6 +152,8 @@ Este documento define a visão lógica oficial da base de dados da OSFlow e deve
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.3.2 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da entidade `provider_leads` e da infraestrutura inicial do Discovery Engine (DB-025), sem scheduler, scraping, automações ou alterações de RBAC. |
+| 1.3.1 | 2026-07-10 | Engenharia da Plataforma OSFlow | Atualização do contrato operacional de `usuarios` com campos organizacionais opcionais (`departamento_id`, `supervisor_id`, `equipa_id`, `cargo_id`). |
 | 1.3.0 | 2026-07-06 | Engenharia da Plataforma OSFlow | Formalização do contrato oficial de logs: `audit_logs` para auditoria operacional e `logs_navegacao` para telemetria/analytics. |
 | 1.2.0 | 2026-07-06 | Engenharia da Plataforma OSFlow | Sincronização do contrato com o estado executado: DB-004 marcado como executada (`user_sessions`) e vínculo oficial `usuarios.auth_user_id` ↔ `auth.users.id`. |
 | 1.1.0 | 2026-07-05 | Engenharia da Plataforma OSFlow | Inclusão do domínio DB-010 (Autorização RBAC), registo das tabelas de perfis/permissões e atualização da rastreabilidade com migrações executadas. |

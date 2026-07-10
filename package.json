@@ -17,6 +17,8 @@
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
+    "imovirtual:test": "node scripts/test-imovirtual.js",
+    "imovirtual:sync": "node --use-system-ca scripts/sync-imovirtual.js",
     "publish": "npm run build && npx bestzip build.zip build/*",
     "test": "react-scripts test",
     "eject": "react-scripts eject"

@@ -30,6 +30,11 @@ function getStoredSessionId() {
   return window.localStorage.getItem(ACTIVE_SESSION_ID_KEY);
 }
 
+function getStoredSessionUserId() {
+  if (typeof window === "undefined") return null;
+  return window.localStorage.getItem(ACTIVE_SESSION_USER_KEY);
+}
+
 function storeSessionContext({ sessionId, userId, empresaId }) {
   if (typeof window === "undefined") return;
 
@@ -54,6 +59,13 @@ function clearSessionContext() {
   window.localStorage.removeItem(ACTIVE_SESSION_TENANT_KEY);
 }
 
+function applySessionUserFilter(query, userId) {
+  if (!userId) return query;
+
+  const normalizedUserId = String(userId);
+  return query.or(`user_id.eq.${normalizedUserId},usuario_id.eq.${normalizedUserId}`);
+}
+
 async function fetchClientIpAddress() {
   // Mantem dependencia zero no frontend; IP real deve ser enriquecido no backend/gateway quando aplicavel.
   return null;
@@ -63,7 +75,7 @@ async function terminatePreviousSessions({ userId, empresaId, reason = "new_logi
   if (!userId) return { ok: false, reason: "missing_user" };
 
   const payload = {
-    status: "terminated",
+    status: "closed",
     logout_at: nowIso(),
     updated_at: nowIso(),
     metadata: {
@@ -74,8 +86,9 @@ async function terminatePreviousSessions({ userId, empresaId, reason = "new_logi
   let query = supabase
     .from(USER_SESSIONS_TABLE)
     .update(payload)
-    .eq("user_id", userId)
     .eq("status", "active");
+
+  query = applySessionUserFilter(query, userId);
 
   if (empresaId) {
     query = query.eq("empresa_id", empresaId);
@@ -91,6 +104,7 @@ async function createSessionRecord(context = {}) {
   const ipAddress = context.ipAddress || (await fetchClientIpAddress());
 
   const payload = {
+    usuario_id: context.userId || null,
     user_id: context.userId || null,
     empresa_id: context.empresaId || null,
     ip_address: ipAddress,
@@ -119,7 +133,7 @@ async function createSessionRecord(context = {}) {
     empresaId: context.empresaId || null
   });
 
-  return { ok: true, sessionId, data };
+  return { ok: true, sessionId, data, payload };
 }
 
 function bindActivityTracking(context = {}) {
@@ -161,22 +175,92 @@ function bindActivityTracking(context = {}) {
 export async function registerUserSession(context = {}) {
   if (!context.userId) return { ok: false, reason: "missing_user" };
 
+  const storedSessionId = getStoredSessionId();
+  const storedSessionUserId = getStoredSessionUserId();
+  const sameStoredUser = storedSessionUserId && String(storedSessionUserId) === String(context.userId);
+
+  if (storedSessionId && sameStoredUser) {
+    const reuseResult = await updateSessionActivity({
+      sessionId: storedSessionId,
+      userId: context.userId,
+      empresaId: context.empresaId || null,
+    });
+
+    if (reuseResult.ok) {
+      bindActivityTracking(context);
+      return {
+        ok: true,
+        sessionId: storedSessionId,
+        reused: true,
+      };
+    }
+  }
+
   await terminatePreviousSessions({
     userId: context.userId,
     empresaId: context.empresaId || null,
     reason: "new_login"
   });
 
-  const created = await createSessionRecord(context);
-  if (created.ok) {
+  const result = await createSessionRecord(context);
+
+  console.log(
+    "registerUserSession payload",
+    result.payload || null
+  );
+
+  console.log(
+    "registerUserSession result",
+    result
+  );
+
+  if (result.error) {
+    console.error(
+      "registerUserSession error",
+      result.error
+    );
+  }
+
+  if (result.ok) {
     bindActivityTracking(context);
   }
 
-  return created;
+  return result;
 }
 
 export async function updateSessionActivity(context = {}) {
-  const sessionId = context.sessionId || getStoredSessionId();
+  let sessionId = context.sessionId || getStoredSessionId();
+
+  if (!sessionId && context.userId) {
+    let query = supabase
+      .from(USER_SESSIONS_TABLE)
+      .select("id,empresa_id")
+      .eq("status", "active")
+      .order("last_activity_at", { ascending: false })
+      .limit(1);
+
+    query = applySessionUserFilter(query, context.userId);
+
+    if (context.empresaId) {
+      query = query.eq("empresa_id", context.empresaId);
+    }
+
+    const { data: activeSession, error: activeSessionError } = await query.maybeSingle();
+    if (activeSessionError) {
+      return { ok: false, error: activeSessionError };
+    }
+
+    sessionId = activeSession?.id || null;
+
+    if (sessionId) {
+      storeSessionContext({
+        sessionId,
+        userId: context.userId,
+        empresaId: activeSession?.empresa_id || context.empresaId || null,
+      });
+    }
+  }
+
   if (!sessionId) return { ok: false, reason: "missing_session" };
 
   const { error } = await supabase
@@ -198,7 +282,7 @@ export async function finalizeUserSession(context = {}) {
     const { error } = await supabase
       .from(USER_SESSIONS_TABLE)
       .update({
-        status: "logged_out",
+        status: "closed",
         logout_at: nowIso(),
         updated_at: nowIso()
       })
@@ -217,12 +301,13 @@ export async function finalizeUserSession(context = {}) {
   let query = supabase
     .from(USER_SESSIONS_TABLE)
     .update({
-      status: "logged_out",
+      status: "closed",
       logout_at: nowIso(),
       updated_at: nowIso()
     })
-    .eq("user_id", context.userId)
     .eq("status", "active");
+
+  query = applySessionUserFilter(query, context.userId);
 
   if (context.empresaId) {
     query = query.eq("empresa_id", context.empresaId);
@@ -231,4 +316,10 @@ export async function finalizeUserSession(context = {}) {
   const { error } = await query;
   clearSessionContext();
   return { ok: !error, error };
+}
+
+export function startSessionActivityTracking(
+  context = {}
+) {
+  bindActivityTracking(context);
 }

@@ -147,7 +147,7 @@ export default function FichaLead({ leadId, user, voltar }) {
   }), [theme]);
 
   if (loading) return <Card style={styles.loading}>A carregar ficha...</Card>;
-  if (!lead || !form) return <Card style={styles.loading}>Lead não encontrada.</Card>;
+  if (!lead || !form) return <Card style={styles.loading}>Lead nÃ£o encontrada.</Card>;
 
   const badgeType = badgeTipoFicha(theme, form.tipo);
   const radarMetadata = parseRadarLeadMetadataFromObservation(lead.observacoes || form.observacoes || "");
@@ -228,7 +228,7 @@ export default function FichaLead({ leadId, user, voltar }) {
         </label>
 
         <label style={styles.label}>
-          Agente responsável
+          Agente responsÃ¡vel
           <select style={styles.select} value={form.agente_id} onChange={(e) => atualizar("agente_id", e.target.value)}>
             <option value="">Sem agente</option>
             {agentes.map((agente) => (
@@ -241,14 +241,14 @@ export default function FichaLead({ leadId, user, voltar }) {
       </div>
 
       <label style={styles.label}>
-        Observações
+        ObservaÃ§Ãµes
         <Input as="textarea" style={styles.textarea} value={form.observacoes} onChange={(e) => atualizar("observacoes", e.target.value)} />
       </label>
 
       <div style={styles.footer}>
         <Button color="light" style={styles.btnSecondary} onClick={voltar}>Cancelar</Button>
         <Button color="success" style={styles.btnPrimary} onClick={salvar} disabled={salvando}>
-          {salvando ? "A guardar..." : "Guardar alterações"}
+          {salvando ? "A guardar..." : "Guardar alteraÃ§Ãµes"}
         </Button>
       </div>
     </Card>

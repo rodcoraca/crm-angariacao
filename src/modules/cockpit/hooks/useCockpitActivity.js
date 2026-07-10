@@ -1,28 +1,26 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchUltimasAtividades } from "../services";
 
 export function useCockpitActivity(ultimasAtividadesBase) {
-  const [data, setData] = useState(() => fetchUltimasAtividades(ultimasAtividadesBase));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
+  const data = useMemo(() => fetchUltimasAtividades(ultimasAtividadesBase), [ultimasAtividadesBase]);
+
+  useEffect(() => {
+    console.log("loop source", "useCockpitActivity");
+  }, []);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     setError(false);
 
     try {
-      const items = await Promise.resolve(fetchUltimasAtividades(ultimasAtividadesBase));
-      setData(items);
+      await Promise.resolve(fetchUltimasAtividades(ultimasAtividadesBase));
     } catch {
       setError(true);
-      setData([]);
     } finally {
       setLoading(false);
     }
-  }, [ultimasAtividadesBase]);
-
-  useEffect(() => {
-    setData(fetchUltimasAtividades(ultimasAtividadesBase));
   }, [ultimasAtividadesBase]);
 
   return {

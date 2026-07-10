@@ -52,6 +52,35 @@ O histórico deve utilizar versionamento coerente com a maturidade da plataforma
 | 0.1.0 | 2026-07-03 | DOC-005 | Base de Dados | Estruturação do repositório oficial de migrações SQL e respetiva rastreabilidade. |
 | 0.1.0 | 2026-07-03 | DOC-009 | Decisões | Consolidação das decisões técnicas aprovadas da Sprint 0. |
 
+## RC1.3 - Módulo Utilizadores (Homologado)
+
+Data: 2026-07-10
+
+### Correções e Implementações
+- Integração completa entre auth.users e usuarios.
+- Implementação e estabilização de user_sessions.
+- Registo de login, logout e atividade contínua.
+- Implementação de status de sessão: active e closed.
+- Correção de persistência de logout_at e last_activity_at.
+- Correção de problemas de auth_user_id.
+- Correção de erros 400 nas consultas de utilizadores.
+- Validação de perfis e RBAC.
+- Validação de auditoria e atividade do utilizador.
+- Preparação estrutural para departamentos, equipas e cargos.
+- Regularização da base de utilizadores para ambiente Beta.
+
+### Decisões Técnicas
+- React.StrictMode foi desativado temporariamente para estabilização do ambiente Beta.
+- Reativação ficará planeada para backlog pós-Beta.
+- Módulo Utilizadores considerado funcionalmente concluído e congelado.
+
+### Estado Final
+Status: HOMOLOGADO
+Pronto para:
+- Integração OLX
+- Publicação Beta
+- Testes reais
+
 ### Versão Oficial Atual
 
 - Versão: OSFlow v0.9.0 Beta

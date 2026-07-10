@@ -4,10 +4,10 @@
 Estabelecer este documento como o repositório oficial de todas as migrações SQL da plataforma OSFlow, centralizando o histórico estrutural da base de dados e a preparação das futuras alterações.
 
 ## Última revisão
-2026-07-06
+2026-07-10
 
 ## Versão do documento
-1.2.5
+1.3.1
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -78,6 +78,12 @@ Cada migração deverá possuir, no mínimo, os seguintes campos:
 | ID | Data | Título | Descrição | Estado | Responsável | Versão | Script SQL | Observações |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | DB-014 | 2026-07-06 | Homologação de Colunas Estruturais | Adição idempotente de colunas estruturais base (`id`, `created_at`, `updated_at`, `ativo`, `created_by`, `updated_by`) nas entidades principais, quando ausentes. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.1 Beta | [sql/migrations/20260706_db014_structural_contract_columns.sql](../sql/migrations/20260706_db014_structural_contract_columns.sql) | Não cria novas tabelas; aplica apenas `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`. |
+| DB-021 | 2026-07-10 | Persistência Estrutural de Preferências | Criação da tabela `user_preferences` (1:1 por `user_id`) com `idioma`, `tema`, `pagina_inicial`, `formato_data` e `notificacoes`. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db021_user_preferences.sql](../sql/migrations/20260710_db021_user_preferences.sql) | Preparação de backend sem alteração de UX; inclui backfill opcional a partir de `usuarios.permissoes`. |
+| DB-022 | 2026-07-10 | Preparação Organizacional Mínima | Adição de colunas opcionais `departamento_id`, `supervisor_id`, `equipa_id` e `cargo_id` em `usuarios` para evolução estrutural. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db022_user_organizational_columns.sql](../sql/migrations/20260710_db022_user_organizational_columns.sql) | Sem CRUD, sem UX nova e sem implementação SaaS; apenas estrutura. |
+| DB-023 | 2026-07-10 | Auditoria de Consistência de Utilizadores | Criação da função `public.listar_utilizadores_inconsistentes()` para diagnóstico A/B/C entre `usuarios` e `auth.users`, sem mutação de dados. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db023_user_consistency_diagnostic.sql](../sql/migrations/20260710_db023_user_consistency_diagnostic.sql) | Relatório somente leitura para regularização manual de identidade. |
+| DB-024 | 2026-07-10 | Configuração Inicial de Organização e Preferências | Aplicação idempotente de configuração mínima para utilizador administrador (`departamento`, `cargo`, `idioma`, `tema`, `pagina inicial`, `formato data`) com fallback em `user_preferences` quando disponível. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db024_admin_org_preferences_bootstrap.sql](../sql/migrations/20260710_db024_admin_org_preferences_bootstrap.sql) | Não altera UX nem RBAC; apenas regularização inicial de dados. |
+| DB-025 | 2026-07-10 | Discovery Engine — Provider Leads | Criação da tabela `provider_leads` para anúncios normalizados de providers, com deduplicação por provider e identificador externo. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db025_provider_leads_discovery_engine.sql](../sql/migrations/20260710_db025_provider_leads_discovery_engine.sql) | Apenas infraestrutura; sem RLS, RBAC, scheduler, scraping ou automação. |
+| DB-026 | 2026-07-10 | Imovirtual Discovery — Campos Normalizados | Adição idempotente de campos de anúncio, proprietário, localização e publicação em `provider_leads`, com backfill a partir de `raw_data`. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db026_provider_leads_imovirtual_fields.sql](../sql/migrations/20260710_db026_provider_leads_imovirtual_fields.sql) | Sem alteração de RLS, autenticação ou RBAC. |
 
 ## 5. Migrações Planeadas
 
@@ -108,6 +114,11 @@ Toda mudança estrutural futura deverá ser documentada aqui antes da implementa
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.3.0 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-025, infraestrutura do Discovery Engine para `provider_leads`, sem alteração de UX, autenticação ou RBAC. |
+| 1.2.9 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-024 (pendente) para configuração inicial mínima de organização e preferências do administrador, de forma idempotente e sem alteração de UX/autenticação/RBAC. |
+| 1.2.8 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-023 (pendente) com função de diagnóstico de inconsistências A/B/C entre `usuarios` e `auth.users`, sem alteração automática de dados. |
+| 1.2.7 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-022 (pendente) para preparação organizacional mínima em `usuarios` com colunas opcionais de estrutura. |
+| 1.2.6 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-021 (pendente) para persistência estrutural de preferências em `user_preferences` com ligação 1:1 por `user_id`. |
 | 1.2.5 | 2026-07-06 | Engenharia da Plataforma OSFlow | Registo da DB-014 (pendente) para homologação do contrato estrutural de colunas nas entidades principais. |
 | 1.2.4 | 2026-07-06 | Engenharia da Plataforma OSFlow | Registo da execução de DB-004 com criação da tabela `user_sessions` e índices operacionais para sessão. |
 | 1.2.3 | 2026-07-05 | Engenharia da Plataforma OSFlow | Registo da execução de DB-013 com adaptação hierárquica da tabela `permissions` para módulo, grupo e permissão com retrocompatibilidade. |

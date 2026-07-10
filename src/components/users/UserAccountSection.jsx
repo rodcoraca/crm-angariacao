@@ -29,6 +29,7 @@ export default function UserAccountSection({ conta, onChange, styles }) {
         <label style={styles.accountFieldLabel}>
           Password
           <input style={styles.input} type="password" placeholder={conta.modoEdicao ? "Opcional" : "Obrigatória"} value={conta.password} onChange={(e) => onChange("password", e.target.value)} />
+          <span style={styles.helperText}>Deixe em branco para manter a palavra-passe atual.</span>
         </label>
 
         <label style={styles.accountFieldLabel}>

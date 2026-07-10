@@ -7,7 +7,8 @@ import Card from "../components/ui/Card";
 import { registrarLogin } from "../modules/audit/services";
 import {
   createAuthUserFromAdminFlow,
-  loadUserProfileByAuthUserId,
+  loadAuthorizationProfileByAuthUserId,
+  loadUserProfileByLoginEmail,
   resolveLoginEmail,
   signInWithPassword,
   signOutAuthSession
@@ -23,19 +24,23 @@ export default function Login({ setUser, onLogin }) {
   const [bootstrapApelido, setBootstrapApelido] = useState("Admin");
   const [bootstrapEmail, setBootstrapEmail] = useState("");
   const [bootstrapPassword, setBootstrapPassword] = useState("");
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
-  function montarUsuarioSessao(authUser, perfil) {
+  function montarUsuarioSessao(authUser, perfil, expiresAt = null) {
     return {
       id: authUser.id,
       auth_user_id: authUser.id,
       perfil_id: perfil?.id || null,
       email: authUser.email,
+      expires_at: expiresAt,
       user_metadata: {
         nome: perfil?.nome || authUser.user_metadata?.nome || authUser.user_metadata?.full_name || authUser.user_metadata?.name || "",
         apelido: perfil?.apelido || authUser.user_metadata?.apelido || "",
         username: perfil?.username || authUser.user_metadata?.username || authUser.email || "",
         telefone: perfil?.telefone || authUser.user_metadata?.telefone || "",
-        perfil: authUser.user_metadata?.perfil || ""
+        perfil: authUser.user_metadata?.perfil || "",
+        empresa_id: perfil?.empresa_id || authUser.user_metadata?.empresa_id || null,
+        permissoes: perfil?.permissoes || {}
       }
     };
   }
@@ -45,7 +50,76 @@ export default function Login({ setUser, onLogin }) {
     console.error(`[${origem}]`, error);
   }
 
+  function normalizeErrorText(error) {
+    return String(error?.message || error?.error_description || error?.code || "").toLowerCase();
+  }
+
+  function isCommunicationError(error) {
+    const code = String(error?.code || "").toLowerCase();
+    const message = normalizeErrorText(error);
+
+    return (
+      code.includes("network") ||
+      code.includes("fetch") ||
+      code.includes("timeout") ||
+      message.includes("failed to fetch") ||
+      message.includes("network") ||
+      message.includes("fetch") ||
+      message.includes("timeout")
+    );
+  }
+
+  function mapSignInErrorMessage(error, { knownUser = false } = {}) {
+    const code = String(error?.code || "").toLowerCase();
+    const message = normalizeErrorText(error);
+
+    if (isCommunicationError(error)) {
+      return "Erro de comunicação com o serviço de autenticação. Tente novamente.";
+    }
+
+    if (
+      code.includes("session") ||
+      code.includes("refresh_token") ||
+      code.includes("jwt_expired") ||
+      message.includes("session expired") ||
+      message.includes("jwt expired") ||
+      message.includes("refresh token")
+    ) {
+      return "Sessão expirada. Faça login novamente.";
+    }
+
+    if (
+      code.includes("invalid_credentials") ||
+      message.includes("invalid login credentials") ||
+      message.includes("invalid credentials")
+    ) {
+      return knownUser ? "Password incorreta." : "Email inexistente.";
+    }
+
+    if (code.includes("email_not_confirmed") || message.includes("email not confirmed")) {
+      return "Conta ainda não confirmada. Verifique o email de confirmação.";
+    }
+
+    return "Erro interno durante a autenticação. Tente novamente.";
+  }
+
+  async function bootstrapDisponivel() {
+    const { count, error } = await supabase
+      .from("usuarios")
+      .select("id", { count: "exact", head: true });
+
+    if (error) {
+      throw error;
+    }
+
+    return Number(count || 0) === 0;
+  }
+
   async function login() {
+    if (isAuthenticating) return;
+
+    setIsAuthenticating(true);
+
     try {
       const valor = username.trim();
       if (!valor || !password) {
@@ -54,7 +128,34 @@ export default function Login({ setUser, onLogin }) {
       }
 
       const resolved = await resolveLoginEmail(valor);
+      if (resolved?.error) {
+        reportError(resolved.error, "Login.resolveLoginEmail");
+        notifyError(isCommunicationError(resolved.error)
+          ? "Erro de comunicação ao validar o utilizador."
+          : "Erro interno ao validar o utilizador.");
+        return;
+      }
+
       const emailAutenticacao = resolved?.email || valor;
+
+      const { data: perfilByEmail, error: perfilByEmailError } = await loadUserProfileByLoginEmail(emailAutenticacao);
+      if (perfilByEmailError) {
+        reportError(perfilByEmailError, "Login.loadUserProfileByLoginEmail");
+        notifyError(isCommunicationError(perfilByEmailError)
+          ? "Erro de comunicação ao carregar o perfil do utilizador."
+          : "Erro interno ao carregar o perfil do utilizador.");
+        return;
+      }
+
+      if (!perfilByEmail) {
+        notifyError("Email inexistente.");
+        return;
+      }
+
+      if (perfilByEmail.ativo === false) {
+        notifyError("Utilizador inativo. Contacte um administrador.");
+        return;
+      }
 
       const { data, error } = await signInWithPassword({
         email: emailAutenticacao,
@@ -62,17 +163,20 @@ export default function Login({ setUser, onLogin }) {
       });
 
       const authUser = data?.user || null;
+      const authSession = data?.session || null;
 
       if (error || !authUser) {
         if (error) reportError(error, "Login.signInWithPassword");
-        notifyError("Utilizador ou password inválidos.");
+        notifyError(mapSignInErrorMessage(error, { knownUser: Boolean(perfilByEmail) }));
         return;
       }
 
-      const { data: perfil, error: perfilError } = await loadUserProfileByAuthUserId(authUser.id);
+      const { data: perfil, error: perfilError } = await loadAuthorizationProfileByAuthUserId(authUser.id);
       if (perfilError) {
-        reportError(perfilError, "Login.loadUserProfileByAuthUserId");
-        notifyError("Não foi possível carregar o perfil do utilizador.");
+        reportError(perfilError, "Login.loadAuthorizationProfileByAuthUserId");
+        notifyError(isCommunicationError(perfilError)
+          ? "Erro de comunicação ao carregar o perfil do utilizador."
+          : "Erro interno ao carregar o perfil do utilizador.");
         return;
       }
 
@@ -82,7 +186,13 @@ export default function Login({ setUser, onLogin }) {
         return;
       }
 
-      const usuarioSessao = montarUsuarioSessao(authUser, perfil);
+      if (perfil.ativo === false) {
+        notifyError("Utilizador inativo. Contacte um administrador.");
+        await signOutAuthSession();
+        return;
+      }
+
+      const usuarioSessao = montarUsuarioSessao(authUser, perfil, authSession?.expires_at || null);
 
       try {
         await registrarLogin({
@@ -105,8 +215,12 @@ export default function Login({ setUser, onLogin }) {
       (setUser || onLogin)?.(usuarioSessao);
     } catch (error) {
       reportError(error, "Login.login");
-      notifyError(error?.message || "Ocorreu um erro inesperado no processo de autenticação.");
+      notifyError(isCommunicationError(error)
+        ? "Erro de comunicação com o serviço de autenticação."
+        : error?.message || "Erro interno no processo de autenticação.");
       return;
+    } finally {
+      setIsAuthenticating(false);
     }
   }
 
@@ -117,9 +231,10 @@ export default function Login({ setUser, onLogin }) {
         return;
       }
 
-      const { data: existentes } = await supabase.from("usuarios").select("id").limit(1);
-      if ((existentes || []).length > 0) {
-        notifyError("Já existe pelo menos um utilizador registado. Use a área de administração para criar novos.");
+      const podeBootstrap = await bootstrapDisponivel();
+      if (!podeBootstrap) {
+        setModoBootstrap(false);
+        notifyError("Bootstrap inicial indisponível. Utilize o login e a Administração.");
         return;
       }
 
@@ -192,6 +307,7 @@ export default function Login({ setUser, onLogin }) {
             <Input
               style={styles.input}
               placeholder="Email ou User name"
+              disabled={isAuthenticating}
               onChange={(e) => setUsername(e.target.value)}
             />
 
@@ -199,14 +315,36 @@ export default function Login({ setUser, onLogin }) {
               style={styles.input}
               type="password"
               placeholder="Password"
+              disabled={isAuthenticating}
               onChange={(e) => setPassword(e.target.value)}
             />
 
-            <Button variant="secondary" style={styles.button} onClick={login}>
+            <Button variant="secondary" style={styles.button} onClick={login} loading={isAuthenticating} disabled={isAuthenticating}>
               Entrar
             </Button>
 
-            <Button variant="ghost" style={styles.secondaryButton} onClick={() => setModoBootstrap(true)}>
+            <Button
+              variant="ghost"
+              style={styles.secondaryButton}
+              disabled={isAuthenticating}
+              onClick={async () => {
+                try {
+                  const podeBootstrap = await bootstrapDisponivel();
+                  if (!podeBootstrap) {
+                    setModoBootstrap(false);
+                    notifyError("Bootstrap inicial indisponível. Utilize o login e a Administração.");
+                    return;
+                  }
+
+                  setModoBootstrap(true);
+                } catch (error) {
+                  reportError(error, "Login.bootstrapDisponivel");
+                  notifyError(isCommunicationError(error)
+                    ? "Erro de comunicação ao validar bootstrap inicial."
+                    : "Erro interno ao validar bootstrap inicial.");
+                }
+              }}
+            >
               Criar primeiro administrador
             </Button>
           </>

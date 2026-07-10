@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTheme } from "../theme/ThemeContext";
 import Badge from "../components/ui/Badge";
 import Card from "../components/ui/Card";
@@ -107,7 +108,7 @@ export default function Home({ user }) {
     pipeline,
     produtividade: produtividadeBase,
     ultimasAtividades: ultimasAtividadesBase
-  } = createCockpitViewModel(theme);
+  } = useMemo(() => createCockpitViewModel(theme), [theme]);
 
   const { data: kpisTopo } = useCockpitKPIs(kpis);
   const { data: pipelineComercial } = useCockpitPipeline(pipeline);

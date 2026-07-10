@@ -3,6 +3,7 @@ import { hasPermission as hasCompatiblePermission } from "./legacyPermissionComp
 export const PROTECTED_VIEW_RULES = {
   home: { permission: "crm.view" },
   radar: { permission: "radar.view" },
+  radar_imovirtual: { permission: "radar.view" },
   fluxo: { permission: "crm.view" },
   dashboard: { permission: "dashboard.view" },
   quente: { permission: "leads.hot.view" },
@@ -31,7 +32,19 @@ export function getRequiredPermission(view) {
 
 function getSessionExpiryTimestamp(context) {
   const direct = context?.session?.expiresAt || context?.session?.expires_at || null;
-  if (direct) return new Date(direct).getTime();
+  if (direct) {
+    if (typeof direct === "number" && Number.isFinite(direct)) {
+      return direct > 1e12 ? direct : direct * 1000;
+    }
+
+    const asNumber = Number(direct);
+    if (Number.isFinite(asNumber) && String(direct).trim() !== "") {
+      return asNumber > 1e12 ? asNumber : asNumber * 1000;
+    }
+
+    const parsedDirect = new Date(direct).getTime();
+    if (Number.isFinite(parsedDirect)) return parsedDirect;
+  }
 
   if (typeof window === "undefined") return null;
 

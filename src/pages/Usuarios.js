@@ -5,8 +5,10 @@ import { PERMISSION_MODULES } from '../modules/auth/services/permissionCatalog';
 import {
   guardarUsuarioComAuditoria,
   listarAuditoriaPorUtilizador,
+  listarPreferenciasPorUtilizador,
   listarSessoesPorUtilizador,
   listarUsuarios,
+  obterResumoAtividadePorUtilizador,
   registrarAcaoNegadaUtilizadores,
 } from '../modules/users/services';
 import UserPersonalSection from '../components/users/UserPersonalSection';
@@ -48,6 +50,8 @@ export default function Usuarios({ currentUser }) {
   const [perfilOrganizacional, setPerfilOrganizacional] = useState('');
   const [sessoesUsuario, setSessoesUsuario] = useState([]);
   const [auditoriaUsuario, setAuditoriaUsuario] = useState([]);
+  const [atividadeResumo, setAtividadeResumo] = useState(null);
+  const [preferenciasUsuario, setPreferenciasUsuario] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
 
   // Arquitetura SaaS (futuro): quando houver persistencia multi-tenant,
@@ -73,6 +77,8 @@ export default function Usuarios({ currentUser }) {
     if (!usuarioSelecionadoMeta) {
       setSessoesUsuario([]);
       setAuditoriaUsuario([]);
+      setAtividadeResumo(null);
+      setPreferenciasUsuario(null);
       return;
     }
 
@@ -100,9 +106,11 @@ export default function Usuarios({ currentUser }) {
 
     setLoadingTimeline(true);
 
-    const [sessoesResult, auditoriaResult] = await Promise.all([
+    const [sessoesResult, auditoriaResult, atividadeResult, preferenciasResult] = await Promise.all([
       listarSessoesPorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id }),
       listarAuditoriaPorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id }),
+      obterResumoAtividadePorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id }),
+      listarPreferenciasPorUtilizador({ perfilId: usuario.id }),
     ]);
 
     if (sessoesResult.error) {
@@ -115,6 +123,20 @@ export default function Usuarios({ currentUser }) {
       setErro(auditoriaResult.error.message || 'Falha ao carregar auditoria do utilizador.');
     } else {
       setAuditoriaUsuario(auditoriaResult.data || []);
+    }
+
+    if (atividadeResult.error) {
+      setErro(atividadeResult.error.message || 'Falha ao carregar atividade do utilizador.');
+      setAtividadeResumo(null);
+    } else {
+      setAtividadeResumo(atividadeResult.data || null);
+    }
+
+    if (preferenciasResult.error) {
+      setErro(preferenciasResult.error.message || 'Falha ao carregar preferencias do utilizador.');
+      setPreferenciasUsuario(null);
+    } else {
+      setPreferenciasUsuario(preferenciasResult.data || null);
     }
 
     setLoadingTimeline(false);
@@ -138,6 +160,8 @@ export default function Usuarios({ currentUser }) {
     setPerfilOrganizacional('');
     setSessoesUsuario([]);
     setAuditoriaUsuario([]);
+    setAtividadeResumo(null);
+    setPreferenciasUsuario(null);
   }
 
   function iniciarNovoUtilizador() {
@@ -239,7 +263,7 @@ export default function Usuarios({ currentUser }) {
     const next = permissionCodes.reduce((acc, permissionCode) => {
       acc[permissionCode] = !todosAtivos;
       return acc;
-    }, {});
+    }, { ...form.permissoes });
 
     setForm((prev) => ({ ...prev, permissoes: next }));
   }
@@ -282,6 +306,7 @@ export default function Usuarios({ currentUser }) {
       usuarioSelecionadoId,
       currentUser,
       perfilOrganizacional,
+      permissoesAtuais: usuarioSelecionadoMeta?.permissoes || {},
     });
 
     if (error) {
@@ -360,9 +385,11 @@ export default function Usuarios({ currentUser }) {
         modoEdicao,
         sessoesUsuario,
         auditoriaUsuario,
+        atividadeResumo,
+        preferenciasPersistidas: preferenciasUsuario,
         estruturaPermissoes: PERMISSION_MODULES,
       }),
-    [form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao, sessoesUsuario, auditoriaUsuario]
+    [form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao, sessoesUsuario, auditoriaUsuario, atividadeResumo, preferenciasUsuario]
   );
 
   const etapasVisiveis = useMemo(() => {

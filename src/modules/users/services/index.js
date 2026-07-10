@@ -1,7 +1,10 @@
 export {
 	listarUsuarios,
 	guardarUsuarioComAuditoria,
+	listarPreferenciasPorUtilizador,
+	listarUtilizadoresInconsistentes,
 	registrarAcaoNegadaUtilizadores,
 	listarSessoesPorUtilizador,
-	listarAuditoriaPorUtilizador
+	listarAuditoriaPorUtilizador,
+	obterResumoAtividadePorUtilizador
 } from "./userService";

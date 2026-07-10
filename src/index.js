@@ -12,17 +12,15 @@ const isCrmRoute = window.location.pathname === '/app' || window.location.pathna
 const isIntegrationCallbackRoute = window.location.pathname === '/app/integrations/callback';
 
 root.render(
-  <React.StrictMode>
-    {isIntegrationCallbackRoute ? (
-      <ThemeProvider>
-        <IntegrationCallback />
-      </ThemeProvider>
-    ) : isCrmRoute ? (
-      <ThemeProvider>
-        <App />
-      </ThemeProvider>
-    ) : (
-      <LandingPage />
-    )}
-  </React.StrictMode>
+  isIntegrationCallbackRoute ? (
+    <ThemeProvider>
+      <IntegrationCallback />
+    </ThemeProvider>
+  ) : isCrmRoute ? (
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  ) : (
+    <LandingPage />
+  )
 );
