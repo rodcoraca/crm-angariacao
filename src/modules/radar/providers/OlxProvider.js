@@ -1,5 +1,4 @@
 import { RadarProvider } from "./RadarProvider";
-import { MockRadarProvider } from "./MockRadarProvider";
 import {
   buildOlxAuthorizationUrl,
   completeOlxOAuthCallback,
@@ -79,7 +78,6 @@ export class OlxProvider extends RadarProvider {
   constructor(options = {}) {
     super();
     this.fetchImpl = options.fetchImpl || (typeof fetch !== "undefined" ? fetch.bind(window) : null);
-    this.fallbackProvider = options.fallbackProvider || new MockRadarProvider();
   }
 
   getConnectionState() {
@@ -221,7 +219,7 @@ export class OlxProvider extends RadarProvider {
 
   async listOpportunities() {
     // Sprint atual: provider OLX apenas valida autenticacao/comunicacao.
-    return this.fallbackProvider.listOpportunities();
+    return [];
   }
 }
 

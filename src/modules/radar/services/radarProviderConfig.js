@@ -1,9 +1,7 @@
-import { MockRadarProvider } from "../providers/MockRadarProvider";
 import { OlxProvider } from "../providers/OlxProvider";
 import { isOlxAccessTokenExpired, loadOlxIntegrationConfig } from "../../integrations";
 
 export const RADAR_PROVIDER_MODES = {
-  MOCK: "mock",
   OLX: "olx"
 };
 
@@ -12,7 +10,7 @@ function resolveRuntimeMode() {
     return String(window.__OSFLOW_RADAR_PROVIDER__).toLowerCase();
   }
 
-  const fromEnv = process.env.REACT_APP_RADAR_PROVIDER || RADAR_PROVIDER_MODES.MOCK;
+  const fromEnv = process.env.REACT_APP_RADAR_PROVIDER || "";
   return String(fromEnv).toLowerCase();
 }
 
@@ -37,7 +35,7 @@ export function buildConfiguredRadarProvider(mode) {
     return new OlxProvider();
   }
 
-  return new MockRadarProvider();
+  return null;
 }
 
 export function getConfiguredRadarProviderMode() {

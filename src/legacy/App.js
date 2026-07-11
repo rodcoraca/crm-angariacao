@@ -15,6 +15,9 @@ import MensagensPadrao from "./MensagensPadrao";
 import EstoqueNaoPublicitado from "./EstoqueNaoPublicitado";
 import Documentos from "./Documentos";
 import FichaLead from "./FichaLead";
+import { initScheduler } from "./services/scheduler/syncScheduler";
+
+initScheduler();
 
 export default function App() {
   const [user, setUser] = useState(null);

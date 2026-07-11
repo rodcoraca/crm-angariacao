@@ -21,11 +21,19 @@ export function formatPublishedDate(value) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "N/A";
 
-  return date.toLocaleDateString("pt-PT", {
+  const datePart = date.toLocaleDateString("pt-PT", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric"
   });
+
+  const timePart = date.toLocaleTimeString("pt-PT", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  });
+
+  return `${datePart} ${timePart}`;
 }
 
 export function calculateAverageScore(opportunities) {

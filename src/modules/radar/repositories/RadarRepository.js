@@ -1,15 +1,214 @@
-import { MockRadarProvider } from "../providers/MockRadarProvider";
+import { supabase } from "../../../supabase";
+import { calcularScoreInteligente } from "../services/radarScoreService";
+
+const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
+
+function toNullableNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function inferPropertyType(title, lead) {
+  const raw = lead?.raw_data || {};
+  if (raw.rooms || raw.roomsNumber || lead?.rooms) return "Apartamento";
+
+  const upperTitle = String(title || "").toUpperCase();
+  if (upperTitle.startsWith("V")) return "Moradia";
+  if (upperTitle.includes("TERRENO")) return "Terreno";
+  return "Outro";
+}
+
+function inferRooms(title, lead) {
+  const roomsFromTitle = String(title || "").match(/T(\d+)/i);
+  const raw = lead?.raw_data || {};
+  const parsed = Number(roomsFromTitle?.[1] || lead?.rooms || raw?.rooms || raw?.roomsNumber || null);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeOpportunitySource(value) {
+  const source = String(value || "").trim().toLowerCase();
+
+  if (source === "crm") return "crm";
+  if (source === "olx") return "olx";
+  if (source === "idealista") return "idealista";
+  return "imovirtual";
+}
+
+function normalizeProviderEstado(lead) {
+  if (lead?.imported === true) return "importado";
+
+  const normalizedStatus = String(lead?.status || "").trim().toLowerCase();
+  if (normalizedStatus === "ignored") return "ignorado";
+
+  return "novo";
+}
+
+function mapProviderLeadToOpportunity(lead) {
+  const raw = lead?.raw_data || {};
+  const title = lead?.title || raw?.title || "";
+  const tipo = inferPropertyType(title, lead);
+  const quartos = inferRooms(title, lead);
+  const dataReferencia = lead?.created_at_first || raw?.createdAtFirst || null;
+  const providerOrigin = String(lead?.provider || lead?.origem || lead?.source || raw?.source || "imovirtual").trim().toLowerCase();
+  const source = normalizeOpportunitySource(providerOrigin);
+  const ownerName = lead?.owner_name || raw?.ownerName || raw?.advertOwner?.name || "N/A";
+  const city = lead?.city || raw?.city || raw?.location?.address?.city?.name || "";
+  const district = lead?.district || raw?.district || raw?.location?.address?.province?.name || "";
+  const municipality = raw?.municipality || raw?.location?.address?.county?.name || city || "";
+  const locationLabel = lead?.location || raw?.locationLabel || [city, district].filter(Boolean).join(", ") || "N/A";
+  const estado = normalizeProviderEstado(lead);
+  let computedScore = 0;
+
+  try {
+    computedScore = calcularScoreInteligente({
+      created_at_first: lead?.created_at_first || raw?.createdAtFirst || null,
+      is_private_owner: lead?.is_private_owner === true,
+      distrito: district,
+      owner_name: ownerName
+    });
+  } catch {
+    computedScore = 0;
+  }
+
+  return {
+    ...lead,
+    id: lead?.id,
+    id_externo: lead?.external_id || null,
+    titulo: title || "Sem título",
+    imovel: title || "Sem imóvel",
+    tipo,
+    quartos,
+    owner_name: ownerName,
+    proprietario: ownerName,
+    link: lead?.url || null,
+    url: lead?.url || null,
+    cidade: city || "N/A",
+    distrito: district,
+    concelho: municipality,
+    morada: locationLabel,
+    location: locationLabel,
+    area: toNullableNumber(lead?.area ?? raw?.area ?? raw?.areaInSquareMeters),
+    preco: toNullableNumber(lead?.price ?? raw?.price ?? raw?.totalPrice?.value),
+    publicado: dataReferencia,
+    publicado_em: dataReferencia,
+    published_at: dataReferencia,
+    encontrado_em: lead?.detected_at || dataReferencia,
+    detected_at: lead?.detected_at || null,
+    created_at_first: lead?.created_at_first || raw?.createdAtFirst || null,
+    imported: lead?.imported === true,
+    crm_lead_id: lead?.crm_lead_id || null,
+    is_private_owner: lead?.is_private_owner === true,
+    is_private: lead?.is_private_owner === true,
+    score: Number.isFinite(computedScore) ? Math.trunc(computedScore) : 0,
+    estado,
+    origem: providerOrigin || "imovirtual",
+    source,
+    radarLeadMetadata: {
+      provider: source,
+      externalId: lead?.external_id || null,
+      url: lead?.url || null,
+      publisherName: ownerName,
+      publishedAt: dataReferencia,
+      capturedAt: lead?.detected_at || null,
+      score: Number.isFinite(computedScore) ? Math.trunc(computedScore) : 0,
+      status: lead?.status || null
+    }
+  };
+}
+async function resolveCurrentEmpresaId() {
+  if (typeof window !== "undefined") {
+    const fromStorage = window.localStorage.getItem(ACTIVE_SESSION_TENANT_KEY);
+    if (fromStorage && String(fromStorage).trim()) {
+      return String(fromStorage).trim();
+    }
+  }
+
+  try {
+    const { data } = await supabase.auth.getUser();
+    const metadataEmpresaId = data?.user?.user_metadata?.empresa_id;
+    if (metadataEmpresaId) return String(metadataEmpresaId);
+  } catch {
+    // Silencioso: sem contexto de empresa, mantém fallback para null.
+  }
+
+  return null;
+}
 
 export class RadarRepository {
-  constructor(provider = new MockRadarProvider()) {
+  constructor(provider = null) {
     this.provider = provider;
   }
 
   setProvider(provider) {
-    this.provider = provider || new MockRadarProvider();
+    this.provider = provider;
   }
 
   async listOpportunities() {
-    return this.provider.listOpportunities();
+    let crmOpportunities;
+
+    try {
+      crmOpportunities = this.provider ? (await this.provider.listOpportunities()) || [] : [];
+      console.log("CRM opportunities:", crmOpportunities.length);
+    } catch (error) {
+      console.log("Erro CRM:", error?.message || error);
+      console.warn("[Radar] Falha ao carregar opportunities CRM:", error);
+      crmOpportunities = [];
+    }
+
+    const empresaId = await resolveCurrentEmpresaId();
+    if (!empresaId) {
+      console.warn("[Radar] empresa não configurada. Utilizando provider_leads sem isolamento multi-tenant.");
+    }
+
+    try {
+      let providerLeadsQuery = supabase
+        .from("provider_leads")
+        .select("*");
+
+      if (empresaId) {
+        providerLeadsQuery = providerLeadsQuery.eq("empresa_id", empresaId);
+      }
+
+      const { data: providerLeads, error: providerError } = await providerLeadsQuery;
+
+      if (providerError) {
+        console.log("Erro Provider:", providerError?.message || providerError);
+        console.warn("[Radar] Falha ao carregar provider_leads:", providerError);
+        return crmOpportunities;
+      }
+
+      console.log("Quantidade importedLeads:", (providerLeads || []).length);
+
+      const mappedLeads = (providerLeads || []).map((lead) => mapProviderLeadToOpportunity(lead));
+
+      mappedLeads.slice(0, 3).forEach((lead, index) => {
+        console.log(`mapProviderLeadToOpportunity() [${index}]`, {
+          id: lead?.id,
+          titulo: lead?.titulo,
+          estado: lead?.estado,
+          owner_name: lead?.owner_name,
+          publicado_em: lead?.publicado_em
+        });
+      });
+
+      const filteredLeads = mappedLeads.filter((lead) => lead.estado !== "ignorado");
+      console.log("Quantidade após .filter(...):", filteredLeads.length);
+
+      const formattedLeads = filteredLeads;
+      console.log("Quantidade final formattedLeads.length:", formattedLeads.length);
+
+      const merged = [...crmOpportunities, ...formattedLeads];
+      console.log("Merged:", merged.length);
+      console.log("Quantidade final opportunities.length:", merged.length);
+
+      return merged;
+    } catch (error) {
+      console.log("Erro Provider:", error?.message || error);
+      console.warn("[Radar] Falha ao carregar provider_leads:", error);
+      return crmOpportunities;
+    }
+
   }
 }
+

@@ -31,11 +31,8 @@ function normalizePrice(item) {
 }
 
 function normalizePublished(item) {
-  if (item?.publicado) {
-    return normalizeText(item.publicado, "N/A");
-  }
-
-  return formatPublishedDate(item?.publicado_em);
+  const publishedAt = item?.created_at_first || item?.publicado_em || item?.published_at || item?.publicado || null;
+  return formatPublishedDate(publishedAt);
 }
 
 function normalizeScore(item) {
@@ -115,12 +112,23 @@ export class RadarViewModel {
   static mapTable(opportunities = []) {
     return opportunities.map((item) => ({
       id: normalizeText(item.id, "radar-row"),
-      imovel: normalizeEstateName(item),
-      localizacao: normalizeLocation(item),
+      imovel: item.titulo || item.title || "Sem imóvel",
+      localizacao: normalizeLocation({
+        morada: item.morada || item.location || "",
+        cidade: item.cidade || ""
+      }),
       preco: normalizePrice(item),
-      publicado: normalizePublished(item),
+      publicado: normalizePublished({
+        ...item,
+        publicado_em: item.created_at_first || item.publicado_em || item.published_at || null
+      }),
       score: normalizeScore(item),
-      estado: normalizeStatus(item)
+      estado: normalizeStatus(item),
+      // Adicionamos os campos extra para consumo na UI
+      tipo: item.tipo,
+      quartos: item.quartos,
+      link: item.link || item.url,
+      rawOpportunity: item
     }));
   }
 
@@ -197,7 +205,6 @@ export class RadarViewModel {
       .sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
   }
 }
-
 export function createRadarViewModel(snapshot) {
   return RadarViewModel.build(snapshot);
 }
@@ -217,10 +224,17 @@ export function mapRadarKpisViewModel(kpis) {
 export function mapRadarTableViewModel(rows) {
   return (rows || []).map((item) => ({
     id: normalizeText(item.id, "radar-row"),
-    imovel: normalizeEstateName(item),
-    localizacao: normalizeLocation(item),
+    rawOpportunity: item,
+    imovel: item.titulo || item.title || "Sem imóvel",
+    localizacao: normalizeLocation({
+      morada: item.morada || item.location || "",
+      cidade: item.cidade || ""
+    }),
     preco: normalizePrice(item),
-    publicado: normalizePublished(item),
+    publicado: normalizePublished({
+      ...item,
+      publicado_em: item.created_at_first || item.publicado_em || item.published_at || null
+    }),
     score: normalizeScore(item),
     estado: normalizeStatus(item)
   }));

@@ -7,6 +7,7 @@ import {
   appendRadarMetadataBlockOnce,
   buildRadarLeadMetadata
 } from "../contracts/radarLeadMetadata";
+import { supabase } from "../../../supabase"; // Corrected import path
 
 function normalizeNumericScore(value) {
   const parsed = Number(value);
@@ -49,7 +50,7 @@ function buildRadarPhone(opportunityId) {
 }
 
 function mapOpportunityToLeadPayload(opportunity, user) {
-  const origemProvider = String(opportunity?.origem || "MockProvider");
+  const origemProvider = String(opportunity?.origem || "RadarProvider");
   const metadata = buildRadarLeadMetadata({
     provider: opportunity?.radarLeadMetadata?.provider || origemProvider,
     externalId: opportunity?.radarLeadMetadata?.externalId || opportunity?.id_externo || opportunity?.id,
@@ -101,11 +102,10 @@ export class RadarService {
   }
 
   async loadOpportunities() {
-    if (Array.isArray(this.sessionOpportunities)) {
-      return [...this.sessionOpportunities];
-    }
-
+    // Forçar carregamento dos dados reais ignorando a cache da sessão
     const loaded = await this.repository.listOpportunities();
+    console.log("Quantidade entregue ao RadarService:", (loaded || []).length);
+    this.sessionOpportunities = loaded;
     return loaded || [];
   }
 
@@ -159,7 +159,7 @@ export class RadarService {
       };
     }
 
-    const supportedStates = ["novo", "analisado", "importado", "ignorado"];
+    const supportedStates = ["novo", "importado", "ignorado"];
     if (!supportedStates.includes(normalizedState)) {
       return {
         ok: false,
@@ -176,10 +176,6 @@ export class RadarService {
         ...item,
         estado: normalizedState
       };
-
-      if (normalizedState === "analisado") {
-        base.analisado_em = now;
-      }
 
       if (normalizedState === "importado") {
         base.importado_em = now;
@@ -229,6 +225,28 @@ export class RadarService {
       };
     }
 
+    // Update provider_leads if it's from imovirtual
+    if (opportunity.origem === 'imovirtual') {
+      const importedBy = user?.perfil_id || user?.id || null;
+      const { error: providerLeadUpdateError } = await supabase
+        .from('provider_leads')
+        .update({
+          imported: true,
+          crm_lead_id: result?.id || null,
+          imported_at: new Date().toISOString(),
+          imported_by: importedBy
+        })
+        .eq('id', opportunity.id);
+
+      if (providerLeadUpdateError) {
+        return {
+          ok: false,
+          message: providerLeadUpdateError.message || "Falha ao atualizar provider_leads após importação.",
+          error: providerLeadUpdateError
+        };
+      }
+    }
+
     await this.updateOpportunityState(opportunity?.id, "importado");
 
     return {
@@ -263,3 +281,4 @@ export async function fetchRadarSnapshot() {
 export function getRadarService() {
   return radarService;
 }
+
