@@ -1,5 +1,4 @@
 import {
-  calculateAverageScore,
   formatPrice,
   formatPublishedDate,
   normalizeText
@@ -49,6 +48,58 @@ function normalizeKpiValue(value, fallback) {
   return text || fallback;
 }
 
+function isSameDay(dateValue, referenceDate = new Date()) {
+  if (!dateValue) return false;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return false;
+
+  return (
+    date.getFullYear() === referenceDate.getFullYear() &&
+    date.getMonth() === referenceDate.getMonth() &&
+    date.getDate() === referenceDate.getDate()
+  );
+}
+
+function resolveSyncExecutionsCount(snapshot = {}) {
+  if (Number.isFinite(snapshot?.syncExecutions)) return snapshot.syncExecutions;
+  if (Number.isFinite(snapshot?.syncCount)) return snapshot.syncCount;
+  if (Array.isArray(snapshot?.syncExecutions)) return snapshot.syncExecutions.length;
+  return null;
+}
+
+function formatTimeOnly(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+}
+
+function toOperationalLabel(title, value) {
+  if (value === null || value === undefined || value === "") {
+    return `${title}: Aguardando dados`;
+  }
+
+  return `${title}: ${value}`;
+}
+
+function countDuplicateOpportunities(opportunities = []) {
+  const keyCount = new Map();
+
+  opportunities.forEach((item) => {
+    const rawKey = item?.id_externo || item?.external_id || item?.url || item?.link || null;
+    const key = String(rawKey || "").trim().toLowerCase();
+    if (!key) return;
+    keyCount.set(key, (keyCount.get(key) || 0) + 1);
+  });
+
+  let duplicates = 0;
+  keyCount.forEach((count) => {
+    if (count > 1) duplicates += (count - 1);
+  });
+
+  return duplicates;
+}
+
 export class RadarViewModel {
   static build(snapshot = {}) {
     const opportunities = snapshot.opportunities || [];
@@ -57,8 +108,8 @@ export class RadarViewModel {
       opportunities,
       kpis: this.mapKpis(opportunities),
       table: this.mapTable(opportunities),
-      flow: this.mapFlow(),
-      roadmap: this.mapRoadmap(),
+      flow: this.mapFlow(opportunities, snapshot),
+      roadmap: this.mapRoadmap(opportunities, snapshot),
       timeline: this.mapTimeline(opportunities)
     };
   }
@@ -67,7 +118,6 @@ export class RadarViewModel {
     const monitorizadas = opportunities.length;
     const novas = opportunities.filter((item) => String(item?.estado || "").toLowerCase() === "novo").length;
     const importadas = opportunities.filter((item) => String(item?.estado || "").toLowerCase() === "importado").length;
-    const scoreMedio = calculateAverageScore(opportunities);
 
     return [
       {
@@ -96,15 +146,6 @@ export class RadarViewModel {
         descricao: "Oportunidades já importadas no fluxo.",
         icone: "I",
         cor: "var(--os-status-warning-text)"
-      },
-      {
-        id: "kpi-pontuacao-media",
-        titulo: "Pontuação Média",
-        valor: String(scoreMedio),
-        variacao: "Qualificação",
-        descricao: "Média de score das oportunidades monitorizadas.",
-        icone: "S",
-        cor: "var(--os-status-success-text)"
       }
     ];
   }
@@ -132,22 +173,60 @@ export class RadarViewModel {
     }));
   }
 
-  static mapFlow() {
+  static mapFlow(opportunities = [], snapshot = {}) {
+    const registryRows = Array.isArray(snapshot?.providerRegistry) ? snapshot.providerRegistry : null;
+
+    const latestSyncRaw = registryRows && registryRows.length
+      ? registryRows
+        .map((row) => row?.last_execution)
+        .filter(Boolean)
+        .sort((a, b) => new Date(b).getTime() - new Date(a).getTime())[0] || null
+      : null;
+
+    const latestSync = formatTimeOnly(latestSyncRaw);
+    const novas = opportunities.length
+      ? opportunities.filter((item) => String(item?.estado || "").toLowerCase() === "novo").length
+      : null;
+    const duplicados = opportunities.length ? countDuplicateOpportunities(opportunities) : null;
+    const erros = registryRows
+      ? registryRows.filter((row) => String(row?.last_error || "").trim().length > 0).length
+      : null;
+    const sincronizacoesRealizadas = registryRows
+      ? registryRows.filter((row) => Boolean(row?.last_execution)).length
+      : null;
+
     return [
-      { id: "flow-monitorizacao", label: "Monitorização" },
-      { id: "flow-normalizacao", label: "Normalização" },
-      { id: "flow-classificacao", label: "Classificação" },
-      { id: "flow-priorizacao", label: "Priorização" },
-      { id: "flow-importacao", label: "Preparação para Importação" }
+      { id: "flow-ultima-sync", label: toOperationalLabel("Última sincronização", latestSync) },
+      { id: "flow-novas", label: toOperationalLabel("Novas oportunidades", novas) },
+      { id: "flow-duplicados", label: toOperationalLabel("Duplicados", duplicados) },
+      { id: "flow-erros", label: toOperationalLabel("Erros", erros) },
+      { id: "flow-sincronizacoes", label: toOperationalLabel("Sincronizações realizadas", sincronizacoesRealizadas) }
     ];
   }
 
-  static mapRoadmap() {
+  static mapRoadmap(opportunities = [], snapshot = {}) {
+    const importedToday = opportunities.filter((item) => {
+      const importedState = String(item?.estado || "").toLowerCase() === "importado" || item?.imported === true;
+      if (!importedState) return false;
+      return isSameDay(item?.importado_em || item?.imported_at || item?.updated_at || null);
+    }).length;
+
+    const novas = opportunities.filter((item) => String(item?.estado || "").toLowerCase() === "novo").length;
+    const ignoradas = opportunities.filter((item) => String(item?.estado || "").toLowerCase() === "ignorado").length;
+    const convertidas = opportunities.filter((item) => item?.converted_to_lead === true || Boolean(item?.crm_lead_id)).length;
+    const syncExecutions = resolveSyncExecutionsCount(snapshot);
+
     return [
-      { id: "roadmap-demo", label: "Radar Demo" },
-      { id: "roadmap-validacao", label: "Validação Operacional" },
-      { id: "roadmap-integracao", label: "Integrações Futuras" },
-      { id: "roadmap-escala", label: "Escala Multi-Fonte" }
+      { id: "roadmap-importadas-hoje", label: `Oportunidades importadas hoje: ${importedToday}` },
+      { id: "roadmap-novas", label: `Oportunidades novas: ${novas}` },
+      { id: "roadmap-ignoradas", label: `Oportunidades ignoradas: ${ignoradas}` },
+      { id: "roadmap-convertidas", label: `Oportunidades convertidas: ${convertidas}` },
+      {
+        id: "roadmap-sync",
+        label: Number.isFinite(syncExecutions)
+          ? `Sincronizações realizadas: ${syncExecutions}`
+          : "Sincronizações realizadas: Aguardando dados"
+      }
     ];
   }
 
@@ -251,16 +330,6 @@ export function mapRadarRoadmapViewModel(stages) {
   return (stages || []).map((item) => ({
     id: normalizeText(item.id, "roadmap"),
     label: normalizeText(item.label, "Fase")
-  }));
-}
-
-export function mapRadarTimelineViewModel(events) {
-  return (events || []).map((item) => ({
-    id: normalizeText(item.id, "timeline-event"),
-    evento: normalizeText(item.evento, "Evento"),
-    estado: normalizeText(item.estado, "estado"),
-    oportunidadeTitulo: normalizeText(item.oportunidadeTitulo, "Sem oportunidade"),
-    data: formatPublishedDate(item.data)
   }));
 }
 

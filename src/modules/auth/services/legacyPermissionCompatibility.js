@@ -1,4 +1,4 @@
-import { getAllPermissionDefinitions } from "./permissionCatalog";
+import { getAllPermissionDefinitions } from "./permissionCatalog.js";
 
 export const LEGACY_PERMISSION_MAP = {
   "crm.view": ["fluxo"],

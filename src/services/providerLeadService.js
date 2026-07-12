@@ -1,5 +1,5 @@
 import { supabase } from "../supabase.js";
-import { auditMutation } from "../modules/audit/services";
+import { auditMutation } from "../modules/audit/services/index.js";
 
 const PROVIDER_LEADS_TABLE = "provider_leads";
 const NEW_LEAD_STATUS = "new";

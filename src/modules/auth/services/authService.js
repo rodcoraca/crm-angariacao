@@ -1,5 +1,5 @@
-import { supabase } from "../../../supabase";
-import { normalizePermissions } from "./legacyPermissionCompatibility";
+import { supabase } from "../../../supabase.js";
+import { normalizePermissions } from "./legacyPermissionCompatibility.js";
 
 const USERS_TABLE = "usuarios";
 const USER_ROLES_TABLE = "user_roles";

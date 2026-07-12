@@ -1,4 +1,4 @@
-import { supabase } from "../../../supabase";
+import { supabase } from "../../../supabase.js";
 
 const USER_SESSIONS_TABLE = "user_sessions";
 const ACTIVE_SESSION_ID_KEY = "osflow_active_session_id";

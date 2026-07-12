@@ -1,87 +1,73 @@
-export const syncState = {
-  status: 'idle',
-  lastSyncAt: null,
-  nextSyncAt: null
-};
+import { supabase } from "../../../supabase";
 
-let isRunning = false;
+export async function getProviderSyncStatus(providerCode) {
+  const { data, error } = await supabase
+    .from("provider_registry")
+    .select("*")
+    .eq("provider_code", providerCode)
+    .single();
 
-export async function syncProviders() {
-  if (isRunning) {
-    console.log("[ProviderSync] Sync already in progress.");
-    return;
+  if (error || !data) {
+    console.error(
+      "[providerSyncService] Erro ao obter estado:",
+      error
+    );
+
+    return null;
   }
 
-  // Verifica bloqueio de intervalo (240 min)
-  if (syncState.nextSyncAt && new Date() < new Date(syncState.nextSyncAt)) {
-    console.log("[ProviderSync] Sync on cooldown.");
-    return;
-  }
+  const now = new Date();
+  const nextExecution = data.next_execution
+    ? new Date(data.next_execution)
+    : null;
 
-  isRunning = true;
-  syncState.status = 'running';
+  const remainingMs =
+    nextExecution && nextExecution > now
+      ? nextExecution.getTime() - now.getTime()
+      : 0;
 
-  try {
-    console.log("[ProviderSync] Starting synchronization...");
-
-    // Lista de providers ativos
-    const activeProviders = ['imovirtual'];
-
-    for (const provider of activeProviders) {
-      console.log(`[ProviderSync] Processing ${provider}...`);
-      // O RadarRepository faz o trabalho pesado de fetch e importação
-      const repo = new RadarRepository();
-      const leads = await repo.listOpportunities();
-      console.log(`[ProviderSync] ${provider}: ${leads.length} leads processadas.`);
-    }
-
-    syncState.lastSyncAt = new Date();
-    syncState.status = 'idle';
-    console.log("[ProviderSync] Finished successfully.");
-  } catch (error) {
-    syncState.status = 'error';
-    console.error("[ProviderSync] Error during sync:", error);
-  } finally {
-    isRunning = false;
-    syncState.nextSyncAt = new Date(Date.now() + 240 * 60 * 1000);
-  }
+  return {
+    ...data,
+    canSync: remainingMs <= 0 && !data.sync_running,
+    remainingMs
+  };
 }
-  lastSyncAt: null,
-  nextSyncAt: null,
-  status: 'idle', // idle, running, error
-};
 
-let isRunning = false;
+export async function canExecuteSync(providerCode) {
+  const status =
+    await getProviderSyncStatus(providerCode);
 
-export async function syncProviders() {
-  if (isRunning) {
-    console.log("[ProviderSync] Sync already in progress.");
-    return;
+  return status?.canSync ?? false;
+}
+
+export async function registerExecution(
+  providerCode,
+  syncRunning = false,
+  intervalMinutes = 240
+) {
+  const now = new Date();
+
+  const nextExecution = new Date(
+    now.getTime() +
+      intervalMinutes * 60 * 1000
+  );
+
+  const { error } = await supabase
+    .from("provider_registry")
+    .update({
+      sync_running: syncRunning,
+      last_execution: now.toISOString(),
+      next_execution:
+        nextExecution.toISOString()
+    })
+    .eq("provider_code", providerCode);
+
+  if (error) {
+    console.error(
+      "[providerSyncService] Erro ao atualizar:",
+      error
+    );
   }
 
-  isRunning = true;
-  syncState.status = 'running';
-  
-  try {
-    console.log("[ProviderSync] Starting synchronization...");
-    
-    // Lista de providers ativos (extensível para OLX, Idealista)
-    const activeProviders = ['imovirtual'];
-
-    for (const provider of activeProviders) {
-      // Nota: A lógica de fetch real será integrada conforme repositório atual
-      console.log(`[ProviderSync] Processing ${provider}...`);
-      // Simulação de processamento de novos listings
-    }
-
-    syncState.lastSyncAt = new Date();
-    syncState.status = 'idle';
-    console.log("[ProviderSync] Finished successfully.");
-  } catch (error) {
-    syncState.status = 'error';
-    console.error("[ProviderSync] Error during sync:", error);
-  } finally {
-    isRunning = false;
-    syncState.nextSyncAt = new Date(Date.now() + 240 * 60 * 1000);
-  }
+  return !error;
 }

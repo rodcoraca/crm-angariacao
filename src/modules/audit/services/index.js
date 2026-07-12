@@ -6,11 +6,11 @@ export {
   registrarExclusao,
   registrarAcessoNegado,
   auditMutation
-} from "./auditService";
+} from "./auditService.js";
 
 export {
   listarUtilizadoresIdentityAccess,
   listarTimelineIdentityAccess
-} from "./identityAccessLogService";
+} from "./identityAccessLogService.js";
 
-export { registrarNavegacao } from "./telemetryService";
+export { registrarNavegacao } from "./telemetryService.js";

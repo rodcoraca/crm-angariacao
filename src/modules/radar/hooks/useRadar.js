@@ -17,7 +17,6 @@ export function useRadar() {
     setError(null);
 
     try {
-      // Garantia de demo: o Radar opera exclusivamente com MockRadarProvider.
       clearRadarDataProvider();
       const data = await fetchRadarSnapshot();
       setSnapshot(data);
@@ -53,8 +52,7 @@ export function useRadar() {
     setImportingId(target.id || null);
     try {
       const service = getRadarService();
-      const result = await service.importOpportunityToLeads(target, user);
-      return result;
+      return await service.importOpportunityToLeads(target, user);
     } finally {
       setImportingId(null);
     }

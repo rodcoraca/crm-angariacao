@@ -46,30 +46,18 @@ export function createRadarStyles(theme) {
       gap: theme.spacing.sm,
       flexWrap: "wrap"
     },
-    cardGrid: {
-      display: "grid",
-      gap: theme.spacing.md,
-      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-    },
     filterCard: {
       display: "grid",
-      gap: theme.spacing.sm
-    },
-    filtersGrid: {
-      display: "flex",
-      gap: theme.spacing.sm,
-      alignItems: "flex-start",
-      flexWrap: "nowrap",
-      overflowX: "auto",
-      overflowY: "hidden",
-      paddingBottom: 2
+      gap: theme.spacing.xs,
+      padding: "10px 12px"
     },
     filterField: {
       display: "grid",
-      gap: 6,
+      gap: 4,
       color: theme.colors.muted,
-      minWidth: "180px",
-      flex: "1 0 180px"
+      minWidth: "160px",
+      flex: "1 0 160px",
+      fontSize: "0.85rem"
     },
     filterControl: {
       width: "100%",
@@ -77,7 +65,9 @@ export function createRadarStyles(theme) {
       boxSizing: "border-box",
       border: `1px solid ${theme.colors.border}`,
       borderRadius: theme.borderRadius.sm,
-      padding: "8px 10px"
+      padding: "6px 8px",
+      minHeight: "32px",
+      fontSize: "0.85rem"
     },
     filterFooter: {
       display: "flex",
@@ -88,7 +78,7 @@ export function createRadarStyles(theme) {
     },
     filterInfo: {
       color: theme.colors.muted,
-      fontSize: "0.9rem"
+      fontSize: "0.82rem"
     },
     linkButton: {
       background: "transparent",
@@ -197,31 +187,13 @@ export function createRadarStyles(theme) {
       color: theme.colors.muted,
       fontSize: "0.85rem"
     },
-    roadmapList: {
-      display: "grid",
-      gap: theme.spacing.sm
-    },
-    roadmapItem: {
-      display: "flex",
-      alignItems: "center",
-      gap: theme.spacing.sm,
-      color: theme.colors.text,
-      fontWeight: theme.typography.cardTitle.fontWeight
-    },
-    roadmapStep: {
-      minWidth: "44px"
-    },
-    flowGrid: {
-      display: "grid",
-      gap: theme.spacing.sm,
-      gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))"
-    },
     flowCard: {
       display: "grid",
       gap: theme.spacing.xs,
       textAlign: "center",
       alignContent: "center",
-      minHeight: "120px"
+      minHeight: "92px",
+      padding: "10px 12px"
     },
     flowStepBadge: {
       width: "fit-content",
@@ -230,13 +202,7 @@ export function createRadarStyles(theme) {
     flowName: {
       margin: 0,
       color: theme.colors.text,
-      fontSize: "1rem"
-    },
-    footer: {
-      textAlign: "center",
-      color: theme.colors.muted,
-      margin: 0,
-      lineHeight: 1.5
+      fontSize: "0.95rem"
     }
   };
 }

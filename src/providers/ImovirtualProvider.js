@@ -1,4 +1,4 @@
-import { createLead, findByExternalId } from "./services/providerLeadService.js";
+import { createLead, findByExternalId } from "../services/providerLeadService.js";
 
 /**
  * Contrato de provider para futuras integrações com o Imovirtual.
@@ -35,7 +35,8 @@ export class ImovirtualProvider {
     );
     searchUrl.searchParams.set("page", String(page));
 
-    const fetchImplementation = this.options.fetch || globalThis.fetch;
+
+    const fetchImplementation = this.options.fetch || globalThis.fetch || (typeof window !== "undefined" ? window.fetch : null);
     if (typeof fetchImplementation !== "function") {
       throw new Error("Fetch API indisponível para obter a página de pesquisa.");
     }
@@ -266,3 +267,4 @@ export const imovirtualListingSelectors = {
   location: LOCATION_SELECTOR,
   link: LISTING_LINK_SELECTOR
 };
+

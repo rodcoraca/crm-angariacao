@@ -7,17 +7,17 @@ import Button from "../components/ui/Button";
 import KpiCard from "../components/ui/KpiCard";
 import Table from "../components/ui/Table";
 import Loading from "../components/ui/Loading";
-import SyncStatusBadge from "../components/providers/SyncStatusBadge";
 import { notifyError, notifyInfo, notifySuccess } from "../components/ui/feedbackBus";
 import {
   useRadar,
   mapRadarFlowViewModel,
   mapRadarKpisViewModel,
   mapRadarRoadmapViewModel,
-  mapRadarTableViewModel,
-  mapRadarTimelineViewModel
+  mapRadarTableViewModel
 } from "../modules/radar";
 import { createRadarStyles } from "./radarStyles";
+import { runImovirtualSync } from "../providers/services/providers/providerSyncRunner";
+import { canExecuteSync } from "../providers/services/providers/providerSyncService";
 
 export default function Radar() {
   const tableRef = useRef(null);
@@ -39,15 +39,15 @@ export default function Radar() {
   const [filtroCidade, setFiltroCidade] = useState("");
   const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [filtroPrecoMin, setFiltroPrecoMin] = useState("");
-  const [filtroPrecoMax, setFiltroPrecoMax] = useState("");
-  const [filtroScoreMin, setFiltroScoreMin] = useState("");
   const [filtroOrigem, setFiltroOrigem] = useState("todos");
   const [filtroDistrito, setFiltroDistrito] = useState("todos");
   const [filtroConcelho, setFiltroConcelho] = useState("todos");
   const [filtroParticulares, setFiltroParticulares] = useState("todos");
-  const [filtroImportados, setFiltroImportados] = useState("todos");
   const [filtroData, setFiltroData] = useState("todos");
+  const [tablePage, setTablePage] = useState(1);
+  const [timelineVisibleCount, setTimelineVisibleCount] = useState(5);
+  const TABLE_PAGE_SIZE = 20;
+  const TIMELINE_PAGE_SIZE = 5;
   const styles = useMemo(() => createRadarStyles(theme), [theme]);
   const nowrapButtonStyle = useMemo(() => ({ whiteSpace: "nowrap", minWidth: "120px" }), []);
   const nowrapBadgeStyle = useMemo(() => ({ whiteSpace: "nowrap" }), []);
@@ -61,13 +61,6 @@ export default function Radar() {
     }
   }, [selectedOpportunity]);
 
-  useEffect(() => {
-    console.log("Quantidade recebida no Radar.jsx:", (snapshot?.opportunities || []).length);
-  }, [snapshot]);
-
-  useEffect(() => {
-    console.log("[Radar] snapshot.length:", Array.isArray(snapshot?.opportunities) ? snapshot.opportunities.length : 0);
-  }, [snapshot]);
 
   const closeDetail = useCallback(() => {
     originalCloseDetail();
@@ -76,9 +69,21 @@ export default function Radar() {
     }
   }, [originalCloseDetail]);
 
-  const handleRefreshRadar = useCallback(async () => {
-    await reload();
-    notifyInfo("Radar atualizado com oportunidades classificadas e ordenadas por score.");
+  const handleManualSync = useCallback(async () => {
+    const canSync = await canExecuteSync("imovirtual");
+    if (!canSync) {
+      notifyInfo("Atualização disponível apenas de 4 em 4 horas.");
+      return;
+    }
+
+    notifyInfo("A sincronizar oportunidades...");
+    try {
+      await runImovirtualSync();
+      await reload();
+      notifySuccess("Oportunidades atualizadas.");
+    } catch (error) {
+      notifyError("Falha ao sincronizar: " + (error.message || "Erro desconhecido"));
+    }
   }, [reload]);
 
   const handleImportOpportunity = useCallback(async (opportunity) => {
@@ -126,11 +131,6 @@ export default function Radar() {
     [snapshot]
   );
 
-  const timeline = useMemo(
-    () => mapRadarTimelineViewModel(snapshot?.timeline || []),
-    [snapshot]
-  );
-
   const filterOptions = useMemo(() => {
     const opportunities = snapshot?.opportunities || [];
     const cidades = Array.from(new Set(opportunities.map((item) => String(item?.cidade || "").trim()).filter(Boolean))).sort();
@@ -144,9 +144,6 @@ export default function Radar() {
 
   const filteredOpportunities = useMemo(() => {
     const oportunidades = snapshot?.opportunities || [];
-    if (!Array.isArray(snapshot?.opportunities)) {
-      console.log("[Radar] condição que devolve []: !Array.isArray(snapshot?.opportunities)");
-    }
     const cidadeLower = filtroCidade.trim().toLowerCase();
 
     // Data filtering logic
@@ -186,17 +183,11 @@ export default function Radar() {
           if (filtroParticulares === "particulares" && !isPrivate) return false;
           if (filtroParticulares === "nao_particulares" && isPrivate) return false;
       }
-      if (filtroImportados !== "todos") {
-        const isImported = item?.imported === true || String(item?.estado || "").toLowerCase() === "importado";
-        if (filtroImportados === "importados" && !isImported) return false;
-        if (filtroImportados === "nao_importados" && isImported) return false;
-      }
       if (filtroData !== "todos" && !filtrarData(item)) return false;
 
       return true;
     });
 
-    console.log("[Radar] resultado filter/useMemo (filteredOpportunities.length):", filtered.length);
     return filtered;
   }, [
     snapshot,
@@ -207,14 +198,11 @@ export default function Radar() {
     filtroDistrito,
     filtroConcelho,
     filtroParticulares,
-    filtroImportados,
     filtroData
   ]);
 
   const tabela = useMemo(() => {
-    const mappedTable = mapRadarTableViewModel(filteredOpportunities);
-    console.log("[Radar] resultado mapTable (tabela.length):", mappedTable.length);
-    return mappedTable;
+    return mapRadarTableViewModel(filteredOpportunities);
   }, [filteredOpportunities]);
 
   const isImovirtualOpportunity = useCallback(
@@ -223,7 +211,7 @@ export default function Radar() {
   );
 
   const isImportedOpportunity = useCallback(
-    (opportunity) => opportunity?.imported === true,
+    (opportunity) => opportunity?.imported === true || String(opportunity?.estado || "").toLowerCase() === "importado",
     []
   );
 
@@ -288,8 +276,8 @@ export default function Radar() {
       key: "acoes",
       title: "Ações",
       render: (row) => {
-        const isImported = row.rawOpportunity?.imported === true || String(row.estado || "").toLowerCase() === "importado";
-        const isIgnored = String(row.estado || "").toLowerCase() === "ignorado";
+        const isImported = isImportedOpportunity(row.rawOpportunity || row);
+        const isIgnored = isIgnoredOpportunity(row.rawOpportunity || row);
               return (
           <div style={styles.rowActions}>
             <Button size="sm" variant="ghost" style={nowrapButtonStyle} onClick={() => openDetail(row.rawOpportunity || null)}>
@@ -302,7 +290,7 @@ export default function Radar() {
               disabled={importingId === row.id || isImported || isIgnored}
               onClick={() => handleImportOpportunity(row.rawOpportunity || null)}
             >
-              {importingId === row.id ? "A importar..." : isImported ? "IMPORTADO" : "IMPORTAR"}
+              {importingId === row.id ? "A importar..." : isImported ? "IMPORTADO" : "Importar Lead"}
             </Button>
                   </div>
               );
@@ -311,6 +299,8 @@ export default function Radar() {
   ], [
     handleImportOpportunity,
     importingId,
+    isIgnoredOpportunity,
+    isImportedOpportunity,
     isImovirtualOpportunity,
     nowrapBadgeStyle,
     nowrapButtonStyle,
@@ -340,11 +330,66 @@ export default function Radar() {
     return [...rows].sort((a, b) => getRowTimestamp(b) - getRowTimestamp(a));
   }, [filteredOpportunities, tabela]);
 
-  useEffect(() => {
-    console.log("[Radar] tableRows.length:", tableRows.length);
+  const totalTablePages = useMemo(() => {
+    return Math.max(1, Math.ceil(tableRows.length / TABLE_PAGE_SIZE));
+  }, [tableRows.length, TABLE_PAGE_SIZE]);
+
+  const paginatedTableRows = useMemo(() => {
+    const start = (tablePage - 1) * TABLE_PAGE_SIZE;
+    const end = start + TABLE_PAGE_SIZE;
+    return tableRows.slice(start, end);
+  }, [tablePage, tableRows, TABLE_PAGE_SIZE]);
+
+  const radarRecentTimeline = useMemo(() => {
+    const getDiscoveryTimestamp = (row) => {
+      const raw = row?.rawOpportunity || {};
+      const sourceDate = raw?.detected_at || raw?.created_at || raw?.publicado_em || null;
+      const parsed = sourceDate ? new Date(sourceDate) : null;
+      return parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : 0;
+    };
+
+    return [...tableRows]
+      .sort((a, b) => getDiscoveryTimestamp(b) - getDiscoveryTimestamp(a))
+      .map((row, index) => {
+        const raw = row?.rawOpportunity || {};
+        return {
+          id: row?.id || `timeline-op-${index}`,
+          titulo: row?.imovel || raw?.titulo || "Sem imóvel",
+          localizacao: row?.localizacao || raw?.morada || raw?.location || "Sem localização",
+          descoberta: raw?.detected_at || raw?.created_at || raw?.publicado_em || null,
+          provider: String(raw?.source || raw?.origem || "N/A")
+        };
+      });
   }, [tableRows]);
 
-  console.log("[Radar] primeiro objeto imediatamente antes do render:", tableRows[0] || null);
+  const visibleTimeline = useMemo(() => {
+    return radarRecentTimeline.slice(0, timelineVisibleCount);
+  }, [radarRecentTimeline, timelineVisibleCount]);
+
+  const hasMoreTimeline = timelineVisibleCount < radarRecentTimeline.length;
+
+  useEffect(() => {
+    setTablePage(1);
+  }, [
+    filtroCidade,
+    filtroTipo,
+    filtroEstado,
+    filtroOrigem,
+    filtroDistrito,
+    filtroConcelho,
+    filtroParticulares,
+    filtroData
+  ]);
+
+  useEffect(() => {
+    if (tablePage > totalTablePages) {
+      setTablePage(totalTablePages);
+    }
+  }, [tablePage, totalTablePages]);
+
+  useEffect(() => {
+    setTimelineVisibleCount(TIMELINE_PAGE_SIZE);
+  }, [radarRecentTimeline.length, TIMELINE_PAGE_SIZE]);
 
   return (
     <div style={styles.page}>
@@ -358,24 +403,41 @@ export default function Radar() {
         </p>
       </Card>
 
+      <section style={styles.section} className="radar-section-spacing">
+        <h2 style={styles.sectionTitle}>Indicadores</h2>
+        <div className="radar-indicator-row">
+          {kpis.map((item) => (
+            <KpiCard
+              key={item.id}
+              className="radar-indicator-card"
+              titulo={item.titulo}
+              valor={item.valor}
+              variacao={item.variacao}
+              descricao={item.descricao}
+              icone={item.icone}
+              cor={item.cor}
+            />
+          ))}
+        </div>
+      </section>
+
       <section style={styles.section}>
         <div style={styles.sectionHeader}>
           <h2 style={styles.sectionTitle}>Filtros operacionais</h2>
-          <Badge variant="neutral" style={nowrapBadgeStyle}>Dados mock para homologação visual</Badge>
+          <Badge variant="neutral" style={nowrapBadgeStyle}>Dados operacionais</Badge>
         </div>
         <Card style={styles.filterCard}>
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(4, 1fr)',
-            gap: '15px',
-            marginBottom: '15px'
+            gap: '10px',
+            marginBottom: '10px'
           }}>
             <label style={styles.filterField}>
               Cidade
               <input
                 value={filtroCidade}
                 onChange={(event) => setFiltroCidade(event.target.value)}
-                placeholder="Ex.: Lisboa"
                 style={styles.filterControl}
                 list="radar-cidades"
               />
@@ -437,43 +499,6 @@ export default function Radar() {
             </label>
 
             <label style={styles.filterField}>
-              Preço mínimo
-              <input
-                type="number"
-                min="0"
-                value={filtroPrecoMin}
-                onChange={(event) => setFiltroPrecoMin(event.target.value)}
-                placeholder="0"
-                style={styles.filterControl}
-              />
-            </label>
-
-            <label style={styles.filterField}>
-              Preço máximo
-              <input
-                type="number"
-                min="0"
-                value={filtroPrecoMax}
-                onChange={(event) => setFiltroPrecoMax(event.target.value)}
-                placeholder="900000"
-                style={styles.filterControl}
-              />
-            </label>
-
-            <label style={styles.filterField}>
-              Score mínimo
-              <input
-                type="number"
-                min="0"
-                max="100"
-                value={filtroScoreMin}
-                onChange={(event) => setFiltroScoreMin(event.target.value)}
-                placeholder="70"
-                style={styles.filterControl}
-              />
-            </label>
-
-            <label style={styles.filterField}>
               Particulares
               <select value={filtroParticulares} onChange={(e) => setFiltroParticulares(e.target.value)} style={styles.filterControl}>
                 <option value="todos">Todos</option>
@@ -482,14 +507,6 @@ export default function Radar() {
               </select>
             </label>
 
-            <label style={styles.filterField}>
-              Importação
-              <select value={filtroImportados} onChange={(e) => setFiltroImportados(e.target.value)} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                <option value="importados">Importados</option>
-                <option value="nao_importados">Não importados</option>
-              </select>
-            </label>
             <label style={styles.filterField}>
               Data
               <select value={filtroData} onChange={(e) => setFiltroData(e.target.value)} style={styles.filterControl}>
@@ -516,11 +533,7 @@ export default function Radar() {
                 setFiltroOrigem("todos");
                 setFiltroDistrito("todos");
                 setFiltroConcelho("todos");
-                setFiltroPrecoMin("");
-                setFiltroPrecoMax("");
-                setFiltroScoreMin("");
                 setFiltroParticulares("todos");
-                setFiltroImportados("todos");
                 setFiltroData("todos");
               }}
             >
@@ -530,42 +543,17 @@ export default function Radar() {
         </Card>
       </section>
 
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Indicadores</h2>
-        <div style={styles.cardGrid}>
-          {kpis.map((item) => (
-            <KpiCard
-              key={item.id}
-              titulo={item.titulo}
-              valor={item.valor}
-              variacao={item.variacao}
-              descricao={item.descricao}
-              icone={item.icone}
-              cor={item.cor}
-            />
-          ))}
-        </div>
-      </section>
-
       <section style={styles.section} ref={tableRef}>
         <h2 style={styles.sectionTitle}>Tabela de oportunidades</h2>
         <Card style={styles.tableContainer}>
           <div style={styles.tableHeader}>
             <div style={styles.actionRow}>
-              <Button variant="primary" style={nowrapButtonStyle} onClick={handleRefreshRadar} disabled={loading}>
-                Atualizar Radar
+              <Button variant="secondary" style={nowrapButtonStyle} onClick={handleManualSync} disabled={loading}>
+                🔄 Atualizar Oportunidades
               </Button>
               <Button variant="ghost" style={nowrapButtonStyle} onClick={() => selectedOpportunity && openDetail(selectedOpportunity)} disabled={!selectedOpportunity}>Abrir detalhe</Button>
-              <Button
-                variant="secondary"
-                style={nowrapButtonStyle}
-                onClick={() => handleImportOpportunity(selectedOpportunity)}
-                disabled={!selectedOpportunity || importingId === selectedOpportunity?.id || isImportedOpportunity(selectedOpportunity) || isIgnoredOpportunity(selectedOpportunity)}
-              >
-                {importingId === selectedOpportunity?.id ? "A importar..." : isImportedOpportunity(selectedOpportunity) ? "IMPORTADO" : "Importar para Leads"}
-              </Button>
             </div>
-            {loading ? <Loading label="A preparar demonstração Radar..." /> : null}
+            {loading ? <Loading label="A carregar Radar..." /> : null}
           </div>
 
           {error ? (
@@ -576,10 +564,99 @@ export default function Radar() {
 
           <Table
             columns={colunasTabela}
-            rows={tableRows}
+            rows={paginatedTableRows}
             emptyMessage="Sem oportunidades disponíveis"
           />
+          {tableRows.length > 0 ? (
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: "12px",
+              marginTop: "12px",
+              flexWrap: "wrap"
+            }}>
+              <span style={styles.filterInfo}>
+                Página {tablePage} de {totalTablePages} ({tableRows.length} registos)
+              </span>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <Button
+                  variant="ghost"
+                  style={nowrapButtonStyle}
+                  onClick={() => setTablePage((prev) => Math.max(1, prev - 1))}
+                  disabled={tablePage === 1}
+                >
+                  Anterior
+                </Button>
+                <Button
+                  variant="ghost"
+                  style={nowrapButtonStyle}
+                  onClick={() => setTablePage((prev) => Math.min(totalTablePages, prev + 1))}
+                  disabled={tablePage >= totalTablePages}
+                >
+                  Seguinte
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </Card>
+      </section>
+
+      <section style={styles.section} className="radar-section-spacing">
+        <h2 style={styles.sectionTitle}>Últimas oportunidades adicionadas ao Radar</h2>
+        <Card style={styles.timelineCard} className="radar-timeline-card">
+          {radarRecentTimeline.length === 0 ? (
+            <p style={styles.timelineEmpty}>Sem oportunidades recentes.</p>
+          ) : (
+            visibleTimeline.map((item) => (
+              <div key={item.id} style={styles.timelineItem}>
+                <div style={styles.timelineItemInfo}>
+                  <strong style={styles.timelineItemTitle}>{item.titulo}</strong>
+                  <span style={styles.timelineItemEvent}>{item.localizacao}</span>
+                </div>
+                <div style={styles.timelineItemMeta}>
+                  <Badge variant="neutral" style={nowrapBadgeStyle}>{item.provider}</Badge>
+                  <span style={styles.timelineDate}>{item.descoberta ? new Date(item.descoberta).toLocaleString("pt-PT") : "Data indisponível"}</span>
+                </div>
+              </div>
+            ))
+          )}
+          {hasMoreTimeline ? (
+            <div style={{ marginTop: "12px", display: "flex", justifyContent: "center" }}>
+              <Button
+                variant="ghost"
+                style={nowrapButtonStyle}
+                onClick={() => setTimelineVisibleCount((prev) => prev + TIMELINE_PAGE_SIZE)}
+              >
+                Mostrar mais
+              </Button>
+            </div>
+          ) : null}
+        </Card>
+      </section>
+
+      <section style={styles.section} className="radar-section-spacing">
+        <h2 style={styles.sectionTitle}>Fluxo operacional</h2>
+        <div className="radar-horizontal-cards">
+          {fluxo.map((etapa, index) => (
+            <Card key={etapa.id} style={styles.flowCard} className="radar-compact-card">
+              <Badge variant="primary" style={{ ...styles.flowStepBadge, ...nowrapBadgeStyle }}>{`Etapa ${index + 1}`}</Badge>
+              <h3 style={styles.flowName}>{etapa.label}</h3>
+            </Card>
+          ))}
+        </div>
+      </section>
+
+      <section style={styles.section} className="radar-section-spacing">
+        <h2 style={styles.sectionTitle}>Roadmap do Radar</h2>
+        <div className="radar-horizontal-cards">
+          {roadmap.map((item, index) => (
+            <Card key={item.id} style={styles.flowCard} className="radar-compact-card">
+              <Badge variant="success" style={{ ...styles.flowStepBadge, ...nowrapBadgeStyle }}>{String(index + 1).padStart(2, "0")}</Badge>
+              <h3 style={styles.flowName}>{item.label}</h3>
+            </Card>
+          ))}
+        </div>
       </section>
 
       {selectedOpportunity ? (
@@ -614,83 +691,12 @@ export default function Radar() {
             </label>
 
             <div style={styles.detailActions}>
-              <Button variant="secondary" style={nowrapButtonStyle} onClick={() => handleImportOpportunity(selectedOpportunity)} disabled={importingId === selectedOpportunity.id || isImportedOpportunity(selectedOpportunity) || isIgnoredOpportunity(selectedOpportunity)}>
-                {importingId === selectedOpportunity.id ? "A importar..." : isImportedOpportunity(selectedOpportunity) ? "IMPORTADO" : "Importar para Leads"}
-              </Button>
               <Button variant="ghost" style={nowrapButtonStyle} onClick={closeDetail}>Fechar detalhe</Button>
             </div>
           </Card>
         </section>
       ) : null}
 
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Timeline operacional</h2>
-        <Card style={styles.timelineCard}>
-          {timeline.length === 0 ? (
-            <p style={styles.timelineEmpty}>Sem eventos na timeline.</p>
-          ) : (
-            timeline.map((event) => {
-              const estado = String(event.estado || "").toLowerCase();
-              const variant =
-                estado === "importada"
-                  ? "success"
-                  : estado === "analisada"
-                    ? "warning"
-                    : estado === "ignorada"
-                      ? "neutral"
-                      : "primary";
-
-              return (
-                <div key={event.id} style={styles.timelineItem}>
-                  <div style={styles.timelineItemInfo}>
-                    <strong style={styles.timelineItemTitle}>{event.oportunidadeTitulo}</strong>
-                    <span style={styles.timelineItemEvent}>{event.evento}</span>
-                  </div>
-                  <div style={styles.timelineItemMeta}>
-                    <Badge variant={variant} style={nowrapBadgeStyle}>{event.estado}</Badge>
-                    <span style={styles.timelineDate}>{event.data}</span>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </Card>
-      </section>
-
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Roadmap do Radar</h2>
-        <Card>
-          <div style={styles.roadmapList}>
-            {roadmap.map((item, index) => (
-              <div key={item.id} style={styles.roadmapItem}>
-                <Badge variant="success" style={{ ...styles.roadmapStep, ...nowrapBadgeStyle }}>{String(index + 1).padStart(2, "0")}</Badge>
-                <span>{item.label}</span>
-                {index < roadmap.length - 1 ? <Badge variant="neutral" style={nowrapBadgeStyle}>↓</Badge> : null}
-              </div>
-            ))}
-          </div>
-        </Card>
-      </section>
-
-      <section style={styles.section}>
-        <h2 style={styles.sectionTitle}>Fluxo operacional</h2>
-        <div style={styles.flowGrid}>
-          {fluxo.map((etapa, index) => (
-            <Card key={etapa.id} style={styles.flowCard}>
-              <Badge variant="primary" style={{ ...styles.flowStepBadge, ...nowrapBadgeStyle }}>{`Etapa ${index + 1}`}</Badge>
-              <h3 style={styles.flowName}>{etapa.label}</h3>
-              {index < fluxo.length - 1 ? <Badge variant="neutral" style={{ ...styles.flowStepBadge, ...nowrapBadgeStyle }}>↓</Badge> : null}
-            </Card>
-          ))}
-        </div>
-      </section>
-
-      <Card>
-        <p style={styles.footer}>
-          Estrutura preparada para futuras integrações com serviços de recolha de anúncios,
-          sem implementação de conectores ou consultas externas nesta fase.
-        </p>
-      </Card>
     </div>
   );
 }

@@ -157,3 +157,72 @@ select:disabled,
   }
 }
 
+.radar-section-spacing {
+  display: grid;
+  gap: 10px;
+}
+
+.radar-indicator-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.radar-indicator-card {
+  min-height: 68px !important;
+  padding: 8px 10px !important;
+  gap: 4px !important;
+}
+
+.radar-indicator-card header {
+  gap: 6px !important;
+}
+
+.radar-indicator-card header strong {
+  font-size: 1.05rem !important;
+  line-height: 1.15 !important;
+}
+
+.radar-indicator-card footer {
+  display: flex !important;
+  align-items: center;
+}
+
+.radar-indicator-card footer small {
+  display: none;
+}
+
+.radar-horizontal-cards {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.radar-compact-card {
+  min-height: 70px !important;
+  padding: 8px 10px !important;
+  gap: 4px !important;
+}
+
+.radar-timeline-card {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+@media (max-width: 1200px) {
+  .radar-indicator-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .radar-horizontal-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 680px) {
+  .radar-indicator-row,
+  .radar-horizontal-cards {
+    grid-template-columns: 1fr;
+  }
+}
+

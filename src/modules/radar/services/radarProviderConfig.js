@@ -37,7 +37,3 @@ export function buildConfiguredRadarProvider(mode) {
 
   return null;
 }
-
-export function getConfiguredRadarProviderMode() {
-  return resolveRuntimeMode();
-}

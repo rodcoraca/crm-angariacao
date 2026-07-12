@@ -178,29 +178,13 @@ export class RadarRepository {
         return crmOpportunities;
       }
 
-      console.log("Quantidade importedLeads:", (providerLeads || []).length);
-
-      const mappedLeads = (providerLeads || []).map((lead) => mapProviderLeadToOpportunity(lead));
-
-      mappedLeads.slice(0, 3).forEach((lead, index) => {
-        console.log(`mapProviderLeadToOpportunity() [${index}]`, {
-          id: lead?.id,
-          titulo: lead?.titulo,
-          estado: lead?.estado,
-          owner_name: lead?.owner_name,
-          publicado_em: lead?.publicado_em
-        });
-      });
-
+      const importedLeads = providerLeads || [];
+      const mappedLeads = importedLeads.map((lead) => mapProviderLeadToOpportunity(lead));
       const filteredLeads = mappedLeads.filter((lead) => lead.estado !== "ignorado");
-      console.log("Quantidade após .filter(...):", filteredLeads.length);
 
       const formattedLeads = filteredLeads;
-      console.log("Quantidade final formattedLeads.length:", formattedLeads.length);
 
       const merged = [...crmOpportunities, ...formattedLeads];
-      console.log("Merged:", merged.length);
-      console.log("Quantidade final opportunities.length:", merged.length);
 
       return merged;
     } catch (error) {

@@ -2,13 +2,11 @@ export {
   clearRadarDataProvider,
   fetchRadarSnapshot,
   getRadarService,
-  RadarService,
-  registerRadarDataProvider
+  RadarService
 } from "./services/radarService";
 
 export { RadarRepository } from "./repositories/RadarRepository";
 export { RadarProvider } from "./providers/RadarProvider";
-export { MockRadarProvider } from "./providers/MockRadarProvider";
 export { OlxProvider } from "./providers/OlxProvider";
 export { useRadar } from "./hooks/useRadar";
 export { RadarViewModel, createRadarViewModel } from "./viewmodels/radarViewModel";
@@ -21,7 +19,6 @@ export {
 } from "./contracts/radarLeadMetadata";
 export {
   buildConfiguredRadarProvider,
-  getConfiguredRadarProviderMode,
   RADAR_PROVIDER_MODES
 } from "./services/radarProviderConfig";
 
@@ -29,6 +26,5 @@ export {
   mapRadarFlowViewModel,
   mapRadarKpisViewModel,
   mapRadarRoadmapViewModel,
-  mapRadarTableViewModel,
-  mapRadarTimelineViewModel
+  mapRadarTableViewModel
 } from "./viewmodels/radarViewModel";

@@ -7,7 +7,7 @@ import {
   appendRadarMetadataBlockOnce,
   buildRadarLeadMetadata
 } from "../contracts/radarLeadMetadata";
-import { supabase } from "../../../supabase"; // Corrected import path
+import { supabase } from "../../../supabase";
 
 function normalizeNumericScore(value) {
   const parsed = Number(value);
@@ -104,7 +104,6 @@ export class RadarService {
   async loadOpportunities() {
     // Forçar carregamento dos dados reais ignorando a cache da sessão
     const loaded = await this.repository.listOpportunities();
-    console.log("Quantidade entregue ao RadarService:", (loaded || []).length);
     this.sessionOpportunities = loaded;
     return loaded || [];
   }
@@ -117,35 +116,39 @@ export class RadarService {
     return sortByScore(opportunities);
   }
 
-  createSnapshotFromOpportunities(opportunities = []) {
+  async loadProviderRegistryState() {
+    const { data, error } = await supabase
+      .from("provider_registry")
+      .select("provider_code,last_execution,next_execution,last_error,sync_running,enabled");
+
+    if (error) {
+      console.warn("[Radar] Falha ao carregar provider_registry:", error);
+      return null;
+    }
+
+    return data || [];
+  }
+
+  createSnapshotFromOpportunities(opportunities = [], providerRegistry = null) {
     const ordered = this.sortByScore(opportunities);
     this.sessionOpportunities = [...ordered];
 
-    const snapshot = createRadarViewModel({ opportunities: ordered });
+    const snapshot = createRadarViewModel({
+      opportunities: ordered,
+      providerRegistry
+    });
 
     return {
       ...snapshot,
-      opportunities: ordered,
-      flow: this.buildOperationalFlow()
+      opportunities: ordered
     };
-  }
-
-  buildOperationalFlow() {
-    return [
-      { id: "flow-atualizar", label: "Atualizar Radar" },
-      { id: "flow-carregar", label: "Carregar oportunidades" },
-      { id: "flow-classificar", label: "Classificar" },
-      { id: "flow-ordenar", label: "Ordenar por Score" },
-      { id: "flow-tabela", label: "Apresentar tabela" },
-      { id: "flow-detalhe", label: "Abrir detalhe" },
-      { id: "flow-importar", label: "Importar para Leads" }
-    ];
   }
 
   async getSnapshot() {
     const loaded = await this.loadOpportunities();
     const classified = this.classifyOpportunities(loaded);
-    return this.createSnapshotFromOpportunities(classified);
+    const providerRegistry = await this.loadProviderRegistryState();
+    return this.createSnapshotFromOpportunities(classified, providerRegistry);
   }
 
   async updateOpportunityState(opportunityId, nextState) {
@@ -189,7 +192,8 @@ export class RadarService {
     });
 
     const classified = this.classifyOpportunities(updated);
-    const snapshot = this.createSnapshotFromOpportunities(classified);
+    const providerRegistry = await this.loadProviderRegistryState();
+    const snapshot = this.createSnapshotFromOpportunities(classified, providerRegistry);
 
     return {
       ok: true,
@@ -204,6 +208,11 @@ export class RadarService {
         message: "Oportunidade inválida para importação."
       };
     }
+
+    console.info("[Radar Import] iniciar", {
+      opportunityId: opportunity?.id || null,
+      source: opportunity?.source || opportunity?.origem || null
+    });
 
     const payload = mapOpportunityToLeadPayload(opportunity, user);
     const result = await salvarLeadFluxo(payload);
@@ -225,18 +234,18 @@ export class RadarService {
       };
     }
 
-    // Update provider_leads if it's from imovirtual
-    if (opportunity.origem === 'imovirtual') {
+    const opportunitySource = String(opportunity?.origem || opportunity?.source || "").toLowerCase();
+    if (opportunitySource === "imovirtual") {
       const importedBy = user?.perfil_id || user?.id || null;
       const { error: providerLeadUpdateError } = await supabase
-        .from('provider_leads')
+        .from("provider_leads")
         .update({
           imported: true,
           crm_lead_id: result?.id || null,
           imported_at: new Date().toISOString(),
           imported_by: importedBy
         })
-        .eq('id', opportunity.id);
+        .eq("id", opportunity.id);
 
       if (providerLeadUpdateError) {
         return {
@@ -249,25 +258,20 @@ export class RadarService {
 
     await this.updateOpportunityState(opportunity?.id, "importado");
 
+    console.info("[Radar Import] concluido", {
+      opportunityId: opportunity?.id || null,
+      imported: true
+    });
+
     return {
       ok: true,
       message: "Oportunidade importada para Leads com sucesso."
     };
   }
+
 }
 
 const radarService = new RadarService(new RadarRepository(buildConfiguredRadarProvider()));
-
-export function registerRadarDataProvider(provider) {
-  if (provider && typeof provider.listOpportunities === "function") {
-    radarService.setProvider(provider);
-    return;
-  }
-
-  if (typeof provider === "function") {
-    radarService.setProvider({ listOpportunities: provider });
-  }
-}
 
 export function clearRadarDataProvider() {
   radarService.sessionOpportunities = null;

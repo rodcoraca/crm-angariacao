@@ -14,7 +14,16 @@ function loadProvider() {
     presets: [["@babel/preset-env", { modules: "commonjs" }]]
   });
   const module = { exports: {} };
-  new Function("exports", "module", code)(module.exports, module);
+    new Function(
+    "exports",
+    "module",
+    "require",
+    code
+  )(
+    module.exports,
+    module,
+    require
+  );
   return module.exports;
 }
 

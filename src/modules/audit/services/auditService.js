@@ -1,9 +1,9 @@
-import { supabase } from "../../../supabase";
+import { supabase } from "../../../supabase.js";
 import {
   finalizeUserSession,
   registerUserSession
-} from "../../auth/services/sessionService";
-import { signOutAuthSession } from "../../auth/services/authService";
+} from "../../auth/services/sessionService.js";
+import { signOutAuthSession } from "../../auth/services/authService.js";
 
 const AUDIT_TABLE = "audit_logs";
 
