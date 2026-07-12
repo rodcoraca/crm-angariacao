@@ -1,4 +1,4 @@
-import { supabase } from "../supabase";
+import { supabase } from "../supabase.js";
 import { auditMutation } from "../modules/audit/services";
 
 const PROVIDER_LEADS_TABLE = "provider_leads";

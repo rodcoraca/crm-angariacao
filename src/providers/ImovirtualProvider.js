@@ -1,4 +1,4 @@
-import { createLead, findByExternalId } from "../services/providerLeadService";
+import { createLead, findByExternalId } from "./services/providerLeadService.js";
 
 /**
  * Contrato de provider para futuras integrações com o Imovirtual.

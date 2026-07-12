@@ -7,6 +7,7 @@ import Button from "../components/ui/Button";
 import KpiCard from "../components/ui/KpiCard";
 import Table from "../components/ui/Table";
 import Loading from "../components/ui/Loading";
+import SyncStatusBadge from "../components/providers/SyncStatusBadge";
 import { notifyError, notifyInfo, notifySuccess } from "../components/ui/feedbackBus";
 import {
   useRadar,

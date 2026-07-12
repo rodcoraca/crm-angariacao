@@ -20,6 +20,7 @@
     "imovirtual:test": "node scripts/test-imovirtual.js",
     "imovirtual:sync": "node --use-system-ca scripts/sync-imovirtual.js",
     "publish": "npm run build && npx bestzip build.zip build/*",
+    "providers:sync": "node scripts/providerSync.js",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
