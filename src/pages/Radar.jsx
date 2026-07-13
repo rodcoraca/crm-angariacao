@@ -109,7 +109,7 @@ export default function Radar() {
     });
 
     if (result?.ok) {
-      notifyInfo("Estado operacional atualizado e score recalculado.");
+      notifyInfo("Estado operacional atualizado.");
       return;
     }
 
@@ -220,6 +220,8 @@ export default function Radar() {
     []
   );
 
+  // SCORE DESATIVADO NA BETA
+  // Funcionalidade reservada para futura Inteligência Comercial.
   const colunasTabela = useMemo(() => [
     {
       key: "imovel",
@@ -247,7 +249,6 @@ export default function Radar() {
         return parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : 0;
       }
     },
-    { key: "score", title: "Score" },
     {
       key: "estado",
       title: "Estado",
@@ -666,7 +667,6 @@ export default function Radar() {
             <div style={styles.detailHeader}>
               <strong style={styles.detailTitle}>{selectedOpportunity.titulo}</strong>
               <Badge variant="primary" style={{ marginLeft: '10px', fontSize: '1.1em', ...nowrapBadgeStyle }}>{selectedOpportunity.preco}</Badge>
-              <Badge variant="warning" style={{ marginLeft: '10px', ...nowrapBadgeStyle }}>Score {selectedOpportunity.score}</Badge>
               {isImovirtualOpportunity(selectedOpportunity) ? <Badge variant="neutral" style={{ marginLeft: '10px', ...nowrapBadgeStyle }}>Imovirtual</Badge> : null}
             </div>
 

@@ -1,12 +1,15 @@
 import { supabase } from "../../../supabase";
-import { calcularScoreInteligente } from "../services/radarScoreService";
-
-const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
+import { applyEmpresaScope, resolveEmpresaId } from "../../../utils/empresaScope";
 
 function toNullableNumber(value) {
   if (value === null || value === undefined || value === "") return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function toScore(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.trunc(parsed) : 0;
 }
 
 function inferPropertyType(title, lead) {
@@ -58,18 +61,7 @@ function mapProviderLeadToOpportunity(lead) {
   const municipality = raw?.municipality || raw?.location?.address?.county?.name || city || "";
   const locationLabel = lead?.location || raw?.locationLabel || [city, district].filter(Boolean).join(", ") || "N/A";
   const estado = normalizeProviderEstado(lead);
-  let computedScore = 0;
-
-  try {
-    computedScore = calcularScoreInteligente({
-      created_at_first: lead?.created_at_first || raw?.createdAtFirst || null,
-      is_private_owner: lead?.is_private_owner === true,
-      distrito: district,
-      owner_name: ownerName
-    });
-  } catch {
-    computedScore = 0;
-  }
+  const persistedScore = toScore(lead?.score ?? raw?.score ?? 0);
 
   return {
     ...lead,
@@ -100,7 +92,7 @@ function mapProviderLeadToOpportunity(lead) {
     crm_lead_id: lead?.crm_lead_id || null,
     is_private_owner: lead?.is_private_owner === true,
     is_private: lead?.is_private_owner === true,
-    score: Number.isFinite(computedScore) ? Math.trunc(computedScore) : 0,
+    score: persistedScore,
     estado,
     origem: providerOrigin || "imovirtual",
     source,
@@ -111,30 +103,11 @@ function mapProviderLeadToOpportunity(lead) {
       publisherName: ownerName,
       publishedAt: dataReferencia,
       capturedAt: lead?.detected_at || null,
-      score: Number.isFinite(computedScore) ? Math.trunc(computedScore) : 0,
+      score: persistedScore,
       status: lead?.status || null
     }
   };
 }
-async function resolveCurrentEmpresaId() {
-  if (typeof window !== "undefined") {
-    const fromStorage = window.localStorage.getItem(ACTIVE_SESSION_TENANT_KEY);
-    if (fromStorage && String(fromStorage).trim()) {
-      return String(fromStorage).trim();
-    }
-  }
-
-  try {
-    const { data } = await supabase.auth.getUser();
-    const metadataEmpresaId = data?.user?.user_metadata?.empresa_id;
-    if (metadataEmpresaId) return String(metadataEmpresaId);
-  } catch {
-    // Silencioso: sem contexto de empresa, mantém fallback para null.
-  }
-
-  return null;
-}
-
 export class RadarRepository {
   constructor(provider = null) {
     this.provider = provider;
@@ -156,19 +129,16 @@ export class RadarRepository {
       crmOpportunities = [];
     }
 
-    const empresaId = await resolveCurrentEmpresaId();
+    const empresaId = await resolveEmpresaId();
     if (!empresaId) {
-      console.warn("[Radar] empresa não configurada. Utilizando provider_leads sem isolamento multi-tenant.");
+      console.warn("Operação sem empresa_id");
+      return [];
     }
 
     try {
-      let providerLeadsQuery = supabase
+      const providerLeadsQuery = applyEmpresaScope(supabase
         .from("provider_leads")
-        .select("*");
-
-      if (empresaId) {
-        providerLeadsQuery = providerLeadsQuery.eq("empresa_id", empresaId);
-      }
+        .select("*"), empresaId);
 
       const { data: providerLeads, error: providerError } = await providerLeadsQuery;
 

@@ -104,11 +104,13 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
 
         {podeVerRota("radar") ? (
           (() => {
-            const menuStyles = getMenuStyles(activeView === "radar" || activeView === "radar_imovirtual");
+            const menuStyles = getMenuStyles(activeView === "radar");
             return (
               <>
+                {/* Módulo descontinuado.
+                    Funcionalidade absorvida pelo Radar.
+                    Remoção física prevista após estabilização Beta. */}
                 <SidebarItem collapsed={collapsed} onClick={() => handleSelectView("radar")} style={menuStyles.style} collapsedStyle={menuStyles.collapsedStyle}>{collapsed ? "R" : "Radar"}</SidebarItem>
-                {!collapsed ? <SidebarItem onClick={() => handleSelectView("radar_imovirtual")} style={getMenuStyles(activeView === "radar_imovirtual", true).style} collapsedStyle={getMenuStyles(activeView === "radar_imovirtual", true).collapsedStyle}>Imovirtual Beta</SidebarItem> : null}
               </>
             );
           })()

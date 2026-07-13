@@ -10,12 +10,15 @@ export async function runImovirtualSync() {
   await registerExecution("imovirtual", true);
 
   try {
-    const API_URL =
-      process.env.REACT_APP_PROVIDER_API_URL ||
-      "http://localhost:3001";
-    
-    // Disparar sincronização na infraestrutura global isolada
-    const response = await fetch(`${API_URL}/api/providers/imovirtual/sync`, {
+    // Arquitetura definitiva:
+    // Frontend
+    // ↓
+    // /api
+    // ↓
+    // Proxy
+    // ↓
+    // Node
+    const response = await fetch("/api/providers/imovirtual/sync", {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' }
     });

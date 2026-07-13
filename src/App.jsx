@@ -571,7 +571,7 @@ export default function App() {
     mensagens: canAccessView("mensagens") ? <MensagensPadrao /> : <Forbidden requestedView="mensagens" requiredPermission={getRequiredPermission("mensagens")} />,
     estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
     usuarios: canAccessView("usuarios") ? <Usuarios currentUser={user} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
-    logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
+    logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={user} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
   };
 
   return (

@@ -4,10 +4,10 @@
 Estabelecer este documento como o repositório oficial de todas as migrações SQL da plataforma OSFlow, centralizando o histórico estrutural da base de dados e a preparação das futuras alterações.
 
 ## Última revisão
-2026-07-10
+2026-07-13
 
 ## Versão do documento
-1.3.1
+1.3.3
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -84,6 +84,8 @@ Cada migração deverá possuir, no mínimo, os seguintes campos:
 | DB-024 | 2026-07-10 | Configuração Inicial de Organização e Preferências | Aplicação idempotente de configuração mínima para utilizador administrador (`departamento`, `cargo`, `idioma`, `tema`, `pagina inicial`, `formato data`) com fallback em `user_preferences` quando disponível. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db024_admin_org_preferences_bootstrap.sql](../sql/migrations/20260710_db024_admin_org_preferences_bootstrap.sql) | Não altera UX nem RBAC; apenas regularização inicial de dados. |
 | DB-025 | 2026-07-10 | Discovery Engine — Provider Leads | Criação da tabela `provider_leads` para anúncios normalizados de providers, com deduplicação por provider e identificador externo. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db025_provider_leads_discovery_engine.sql](../sql/migrations/20260710_db025_provider_leads_discovery_engine.sql) | Apenas infraestrutura; sem RLS, RBAC, scheduler, scraping ou automação. |
 | DB-026 | 2026-07-10 | Imovirtual Discovery — Campos Normalizados | Adição idempotente de campos de anúncio, proprietário, localização e publicação em `provider_leads`, com backfill a partir de `raw_data`. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db026_provider_leads_imovirtual_fields.sql](../sql/migrations/20260710_db026_provider_leads_imovirtual_fields.sql) | Sem alteração de RLS, autenticação ou RBAC. |
+| DB-027 | 2026-07-13 | Ciclo de Vida de Conta de Utilizador | Adição de `account_status` em `usuarios` com estados `pending_activation/active/disabled` e carimbos `activation_sent_at`, `activated_at`, `disabled_at`, incluindo backfill idempotente. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.3 Beta | [sql/migrations/20260713_db027_user_account_lifecycle.sql](../sql/migrations/20260713_db027_user_account_lifecycle.sql) | Preparação estrutural para ativação por convite e bloqueio administrativo sem sistema próprio de recuperação de password. |
+| DB-028 | 2026-07-13 | Multi-tenant Scope Fase A | Adição de `empresa_id` (nullable) em `leads`, `provider_leads` e `estoque_nao_publicitado`, com índices de escopo e chave única de `provider_leads` por empresa. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.3 Beta | [sql/migrations/20260713_db028_multi_tenant_scope_phase_a.sql](../sql/migrations/20260713_db028_multi_tenant_scope_phase_a.sql) | Isolamento mínimo por empresa no domínio operacional, sem RLS completo nesta fase. |
 
 ## 5. Migrações Planeadas
 
@@ -114,6 +116,8 @@ Toda mudança estrutural futura deverá ser documentada aqui antes da implementa
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.3.3 | 2026-07-13 | Engenharia da Plataforma OSFlow | Registo da DB-028 (pendente) com escopo multi-tenant Fase A em `leads`, `provider_leads` e `estoque_nao_publicitado`. |
+| 1.3.2 | 2026-07-13 | Engenharia da Plataforma OSFlow | Registo da DB-027 (pendente) com ciclo de vida de conta em `usuarios` (`pending_activation`, `active`, `disabled`) e timestamps de ativação/desativação. |
 | 1.3.0 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-025, infraestrutura do Discovery Engine para `provider_leads`, sem alteração de UX, autenticação ou RBAC. |
 | 1.2.9 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-024 (pendente) para configuração inicial mínima de organização e preferências do administrador, de forma idempotente e sem alteração de UX/autenticação/RBAC. |
 | 1.2.8 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-023 (pendente) com função de diagnóstico de inconsistências A/B/C entre `usuarios` e `auth.users`, sem alteração automática de dados. |

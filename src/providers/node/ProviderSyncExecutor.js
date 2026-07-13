@@ -1,4 +1,5 @@
 import { supabase } from "../../../supabase.js";
+import { calcularScoreInteligente } from "../../modules/radar/services/radarScoreService.js";
 
 /**
  * Executor isolado para sincronização de providers em ambiente Node.js.
@@ -42,6 +43,13 @@ export class ProviderSyncExecutor {
       };
 
       // 2. Insere novo registo respeitando o mapeamento atual
+      const score = calcularScoreInteligente({
+        created_at_first: listing.createdAtFirst,
+        is_private_owner: listing.isPrivateOwner === true,
+        distrito: listing.district,
+        owner_name: listing.ownerName
+      });
+
       const payload = {
         provider: this.providerName,
         external_id: listing.externalId,
@@ -55,6 +63,7 @@ export class ProviderSyncExecutor {
         district: listing.district,
         owner_name: listing.ownerName,
         is_private_owner: listing.isPrivateOwner,
+        score,
         created_at_first: isValidDate(listing.createdAtFirst),
         short_description: listing.shortDescription,
         source: listing.source,

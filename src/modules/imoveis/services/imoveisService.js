@@ -10,13 +10,31 @@ import {
   deleteFicheiro
 } from "../repositories";
 import { FORM_DEFAULTS, TELEFONE_ERROR_MESSAGE } from "../utils";
+import {
+  buildMissingEmpresaError,
+  hasEmpresaId,
+  resolveEmpresaId,
+  warnMissingEmpresaId
+} from "../../../utils/empresaScope";
 
 export async function carregarImoveisService() {
-  return fetchImoveis();
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
+  return fetchImoveis(empresaId);
 }
 
 export async function carregarFicheirosService(imovelId) {
-  return fetchFicheirosByImovelId(imovelId);
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
+  return fetchFicheirosByImovelId(imovelId, empresaId);
 }
 
 export function mapImovelParaFormulario(imovel) {
@@ -129,20 +147,39 @@ export function construirPayloadImovel(form) {
 }
 
 export async function salvarImovelService({ form, isEditing, imovelEdicao }) {
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: null, error: buildMissingEmpresaError() };
+  }
+
   const payload = construirPayloadImovel(form);
+  payload.empresa_id = empresaId;
 
   if (isEditing && imovelEdicao) {
-    return updateImovel(imovelEdicao.id, payload);
+    return updateImovel(imovelEdicao.id, payload, empresaId);
   }
 
   return insertImovel(payload);
 }
 
 export async function apagarFicheiroService(ficheiroId) {
-  return deleteFicheiro(ficheiroId);
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: null, error: buildMissingEmpresaError() };
+  }
+
+  return deleteFicheiro(ficheiroId, empresaId);
 }
 
 export async function uploadFicheiroService({ file, imovelId, setProgresso }) {
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    throw buildMissingEmpresaError();
+  }
+
   const nomeArquivo = `${Date.now()}-${file.name}`;
 
   setProgresso(30);
@@ -156,6 +193,7 @@ export async function uploadFicheiroService({ file, imovelId, setProgresso }) {
 
   const { data: insertData, error: insertError } = await insertImovelFicheiro({
     imovel_id: imovelId,
+    empresa_id: empresaId,
     nome: file.name,
     tipo: file.type.includes("pdf") ? "pdf" : "imagem",
     url: publicUrl.publicUrl

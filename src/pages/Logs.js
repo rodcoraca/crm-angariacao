@@ -3,7 +3,7 @@ import { listarTimelineIdentityAccess, listarUtilizadoresIdentityAccess } from '
 
 const PAGE_SIZE = 50;
 
-export default function Logs({ modo = 'geral', onModoChange }) {
+export default function Logs({ modo = 'geral', onModoChange, currentUser = null }) {
   const [logs, setLogs] = useState([]);
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -18,12 +18,12 @@ export default function Logs({ modo = 'geral', onModoChange }) {
   }, [page]);
 
   const carregarUsuarios = useCallback(async () => {
-    const { data, error } = await listarUtilizadoresIdentityAccess();
+    const { data, error } = await listarUtilizadoresIdentityAccess({ currentUser });
 
     if (!error) {
       setUsuarios(data || []);
     }
-  }, []);
+  }, [currentUser]);
 
   const carregarLogs = useCallback(async ({ reset = false, userId = null } = {}) => {
     if (reset) {
@@ -44,7 +44,8 @@ export default function Logs({ modo = 'geral', onModoChange }) {
     const { data, error, hasMore: nextHasMore } = await listarTimelineIdentityAccess({
       page: targetPage,
       pageSize: PAGE_SIZE,
-      userFilter: selectedUser
+      userFilter: selectedUser,
+      currentUser
     });
 
     if (!error) {
@@ -56,7 +57,7 @@ export default function Logs({ modo = 'geral', onModoChange }) {
 
     setLoading(false);
     setLoadingMore(false);
-  }, [usuarios]);
+  }, [usuarios, currentUser]);
 
   useEffect(() => {
     carregarUsuarios();

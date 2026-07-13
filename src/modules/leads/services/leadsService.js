@@ -10,6 +10,12 @@ import {
   updateLeadById
 } from "../repositories/leadsRepository";
 import { resolverContratoIdentidade } from "../utils/identityContract";
+import {
+  buildMissingEmpresaError,
+  hasEmpresaId,
+  resolveEmpresaId,
+  warnMissingEmpresaId
+} from "../../../utils/empresaScope";
 
 async function executarMutacaoComErro(mutationHandler) {
   const result = await mutationHandler();
@@ -46,14 +52,26 @@ function criarContextoAuditoriaLeads({
 }
 
 export async function carregarLeadsPorTipo(tipo) {
-  const { data, error } = await fetchLeadsByTipo(tipo);
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
+  const { data, error } = await fetchLeadsByTipo(tipo, empresaId);
 
   if (error) return { data: [], error };
   return { data: data || [], error: null };
 }
 
 export async function carregarLeadsDashboard() {
-  const { data, error } = await fetchDashboardLeads();
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
+  const { data, error } = await fetchDashboardLeads(empresaId);
 
   if (error) return { data: [], error };
   return { data: data || [], error: null };
@@ -61,6 +79,12 @@ export async function carregarLeadsDashboard() {
 
 export async function alterarTipoLead(leadId, novoTipo, user, leadAnterior = null) {
   try {
+    const empresaId = await resolveEmpresaId(user);
+    if (!hasEmpresaId(empresaId)) {
+      warnMissingEmpresaId();
+      return { error: buildMissingEmpresaError() };
+    }
+
     const contexto = criarContextoAuditoriaLeads({
       user,
       leadId,
@@ -80,7 +104,7 @@ export async function alterarTipoLead(leadId, novoTipo, user, leadAnterior = nul
     const result = await auditMutation("update", () => executarMutacaoComErro(() => updateLeadById(leadId, {
       tipo: novoTipo,
       updated_at: new Date().toISOString()
-    })), contexto);
+    }, empresaId)), contexto);
 
     return { error: null, data: result?.data || null };
   } catch (error) {
@@ -90,6 +114,12 @@ export async function alterarTipoLead(leadId, novoTipo, user, leadAnterior = nul
 
 export async function salvarObservacaoLead(leadId, observacoes, user) {
   try {
+    const empresaId = await resolveEmpresaId(user);
+    if (!hasEmpresaId(empresaId)) {
+      warnMissingEmpresaId();
+      return { error: buildMissingEmpresaError() };
+    }
+
     const contexto = criarContextoAuditoriaLeads({
       user,
       leadId,
@@ -103,7 +133,7 @@ export async function salvarObservacaoLead(leadId, observacoes, user) {
     const result = await auditMutation("update", () => executarMutacaoComErro(() => updateLeadById(leadId, {
       observacoes,
       updated_at: new Date().toISOString()
-    })), contexto);
+    }, empresaId)), contexto);
 
     return { error: null, data: result?.data || null };
   } catch (error) {
@@ -112,7 +142,13 @@ export async function salvarObservacaoLead(leadId, observacoes, user) {
 }
 
 export async function carregarFichaLead(leadId) {
-  const { data, error } = await fetchLeadById(leadId);
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { lead: null, form: null, error: null };
+  }
+
+  const { data, error } = await fetchLeadById(leadId, empresaId);
   if (error) return { lead: null, form: null, error };
 
   return {
@@ -148,7 +184,13 @@ export function validarEntradaTelefone(valor) {
 export async function verificarLeadExistente(telefone) {
   if (!telefone || !validarTelefone(telefone)) return { lead: null, error: null };
 
-  const { data, error } = await fetchLeadByTelefone(telefone);
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { lead: null, error: null };
+  }
+
+  const { data, error } = await fetchLeadByTelefone(telefone, empresaId);
 
   if (error) return { lead: null, error };
 
@@ -157,29 +199,38 @@ export async function verificarLeadExistente(telefone) {
 
 export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao, user }) {
   const telefoneNormalizado = normalizarTelefone(telefone);
+  const hasPhone = Boolean(telefoneNormalizado);
 
-  if (!validarTelefone(telefoneNormalizado)) {
+  if (hasPhone && !validarTelefone(telefoneNormalizado)) {
     return {
       error: { message: "Informe o telefone com 12 dígitos (indicativo + 9 dígitos).\n", invalidPhone: true }
     };
   }
 
-  const leadExistenteResult = await verificarLeadExistente(telefoneNormalizado);
-  if (leadExistenteResult.error) return { error: leadExistenteResult.error };
+  if (hasPhone) {
+    const leadExistenteResult = await verificarLeadExistente(telefoneNormalizado);
+    if (leadExistenteResult.error) return { error: leadExistenteResult.error };
 
-  if (leadExistenteResult.lead) {
-    return { duplicateLead: leadExistenteResult.lead, error: null };
+    if (leadExistenteResult.lead) {
+      return { duplicateLead: leadExistenteResult.lead, error: null };
+    }
   }
 
   const contrato = resolverContratoIdentidade(user);
+  const empresaId = await resolveEmpresaId(user);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { error: buildMissingEmpresaError() };
+  }
 
   const payload = {
     nome,
-    telefone: telefoneNormalizado,
+    telefone: hasPhone ? telefoneNormalizado : null,
     tipo,
     origem,
     observacoes: observacao,
     agente_id: contrato.responsavelId,
+    empresa_id: empresaId,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
   };
@@ -209,6 +260,11 @@ export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao
 
 export async function salvarFichaLead({ leadId, form, user, leadAtual = null }) {
   const telefoneNormalizado = normalizarTelefone(form.telefone);
+  const empresaId = await resolveEmpresaId(user);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { error: buildMissingEmpresaError() };
+  }
 
   if (!validarTelefone(telefoneNormalizado)) {
     return {
@@ -216,7 +272,7 @@ export async function salvarFichaLead({ leadId, form, user, leadAtual = null }) 
     };
   }
 
-  const { data: leadDuplicada, error: erroDuplicado } = await fetchLeadByTelefoneExcludingId(leadId, telefoneNormalizado);
+  const { data: leadDuplicada, error: erroDuplicado } = await fetchLeadByTelefoneExcludingId(leadId, telefoneNormalizado, empresaId);
 
   if (erroDuplicado) {
     return { error: erroDuplicado };
@@ -262,7 +318,7 @@ export async function salvarFichaLead({ leadId, form, user, leadAtual = null }) 
       }
     });
 
-    await auditMutation("update", () => executarMutacaoComErro(() => updateLeadById(leadId, updatePayload)), contexto);
+    await auditMutation("update", () => executarMutacaoComErro(() => updateLeadById(leadId, updatePayload, empresaId)), contexto);
   } catch (error) {
     return { error };
   }

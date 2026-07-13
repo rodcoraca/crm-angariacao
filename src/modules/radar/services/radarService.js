@@ -1,13 +1,19 @@
 import { RadarRepository } from "../repositories/RadarRepository";
 import { createRadarViewModel } from "../viewmodels/radarViewModel";
 import { salvarLeadFluxo } from "../../leads/services";
-import { recalcularOpportunityScore } from "./radarScoreService";
 import { buildConfiguredRadarProvider } from "./radarProviderConfig";
 import {
   appendRadarMetadataBlockOnce,
   buildRadarLeadMetadata
 } from "../contracts/radarLeadMetadata";
 import { supabase } from "../../../supabase";
+import {
+  applyEmpresaScope,
+  buildMissingEmpresaError,
+  hasEmpresaId,
+  resolveEmpresaId,
+  warnMissingEmpresaId
+} from "../../../utils/empresaScope";
 
 function normalizeNumericScore(value) {
   const parsed = Number(value);
@@ -24,12 +30,12 @@ function classifyOpportunity(opportunity) {
 }
 
 function normalizeOpportunity(opportunity) {
-  const recalculated = recalcularOpportunityScore(opportunity);
+  const normalizedScore = normalizeNumericScore(opportunity?.score);
 
   return {
-    ...recalculated,
-    score: normalizeNumericScore(recalculated?.score),
-    classificacao: classifyOpportunity(recalculated)
+    ...opportunity,
+    score: normalizedScore,
+    classificacao: classifyOpportunity({ ...opportunity, score: normalizedScore })
   };
 }
 
@@ -37,16 +43,15 @@ function sortByScore(opportunities) {
   return [...opportunities].sort((a, b) => b.score - a.score);
 }
 
-function buildRadarPhone(opportunityId) {
-  const raw = String(opportunityId || "");
-  let hash = 0;
+function resolveLeadOriginFromProvider(providerValue) {
+  const normalized = String(providerValue || "").trim().toLowerCase();
 
-  for (let i = 0; i < raw.length; i += 1) {
-    hash = (hash * 31 + raw.charCodeAt(i)) % 100000000;
-  }
+  if (normalized.includes("imovirtual")) return "Imovirtual";
+  if (normalized.includes("olx")) return "OLX";
+  if (normalized.includes("idealista")) return "Idealista";
 
-  const localNumber = String(hash).padStart(8, "0");
-  return `3519${localNumber}`;
+  const text = String(providerValue || "").trim();
+  return text || "Radar";
 }
 
 function mapOpportunityToLeadPayload(opportunity, user) {
@@ -70,7 +75,7 @@ function mapOpportunityToLeadPayload(opportunity, user) {
 
   const nomeLeadBase = advertiserName || opportunity?.titulo || "Lead Radar";
   const nome = contactLabel ? `${nomeLeadBase} (${contactLabel})` : nomeLeadBase;
-  const telefoneLead = contactPhone || buildRadarPhone(opportunity?.id);
+  const telefoneLead = contactPhone || null;
 
   const observacaoBase = [
     `Importado via Radar (${new Date().toISOString()})`,
@@ -85,7 +90,7 @@ function mapOpportunityToLeadPayload(opportunity, user) {
     nome,
     telefone: telefoneLead,
     tipo: opportunity?.score >= 85 ? "quente" : opportunity?.score >= 75 ? "morno" : "frio",
-    origem: "Radar",
+    origem: resolveLeadOriginFromProvider(metadata.provider || opportunity?.source || opportunity?.origem),
     observacao,
     user
   };
@@ -117,6 +122,12 @@ export class RadarService {
   }
 
   async loadProviderRegistryState() {
+    const empresaId = await resolveEmpresaId();
+    if (!hasEmpresaId(empresaId)) {
+      warnMissingEmpresaId();
+      return [];
+    }
+
     const { data, error } = await supabase
       .from("provider_registry")
       .select("provider_code,last_execution,next_execution,last_error,sync_running,enabled");
@@ -237,15 +248,28 @@ export class RadarService {
     const opportunitySource = String(opportunity?.origem || opportunity?.source || "").toLowerCase();
     if (opportunitySource === "imovirtual") {
       const importedBy = user?.perfil_id || user?.id || null;
-      const { error: providerLeadUpdateError } = await supabase
+      const empresaId = await resolveEmpresaId(user);
+      if (!hasEmpresaId(empresaId)) {
+        warnMissingEmpresaId();
+        return {
+          ok: false,
+          message: "Operacao sem empresa_id",
+          error: buildMissingEmpresaError()
+        };
+      }
+
+      const scopedUpdate = applyEmpresaScope(supabase
         .from("provider_leads")
         .update({
           imported: true,
+          empresa_id: empresaId,
           crm_lead_id: result?.id || null,
           imported_at: new Date().toISOString(),
           imported_by: importedBy
         })
-        .eq("id", opportunity.id);
+        .eq("id", opportunity.id), empresaId);
+
+      const { error: providerLeadUpdateError } = await scopedUpdate;
 
       if (providerLeadUpdateError) {
         return {

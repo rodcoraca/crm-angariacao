@@ -1,4 +1,5 @@
 import { createLead, findByExternalId } from "../services/providerLeadService.js";
+import { calcularScoreInteligente } from "../modules/radar/services/radarScoreService.js";
 
 /**
  * Contrato de provider para futuras integrações com o Imovirtual.
@@ -111,6 +112,13 @@ export class ImovirtualProvider {
         continue;
       }
 
+      const score = calcularScoreInteligente({
+        created_at_first: listing.createdAtFirst,
+        is_private_owner: listing.isPrivateOwner === true,
+        distrito: listing.district,
+        owner_name: listing.ownerName
+      });
+
       const result = await createLead({
         provider: this.name,
         external_id: listing.externalId,
@@ -124,6 +132,7 @@ export class ImovirtualProvider {
         district: listing.district,
         owner_name: listing.ownerName,
         is_private_owner: listing.isPrivateOwner,
+        score,
         created_at_first: listing.createdAtFirst,
         short_description: listing.shortDescription,
         source: listing.source,

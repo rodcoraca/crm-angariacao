@@ -6,6 +6,12 @@ import {
   uploadDocumentoStorage
 } from "../repositories";
 import { DOCUMENTOS_UPLOAD_RULES } from "../utils";
+import {
+  buildMissingEmpresaError,
+  hasEmpresaId,
+  resolveEmpresaId,
+  warnMissingEmpresaId
+} from "../../../utils/empresaScope";
 
 export function validarTipoUpload(file, acceptedMimeTypes = DOCUMENTOS_UPLOAD_RULES.acceptedMimeTypes) {
   if (!file) return false;
@@ -58,10 +64,22 @@ export function montarPayloadDocumento({ nome, categoria, descricao, file, publi
 }
 
 export async function carregarDocumentosService() {
-  return fetchDocumentos();
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
+  return fetchDocumentos(empresaId);
 }
 
 export async function uploadDocumentoService({ nome, categoria, descricao, file }) {
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: null, error: buildMissingEmpresaError() };
+  }
+
   const validacao = validarUploadDocumento(file);
   if (!validacao.ok) {
     return {
@@ -87,6 +105,8 @@ export async function uploadDocumentoService({ nome, categoria, descricao, file 
     publicUrl: publicUrl.publicUrl
   });
 
+  payload.empresa_id = empresaId;
+
   const payloadValidation = validarPayloadDocumento(payload);
   if (!payloadValidation.ok) {
     return {
@@ -104,5 +124,11 @@ export async function uploadDocumentoService({ nome, categoria, descricao, file 
 }
 
 export async function apagarDocumentoService(documentoId) {
-  return deleteDocumentoById(documentoId);
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: null, error: buildMissingEmpresaError() };
+  }
+
+  return deleteDocumentoById(documentoId, empresaId);
 }

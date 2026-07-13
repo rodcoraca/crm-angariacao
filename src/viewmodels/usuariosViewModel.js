@@ -60,6 +60,15 @@ function resolveDisplayValue(...values) {
   return "Não configurado";
 }
 
+function resolveAccountStatus(meta, form) {
+  const status = String(form?.account_status || meta?.account_status || "").trim().toLowerCase();
+  if (status === "pending_activation" || status === "active" || status === "disabled") {
+    return status;
+  }
+
+  return form?.ativo === false ? "disabled" : "active";
+}
+
 export function criarUsuariosViewModel({
   form,
   perfilOrganizacional,
@@ -77,15 +86,9 @@ export function criarUsuariosViewModel({
       : "Novo utilizador";
 
   const ultimaSessao = resolveUltimaSessaoValida(sessoesUsuario);
-  const ultimoEvento = auditoriaUsuario[0] || null;
   const ultimoAcessoFormatado = formatDateTime(
     ultimaSessao?.last_activity_at || ultimaSessao?.login_at || ultimaSessao?.updated_at
   );
-  const ultimaAcaoFormatada =
-    ultimoEvento?.event_type && ultimoEvento?.created_at
-      ? `${ultimoEvento.event_type} (${formatDateTime(ultimoEvento.created_at) || "n/d"})`
-      : ultimoEvento?.event_type || "Sem atividade registada";
-  const existeAtividade = Boolean(ultimoAcessoFormatado || ultimoEvento);
   const ultimoAcessoAtividade = formatDateTime(atividadeResumo?.ultimoAcessoAt);
   const ultimoEventoAtividade = atividadeResumo?.ultimaAcao || null;
   const ultimaAcaoAtividade =
@@ -104,7 +107,7 @@ export function criarUsuariosViewModel({
     },
 
     conta: {
-      estado: form.ativo ? "ativo" : "inativo",
+      estado: resolveAccountStatus(usuarioSelecionadoMeta, form),
       ultimoAcesso: ultimoAcessoFormatado || "Sem acessos registados",
       dataCriacao,
       username: form.username,

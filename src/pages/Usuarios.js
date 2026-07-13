@@ -31,6 +31,21 @@ const USER_STEPS = [
 
 const USER_STEPS_REQUIRE_SELECTION = ['ficha', 'sessoes', 'auditoria', 'permissoes'];
 
+function resolveAccountStatus(usuario) {
+  const status = String(usuario?.account_status || '').trim().toLowerCase();
+  if (status === 'pending_activation' || status === 'active' || status === 'disabled') {
+    return status;
+  }
+
+  return usuario?.ativo === false ? 'disabled' : 'active';
+}
+
+function getAccountStatusLabel(status) {
+  if (status === 'pending_activation') return 'Pendente ativação';
+  if (status === 'disabled') return 'Desativado';
+  return 'Ativo';
+}
+
 export default function Usuarios({ currentUser }) {
   const theme = useTheme();
   const { can } = usePermissions();
@@ -67,10 +82,12 @@ export default function Usuarios({ currentUser }) {
     confirmarPassword: '',
     permissoes: {},
     ativo: true,
+    account_status: 'active',
   });
 
   useEffect(() => {
     carregarUsuarios();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -83,13 +100,14 @@ export default function Usuarios({ currentUser }) {
     }
 
     carregarTimelineUsuario(usuarioSelecionadoMeta);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioSelecionadoMeta]);
 
   async function carregarUsuarios() {
     setLoading(true);
     setErro('');
 
-    const { data, error } = await listarUsuarios();
+    const { data, error } = await listarUsuarios({ currentUser });
     if (error) {
       setErro(error.message || 'Falha ao carregar utilizadores.');
       setUsuarios([]);
@@ -107,9 +125,9 @@ export default function Usuarios({ currentUser }) {
     setLoadingTimeline(true);
 
     const [sessoesResult, auditoriaResult, atividadeResult, preferenciasResult] = await Promise.all([
-      listarSessoesPorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id }),
-      listarAuditoriaPorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id }),
-      obterResumoAtividadePorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id }),
+      listarSessoesPorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id, currentUser }),
+      listarAuditoriaPorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id, currentUser }),
+      obterResumoAtividadePorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id, currentUser }),
       listarPreferenciasPorUtilizador({ perfilId: usuario.id }),
     ]);
 
@@ -153,6 +171,7 @@ export default function Usuarios({ currentUser }) {
       confirmarPassword: '',
       permissoes: {},
       ativo: true,
+      account_status: 'active',
     });
     setModoEdicao(false);
     setUsuarioSelecionadoId(null);
@@ -186,7 +205,8 @@ export default function Usuarios({ currentUser }) {
       password: '',
       confirmarPassword: '',
       permissoes: usuario.permissoes || {},
-      ativo: usuario.ativo !== false,
+      ativo: resolveAccountStatus(usuario) !== 'disabled',
+      account_status: resolveAccountStatus(usuario),
     });
   }
 
@@ -204,6 +224,16 @@ export default function Usuarios({ currentUser }) {
   }
 
   function atualizarCampo(campo, valor) {
+    if (campo === 'account_status') {
+      const nextStatus = String(valor || '').trim().toLowerCase();
+      setForm((prev) => ({
+        ...prev,
+        account_status: nextStatus,
+        ativo: nextStatus !== 'disabled',
+      }));
+      return;
+    }
+
     setForm((prev) => ({ ...prev, [campo]: valor }));
   }
 
@@ -288,11 +318,6 @@ export default function Usuarios({ currentUser }) {
       return;
     }
 
-    if (!modoEdicao && (!form.password || !form.confirmarPassword)) {
-      setErro('Defina a password e confirme-a.');
-      return;
-    }
-
     if (form.password || form.confirmarPassword) {
       if (form.password !== form.confirmarPassword) {
         setErro('As passwords não coincidem.');
@@ -321,7 +346,9 @@ export default function Usuarios({ currentUser }) {
 
   const resumo = useMemo(() => ({
     total: usuarios.length,
-    ativos: usuarios.filter((u) => u.ativo).length,
+    ativos: usuarios.filter((u) => resolveAccountStatus(u) === 'active').length,
+    pendentes: usuarios.filter((u) => resolveAccountStatus(u) === 'pending_activation').length,
+    desativados: usuarios.filter((u) => resolveAccountStatus(u) === 'disabled').length,
   }), [usuarios]);
 
   const ultimoEventoSelecionado = useMemo(() => {
@@ -345,7 +372,7 @@ export default function Usuarios({ currentUser }) {
 
     const nome = `${usuarioSelecionadoMeta.nome || ''} ${usuarioSelecionadoMeta.apelido || ''}`.trim() || 'Sem nome';
     const perfil = usuarioSelecionadoMeta?.permissoes?.__perfil || 'Nao definido';
-    const estado = usuarioSelecionadoMeta.ativo === false ? 'Inativo' : 'Ativo';
+    const estado = getAccountStatusLabel(resolveAccountStatus(usuarioSelecionadoMeta));
 
     const ultimaSessao = sessoesUsuario[0];
     const ultimaAtividade = ultimaSessao?.last_activity_at
@@ -370,8 +397,10 @@ export default function Usuarios({ currentUser }) {
       const matchPesquisa = !termo || nomeCompleto.includes(termo) || email.includes(termo) || username.includes(termo);
 
       if (!matchPesquisa) return false;
-      if (filtroEstado === 'ativos') return usuario.ativo !== false;
-      if (filtroEstado === 'inativos') return usuario.ativo === false;
+      const status = resolveAccountStatus(usuario);
+      if (filtroEstado === 'ativos') return status === 'active';
+      if (filtroEstado === 'pendentes') return status === 'pending_activation';
+      if (filtroEstado === 'inativos') return status === 'disabled';
       return true;
     });
   }, [usuarios, filtroPesquisa, filtroEstado]);
@@ -782,6 +811,7 @@ export default function Usuarios({ currentUser }) {
               <select style={styles.input} value={filtroEstado} onChange={(event) => setFiltroEstado(event.target.value)}>
                 <option value="todos">Todos</option>
                 <option value="ativos">Ativos</option>
+                <option value="pendentes">Pendentes ativação</option>
                 <option value="inativos">Inativos</option>
               </select>
             </div>
@@ -810,7 +840,7 @@ export default function Usuarios({ currentUser }) {
                   </div>
                   <div style={styles.userActions}>
                     {String(usuarioSelecionadoId || '') === String(usuario.id) ? <span style={{ ...styles.badge, background: `${theme.colors.primary}22`, color: theme.colors.primary }}>Selecionado</span> : null}
-                    <span style={styles.badge}>{usuario.ativo ? 'Ativo' : 'Inativo'}</span>
+                    <span style={styles.badge}>{getAccountStatusLabel(resolveAccountStatus(usuario))}</span>
                   </div>
                 </div>
               ))}
@@ -819,6 +849,8 @@ export default function Usuarios({ currentUser }) {
             <div style={styles.bottomStats}>
               <span><strong>Total:</strong> {resumo.total}</span>
               <span><strong>Ativos:</strong> {resumo.ativos}</span>
+              <span><strong>Pendentes:</strong> {resumo.pendentes}</span>
+              <span><strong>Desativados:</strong> {resumo.desativados}</span>
             </div>
           </div>
         </>

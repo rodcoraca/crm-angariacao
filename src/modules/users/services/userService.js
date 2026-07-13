@@ -1,11 +1,18 @@
 import { supabase } from "../../../supabase";
+import {
+  applyEmpresaScope,
+  buildMissingEmpresaError,
+  hasEmpresaId,
+  resolveEmpresaIdFromContext,
+  warnMissingEmpresaId
+} from "../../../utils/empresaScope";
 import { normalizarPermissoes } from "../../../utils/usuarios";
 import { registrarAcessoNegado, registrarCriacao, registrarEdicao } from "../../audit/services";
-import { createAuthUserFromAdminFlow } from "../../auth/services";
+import { createAuthUserFromAdminFlow, requestPasswordReset } from "../../auth/services";
 import { fetchUserPreferencesByUserId, upsertUserPreferencesByUserId } from "../repositories";
 
 const USERS_TABLE = "usuarios";
-const USER_LIST_BASE_SELECT = "id,auth_user_id,nome,apelido,email,telefone,username,ativo,permissoes,empresa_id,created_at,updated_at";
+const USER_LIST_BASE_SELECT = "id,auth_user_id,nome,apelido,email,telefone,username,ativo,account_status,activation_sent_at,activated_at,disabled_at,permissoes,empresa_id,created_at,updated_at";
 
 function resolveActorUserId(currentUser) {
   return currentUser?.perfil_id || currentUser?.id || null;
@@ -92,10 +99,16 @@ function isFunctionMissing(error) {
     || message.includes("function public.listar_utilizadores_inconsistentes");
 }
 
-export async function listarUsuarios() {
-  return supabase
+export async function listarUsuarios({ currentUser } = {}) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
+  return applyEmpresaScope(supabase
     .from(USERS_TABLE)
-    .select(USER_LIST_BASE_SELECT)
+    .select(USER_LIST_BASE_SELECT), empresaId)
     .order("created_at", { ascending: false });
 }
 
@@ -105,9 +118,15 @@ export async function registrarAcaoNegadaUtilizadores({
   requiredPermission,
   action
 }) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { error: buildMissingEmpresaError() };
+  }
+
   return registrarAcessoNegado({
     userId: resolveActorUserId(currentUser),
-    empresaId: currentUser?.user_metadata?.empresa_id || null,
+    empresaId,
     modulo: "users",
     entidade: "usuarios",
     entidadeId: usuarioSelecionadoId || null,
@@ -132,6 +151,15 @@ export async function guardarUsuarioComAuditoria({
   const telefone = String(form.telefone || "").trim();
   const username = String(form.username || "").trim();
   const perfil = String(perfilOrganizacional || "").trim();
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { error: buildMissingEmpresaError() };
+  }
+
+  const accountStatus = String(form.account_status || (form.ativo ? "active" : "disabled")).trim().toLowerCase();
+  const isDisabled = accountStatus === "disabled";
+  const isPendingActivation = accountStatus === "pending_activation";
 
   const permissoesBase = {
     ...(permissoesAtuais && typeof permissoesAtuais === "object" ? permissoesAtuais : {}),
@@ -152,7 +180,12 @@ export async function guardarUsuarioComAuditoria({
     telefone,
     username,
     permissoes: permissoesNormalizadas,
-    ativo: form.ativo,
+    ativo: !isDisabled,
+    account_status: accountStatus,
+    activated_at: accountStatus === "active" ? new Date().toISOString() : null,
+    activation_sent_at: isPendingActivation ? new Date().toISOString() : null,
+    disabled_at: isDisabled ? new Date().toISOString() : null,
+    empresa_id: empresaId,
     created_by: resolveActorUserId(currentUser)
   };
 
@@ -160,7 +193,10 @@ export async function guardarUsuarioComAuditoria({
   let createdProfileId = usuarioSelecionadoId || null;
 
   if (modoEdicao && usuarioSelecionadoId) {
-    ({ error } = await supabase.from(USERS_TABLE).update(payload).eq("id", usuarioSelecionadoId));
+    ({ error } = await applyEmpresaScope(
+      supabase.from(USERS_TABLE).update(payload).eq("id", usuarioSelecionadoId),
+      empresaId
+    ));
   } else {
     const authCreation = await createAuthUserFromAdminFlow({
       email,
@@ -194,16 +230,25 @@ export async function guardarUsuarioComAuditoria({
     createdProfileId = insertedUser?.id || null;
 
     if (!error) {
-      const { data: consistencyProfile, error: consistencyError } = await supabase
+      const { data: consistencyProfile, error: consistencyError } = await applyEmpresaScope(supabase
         .from(USERS_TABLE)
         .select("id,auth_user_id,email")
-        .eq("auth_user_id", authUserId)
+        .eq("auth_user_id", authUserId),
+        empresaId
+      )
         .maybeSingle();
 
       if (consistencyError || !consistencyProfile || consistencyProfile.email !== email) {
         return {
           error: consistencyError || { message: "Falha de consistencia entre auth.users e usuarios." }
         };
+      }
+
+      if (isPendingActivation) {
+        const { error: activationInviteError } = await requestPasswordReset(email);
+        if (activationInviteError) {
+          return { error: activationInviteError };
+        }
       }
     }
   }
@@ -245,31 +290,43 @@ export async function guardarUsuarioComAuditoria({
   return { error: null, permissoesNormalizadas };
 }
 
-export async function listarSessoesPorUtilizador({ perfilId, authUserId, limit = 50 }) {
+export async function listarSessoesPorUtilizador({ perfilId, authUserId, limit = 50, currentUser = null }) {
   if (!perfilId && !authUserId) return { data: [], error: null };
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
 
-  let query = supabase
+  let query = applyEmpresaScope(supabase
     .from("user_sessions")
     .select("id,user_id,empresa_id,status,ip_address,user_agent,device,login_at,last_activity_at,logout_at,updated_at")
+  , empresaId)
     .order("login_at", { ascending: false })
     .limit(limit);
 
   return applyUserFilter(query, { perfilId, authUserId });
 }
 
-export async function listarAuditoriaPorUtilizador({ perfilId, authUserId, limit = 50 }) {
+export async function listarAuditoriaPorUtilizador({ perfilId, authUserId, limit = 50, currentUser = null }) {
   if (!perfilId && !authUserId) return { data: [], error: null };
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
 
-  let query = supabase
+  let query = applyEmpresaScope(supabase
     .from("audit_logs")
     .select("id,user_id,event_type,status,modulo,entidade,entidade_id,metadata,created_at")
+  , empresaId)
     .order("created_at", { ascending: false })
     .limit(limit);
 
   return applyUserFilter(query, { perfilId, authUserId });
 }
 
-export async function obterResumoAtividadePorUtilizador({ perfilId, authUserId }) {
+export async function obterResumoAtividadePorUtilizador({ perfilId, authUserId, currentUser = null }) {
   if (!perfilId && !authUserId) {
     return {
       data: {
@@ -281,28 +338,44 @@ export async function obterResumoAtividadePorUtilizador({ perfilId, authUserId }
     };
   }
 
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return {
+      data: {
+        ultimoAcessoAt: null,
+        ultimaAcao: null,
+        numeroAcessos: 0,
+      },
+      error: null,
+    };
+  }
+
   const ultimoAcessoQuery = applyUserFilter(
-    supabase
+    applyEmpresaScope(supabase
       .from("user_sessions")
       .select("last_activity_at")
       .not("last_activity_at", "is", null)
+    , empresaId)
       .order("last_activity_at", { ascending: false })
       .limit(1),
     { perfilId, authUserId }
   );
 
   const numeroAcessosQuery = applyUserFilter(
-    supabase
+    applyEmpresaScope(supabase
       .from("user_sessions")
       .select("id", { count: "exact", head: true })
+    , empresaId)
       .not("login_at", "is", null),
     { perfilId, authUserId }
   );
 
   const ultimaAcaoQuery = applyUserFilter(
-    supabase
+    applyEmpresaScope(supabase
       .from("audit_logs")
       .select("id,event_type,created_at")
+    , empresaId)
       .order("created_at", { ascending: false })
       .limit(1),
     { perfilId, authUserId }
@@ -342,7 +415,13 @@ export async function listarPreferenciasPorUtilizador({ perfilId }) {
   return result;
 }
 
-export async function listarUtilizadoresInconsistentes() {
+export async function listarUtilizadoresInconsistentes({ currentUser = null } = {}) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
   const result = await supabase.rpc("listar_utilizadores_inconsistentes");
 
   if (isFunctionMissing(result.error)) {

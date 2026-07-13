@@ -1,61 +1,62 @@
 import { supabase } from "../../../supabase";
+import { applyEmpresaScope } from "../../../utils/empresaScope";
 
-export function fetchLeadsByTipo(tipo) {
-  return supabase
+export function fetchLeadsByTipo(tipo, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from("leads")
     .select("id, nome, telefone, tipo, observacoes, agente_id, created_at, updated_at")
-    .eq("tipo", tipo)
+    .eq("tipo", tipo), empresaId)
     .order("created_at", { ascending: false });
 }
 
-export function fetchLeadById(leadId) {
-  return supabase
+export function fetchLeadById(leadId, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from("leads")
     .select("*")
-    .eq("id", leadId)
+    .eq("id", leadId), empresaId)
     .single();
 }
 
-export function fetchDashboardLeads() {
-  return supabase
+export function fetchDashboardLeads(empresaId = null) {
+  return applyEmpresaScope(supabase
     .from("leads")
-    .select("id, nome, telefone, tipo, created_at, updated_at")
+    .select("id, nome, telefone, tipo, created_at, updated_at"), empresaId)
     .order("created_at", { ascending: false });
 }
 
-export function fetchLeadByTelefone(telefone) {
-  return supabase
+export function fetchLeadByTelefone(telefone, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from("leads")
     .select("id, telefone")
-    .eq("telefone", telefone)
+    .eq("telefone", telefone), empresaId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 }
 
-export function fetchLeadByTelefoneExcludingId(leadId, telefone) {
-  return supabase
+export function fetchLeadByTelefoneExcludingId(leadId, telefone, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from("leads")
     .select("id, telefone")
     .neq("id", leadId)
-    .eq("telefone", telefone)
+    .eq("telefone", telefone), empresaId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
 }
 
-export function fetchLeadAgenteIds() {
-  return supabase
+export function fetchLeadAgenteIds(empresaId = null) {
+  return applyEmpresaScope(supabase
     .from("leads")
     .select("agente_id")
-    .not("agente_id", "is", null);
+    .not("agente_id", "is", null), empresaId);
 }
 
-export function updateLeadById(leadId, payload) {
-  return supabase
+export function updateLeadById(leadId, payload, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from("leads")
     .update(payload)
-    .eq("id", leadId);
+    .eq("id", leadId), empresaId);
 }
 
 export function insertLead(payload) {

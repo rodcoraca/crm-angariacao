@@ -1,4 +1,5 @@
 import { formatarNomeApresentacao } from "../../../utils/nomes";
+import { resolveEmpresaIdFromContext } from "../../../utils/empresaScope";
 import { fetchAgentesAtivos, fetchLeadAgenteIds } from "../repositories/leadsRepository";
 import { pertenceAoMesmoContrato, resolverContratoIdentidade } from "../utils/identityContract";
 
@@ -49,7 +50,8 @@ export async function carregarAgentesParaFicha(agenteAtualId, user) {
     return mapAgentes(data);
   }
 
-  const { data: leadsData } = await fetchLeadAgenteIds();
+  const empresaId = resolveEmpresaIdFromContext(user);
+  const { data: leadsData } = await fetchLeadAgenteIds(empresaId);
   const ids = [...new Set((leadsData || []).map((lead) => lead.agente_id).filter(Boolean))];
   const contrato = resolverContratoIdentidade(user);
 

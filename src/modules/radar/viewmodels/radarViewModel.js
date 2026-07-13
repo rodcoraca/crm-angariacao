@@ -34,10 +34,6 @@ function normalizePublished(item) {
   return formatPublishedDate(publishedAt);
 }
 
-function normalizeScore(item) {
-  return normalizeText(item?.score, "0");
-}
-
 function normalizeStatus(item) {
   return normalizeText(item?.estado, "Novo");
 }
@@ -163,7 +159,6 @@ export class RadarViewModel {
         ...item,
         publicado_em: item.created_at_first || item.publicado_em || item.published_at || null
       }),
-      score: normalizeScore(item),
       estado: normalizeStatus(item),
       // Adicionamos os campos extra para consumo na UI
       tipo: item.tipo,
@@ -314,7 +309,6 @@ export function mapRadarTableViewModel(rows) {
       ...item,
       publicado_em: item.created_at_first || item.publicado_em || item.published_at || null
     }),
-    score: normalizeScore(item),
     estado: normalizeStatus(item)
   }));
 }

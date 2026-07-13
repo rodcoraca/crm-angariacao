@@ -1,29 +1,30 @@
 import { supabase } from "../../../supabase";
+import { applyEmpresaScope } from "../../../utils/empresaScope";
 
 const IMOVEIS_TABLE = "estoque_nao_publicitado";
 const FICHEIROS_TABLE = "imovel_ficheiros";
 const STORAGE_BUCKET = "crm-imoveis";
 
-export function fetchImoveis() {
-  return supabase
+export function fetchImoveis(empresaId = null) {
+  return applyEmpresaScope(supabase
     .from(IMOVEIS_TABLE)
-    .select("*")
+    .select("*"), empresaId)
     .order("created_at", { ascending: false });
 }
 
-export function fetchFicheirosByImovelId(imovelId) {
-  return supabase
+export function fetchFicheirosByImovelId(imovelId, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from(FICHEIROS_TABLE)
     .select("*")
-    .eq("imovel_id", imovelId)
+    .eq("imovel_id", imovelId), empresaId)
     .order("created_at", { ascending: false });
 }
 
-export function updateImovel(imovelId, payload) {
-  return supabase
+export function updateImovel(imovelId, payload, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from(IMOVEIS_TABLE)
     .update(payload)
-    .eq("id", imovelId);
+    .eq("id", imovelId), empresaId);
 }
 
 export function insertImovel(payload) {
@@ -32,11 +33,11 @@ export function insertImovel(payload) {
     .insert([payload]);
 }
 
-export function deleteFicheiro(ficheiroId) {
-  return supabase
+export function deleteFicheiro(ficheiroId, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from(FICHEIROS_TABLE)
     .delete()
-    .eq("id", ficheiroId);
+    .eq("id", ficheiroId), empresaId);
 }
 
 export function uploadImovelStorageFile(nomeArquivo, file) {

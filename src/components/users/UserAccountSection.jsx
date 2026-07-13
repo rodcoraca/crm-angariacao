@@ -5,9 +5,10 @@ export default function UserAccountSection({ conta, onChange, styles }) {
       <div style={styles.accountGrid}>
         <label style={styles.accountFieldLabel}>
           Estado
-          <select style={styles.input} value={conta.estado} onChange={(e) => onChange("ativo", e.target.value === "ativo")}>
-            <option value="ativo">Ativo</option>
-            <option value="inativo">Inativo</option>
+          <select style={styles.input} value={conta.estado} onChange={(e) => onChange("account_status", e.target.value)}>
+            <option value="pending_activation">Pendente ativação</option>
+            <option value="active">Ativo</option>
+            <option value="disabled">Desativado</option>
           </select>
         </label>
 

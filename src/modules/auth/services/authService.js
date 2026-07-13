@@ -5,7 +5,7 @@ const USERS_TABLE = "usuarios";
 const USER_ROLES_TABLE = "user_roles";
 const ROLE_PERMISSIONS_TABLE = "role_permissions";
 const PERMISSIONS_TABLE = "permissions";
-const USER_PROFILE_SELECT = "id,auth_user_id,nome,apelido,email,telefone,username,ativo,permissoes,empresa_id,created_at,updated_at";
+const USER_PROFILE_SELECT = "id,auth_user_id,nome,apelido,email,telefone,username,ativo,account_status,activation_sent_at,activated_at,disabled_at,permissoes,empresa_id,created_at,updated_at";
 
 function normalizeIdentifier(identifier) {
   return String(identifier || "").trim();
@@ -13,6 +13,11 @@ function normalizeIdentifier(identifier) {
 
 function normalizePermissionKey(permissionCode) {
   return String(permissionCode || "").trim().toLowerCase();
+}
+
+function buildTemporaryPassword() {
+  const suffix = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
+  return `Tmp@${suffix}`;
 }
 
 export async function resolveLoginEmail(identifier) {
@@ -193,13 +198,40 @@ export async function requestPasswordReset(email, redirectTo) {
   });
 }
 
+export async function markUserAccountActive(profileId) {
+  if (!profileId) {
+    return {
+      data: null,
+      error: {
+        code: "missing_profile_id",
+        message: "Identificador do perfil obrigatorio para ativacao."
+      }
+    };
+  }
+
+  return supabase
+    .from(USERS_TABLE)
+    .update({
+      account_status: "active",
+      activated_at: new Date().toISOString(),
+      disabled_at: null,
+      ativo: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq("id", profileId)
+    .eq("account_status", "pending_activation")
+    .select("id,account_status,activated_at")
+    .maybeSingle();
+}
+
 export async function createAuthUserFromAdminFlow({ email, password, metadata = {} }) {
   const currentSessionResult = await supabase.auth.getSession();
   const previousSession = currentSessionResult?.data?.session || null;
+  const resolvedPassword = normalizeIdentifier(password) || buildTemporaryPassword();
 
   const signUpResult = await supabase.auth.signUp({
     email,
-    password,
+    password: resolvedPassword,
     options: {
       data: metadata
     }

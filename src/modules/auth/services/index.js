@@ -10,5 +10,6 @@ export {
 	loadUserProfileByLoginEmail,
 	loadAuthorizationProfileByAuthUserId,
 	requestPasswordReset,
-	createAuthUserFromAdminFlow
+	createAuthUserFromAdminFlow,
+	markUserAccountActive
 } from "./authService";

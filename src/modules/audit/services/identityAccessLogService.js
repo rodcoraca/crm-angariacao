@@ -1,4 +1,10 @@
 import { supabase } from "../../../supabase.js";
+import {
+  applyEmpresaScope,
+  hasEmpresaId,
+  resolveEmpresaIdFromContext,
+  warnMissingEmpresaId
+} from "../../../utils/empresaScope";
 
 function getFilterIds(userFilter = null) {
   if (!userFilter) return [];
@@ -68,13 +74,14 @@ async function fetchNavigationLogs({ page, pageSize, userFilter }) {
   return query;
 }
 
-async function fetchAuditLogs({ page, pageSize, userFilter }) {
+async function fetchAuditLogs({ page, pageSize, userFilter, empresaId }) {
   const offset = (page - 1) * pageSize;
   const ids = getFilterIds(userFilter);
 
-  let query = supabase
+  let query = applyEmpresaScope(supabase
     .from("audit_logs")
     .select("id,user_id,event_type,status,modulo,entidade,metadata,created_at")
+  , empresaId)
     .order("created_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
@@ -89,13 +96,14 @@ async function fetchAuditLogs({ page, pageSize, userFilter }) {
   return query;
 }
 
-async function fetchSessionLogs({ page, pageSize, userFilter }) {
+async function fetchSessionLogs({ page, pageSize, userFilter, empresaId }) {
   const offset = (page - 1) * pageSize;
   const ids = getFilterIds(userFilter);
 
-  let query = supabase
+  let query = applyEmpresaScope(supabase
     .from("user_sessions")
     .select("id,user_id,status,ip_address,user_agent,device,login_at,last_activity_at,logout_at,updated_at")
+  , empresaId)
     .order("last_activity_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
@@ -110,18 +118,30 @@ async function fetchSessionLogs({ page, pageSize, userFilter }) {
   return query;
 }
 
-export async function listarUtilizadoresIdentityAccess() {
-  return supabase
+export async function listarUtilizadoresIdentityAccess({ currentUser = null } = {}) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
+  return applyEmpresaScope(supabase
     .from("usuarios")
-    .select("id,auth_user_id,nome,apelido,email,username")
+    .select("id,auth_user_id,nome,apelido,email,username"), empresaId)
     .order("nome", { ascending: true });
 }
 
-export async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilter = null }) {
+export async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilter = null, currentUser = null }) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], hasMore: false, error: null };
+  }
+
   const [navResult, auditResult, sessionResult] = await Promise.all([
     fetchNavigationLogs({ page, pageSize, userFilter }),
-    fetchAuditLogs({ page, pageSize, userFilter }),
-    fetchSessionLogs({ page, pageSize, userFilter })
+    fetchAuditLogs({ page, pageSize, userFilter, empresaId }),
+    fetchSessionLogs({ page, pageSize, userFilter, empresaId })
   ]);
 
   const error = navResult.error || auditResult.error || sessionResult.error || null;

@@ -1,10 +1,11 @@
 import { supabase } from "../../../supabase";
+import { applyEmpresaScope } from "../../../utils/empresaScope";
 import { DOCUMENTOS_STORAGE_BUCKET, DOCUMENTOS_TABLE } from "../utils";
 
-export function fetchDocumentos() {
-  return supabase
+export function fetchDocumentos(empresaId = null) {
+  return applyEmpresaScope(supabase
     .from(DOCUMENTOS_TABLE)
-    .select("*")
+    .select("*"), empresaId)
     .order("created_at", { ascending: false });
 }
 
@@ -26,9 +27,9 @@ export function insertDocumento(payload) {
     .insert([payload]);
 }
 
-export function deleteDocumentoById(documentoId) {
-  return supabase
+export function deleteDocumentoById(documentoId, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from(DOCUMENTOS_TABLE)
     .delete()
-    .eq("id", documentoId);
+    .eq("id", documentoId), empresaId);
 }

@@ -9,6 +9,8 @@ import {
   createAuthUserFromAdminFlow,
   loadAuthorizationProfileByAuthUserId,
   loadUserProfileByLoginEmail,
+  markUserAccountActive,
+  requestPasswordReset,
   resolveLoginEmail,
   signInWithPassword,
   signOutAuthSession
@@ -48,6 +50,15 @@ export default function Login({ setUser, onLogin }) {
   function reportError(error, origem) {
     // Instrumentacao leve para observabilidade sem quebrar o fluxo principal.
     console.error(`[${origem}]`, error);
+  }
+
+  function resolveAccountStatus(profile) {
+    const status = String(profile?.account_status || "").trim().toLowerCase();
+    if (status === "pending_activation" || status === "active" || status === "disabled") {
+      return status;
+    }
+
+    return profile?.ativo === false ? "disabled" : "active";
   }
 
   function normalizeErrorText(error) {
@@ -152,7 +163,7 @@ export default function Login({ setUser, onLogin }) {
         return;
       }
 
-      if (perfilByEmail.ativo === false) {
+      if (resolveAccountStatus(perfilByEmail) === "disabled") {
         notifyError("Utilizador inativo. Contacte um administrador.");
         return;
       }
@@ -186,10 +197,21 @@ export default function Login({ setUser, onLogin }) {
         return;
       }
 
-      if (perfil.ativo === false) {
+      const accountStatus = resolveAccountStatus(perfil);
+      if (accountStatus === "disabled") {
         notifyError("Utilizador inativo. Contacte um administrador.");
         await signOutAuthSession();
         return;
+      }
+
+      if (accountStatus === "pending_activation") {
+        const activationResult = await markUserAccountActive(perfil.id);
+        if (activationResult.error) {
+          reportError(activationResult.error, "Login.markUserAccountActive");
+        } else {
+          perfil.account_status = "active";
+          perfil.activated_at = activationResult.data?.activated_at || new Date().toISOString();
+        }
       }
 
       const usuarioSessao = montarUsuarioSessao(authUser, perfil, authSession?.expires_at || null);
@@ -277,6 +299,8 @@ export default function Login({ setUser, onLogin }) {
           logs: true,
         },
         ativo: true,
+        account_status: "active",
+        activated_at: new Date().toISOString(),
         created_at: new Date().toISOString(),
       }]);
 
@@ -321,6 +345,43 @@ export default function Login({ setUser, onLogin }) {
 
             <Button variant="secondary" style={styles.button} onClick={login} loading={isAuthenticating} disabled={isAuthenticating}>
               Entrar
+            </Button>
+
+            <Button
+              variant="ghost"
+              style={styles.secondaryButton}
+              disabled={isAuthenticating}
+              onClick={async () => {
+                try {
+                  const valor = username.trim();
+                  if (!valor) {
+                    notifyError("Introduza o email ou user name para recuperar a password.");
+                    return;
+                  }
+
+                  const resolved = await resolveLoginEmail(valor);
+                  if (resolved?.error) {
+                    reportError(resolved.error, "Login.requestPasswordReset.resolveLoginEmail");
+                    notifyError("Erro ao validar o utilizador para recuperação de password.");
+                    return;
+                  }
+
+                  const emailRecuperacao = resolved?.email || valor;
+                  const { error } = await requestPasswordReset(emailRecuperacao, `${window.location.origin}/app`);
+                  if (error) {
+                    reportError(error, "Login.requestPasswordReset");
+                    notifyError("Não foi possível enviar o email de recuperação.");
+                    return;
+                  }
+
+                  notifySuccess("Email de recuperação enviado.");
+                } catch (error) {
+                  reportError(error, "Login.requestPasswordReset.catch");
+                  notifyError("Erro interno ao recuperar password.");
+                }
+              }}
+            >
+              Recuperar password
             </Button>
 
             <Button
