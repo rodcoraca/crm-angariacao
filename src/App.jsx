@@ -38,7 +38,8 @@ const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
 
 function detectPasswordRecoveryHash() {
   if (typeof window === "undefined") return false;
-  return String(window.location.hash || "").includes("type=recovery");
+  const hash = String(window.location.hash || "").toLowerCase();
+  return hash.includes("type=recovery") || hash.includes("type=invite");
 }
 
 export default function App() {
@@ -658,8 +659,12 @@ export default function App() {
           passwordRecoveryMode={isPasswordRecoveryMode}
           onPasswordRecoveryComplete={() => {
             setIsPasswordRecoveryMode(false);
+            setUser(null);
+            setPerfil(null);
+            setAuthzReady(true);
             if (typeof window !== "undefined") {
-              window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+              window.history.replaceState(null, document.title, "/");
+              window.location.replace("/");
             }
           }}
         />

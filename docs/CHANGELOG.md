@@ -125,6 +125,28 @@ Data: 2026-07-13
 ### SQL
 - Sem alterações SQL para RC1.5.2.
 
+## RC1.5.3.6 - Fluxo Definitivo de Onboarding e Ativação de Utilizadores
+
+Data: 2026-07-14
+
+### Causa Encontrada
+- O fluxo administrativo de criação executava `signUp` e, no mesmo processo, enviava também `invite`, gerando emails duplicados e estados de sessão intermédios.
+
+### Implementação
+- Removida a criação administrativa via `supabase.auth.signUp()` do serviço de auth.
+- Criação administrativa passa a usar exclusivamente convite (`Invite User`) via Edge Function `send-user-invite`.
+- Eliminado o segundo envio redundante de convite no fluxo de criação de utilizadores.
+- Fluxo de definição de password passou a cobrir `type=recovery` e `type=invite`.
+- Após definir password: logout obrigatório, limpeza completa de `localStorage` e `sessionStorage`, reset de estado local e redirecionamento forçado para `/login`.
+- Mantida a autoativação quando `email_confirmed_at` existe e o perfil está em `pending_activation`.
+- Mantida reconciliação por email para associação automática de `auth_user_id` no primeiro login.
+
+### Preservação
+- Sem alterações em RBAC, multi-tenant, `empresa_id`, auditoria e UX principal.
+
+### SQL
+- Sem alterações SQL para RC1.5.3.6.
+
 ## 4. Categorias de Alteração
 
 - Documentação

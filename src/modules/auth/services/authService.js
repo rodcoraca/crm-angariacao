@@ -44,11 +44,6 @@ function normalizeAuthUserRef(authUserOrId) {
   };
 }
 
-function buildTemporaryPassword() {
-  const suffix = `${Date.now()}${Math.floor(Math.random() * 100000)}`;
-  return `Tmp@${suffix}`;
-}
-
 export async function resolveLoginEmail(identifier) {
   const normalized = normalizeIdentifier(identifier);
   if (!normalized) {
@@ -434,23 +429,135 @@ export async function requestPasswordReset(email, redirectTo) {
 }
 
 export async function sendAccountActivationInvite(email, redirectTo) {
-  const normalizedEmail = normalizeIdentifier(email);
+  const normalizedEmail =
+    normalizeIdentifier(email)
+      .toLowerCase();
+
   if (!normalizedEmail) {
     return {
       data: null,
       error: {
         code: "missing_email",
-        message: "Email obrigatorio para envio de convite de ativacao."
+        message:
+          "Email obrigatorio para envio de convite de ativacao."
       }
     };
   }
 
-  return supabase.functions.invoke("send-user-invite", {
-    body: {
+  try {
+    const {
+      data: { session },
+      error: sessionError
+    } = await supabase.auth.getSession();
+
+    console.group(
+      "sendAccountActivationInvite"
+    );
+
+    console.log(
+      "EMAIL:",
+      normalizedEmail
+    );
+
+    console.log(
+      "REDIRECT:",
+      redirectTo || null
+    );
+
+    console.log(
+      "SESSION ERROR:",
+      sessionError || null
+    );
+
+    console.log(
+      "SESSION EXISTS:",
+      !!session
+    );
+
+    console.log(
+      "AUTH USER:",
+      session?.user || null
+    );
+
+    console.log(
+      "AUTH USER ID:",
+      session?.user?.id || null
+    );
+
+    console.log(
+      "AUTH USER EMAIL:",
+      session?.user?.email || null
+    );
+
+    console.log(
+      "ACCESS TOKEN:",
+      session?.access_token
+        ? "EXISTS"
+        : "MISSING"
+    );
+
+    const payload = {
       email: normalizedEmail,
-      redirectTo: redirectTo || undefined
-    }
-  });
+      redirectTo:
+        redirectTo || undefined
+    };
+
+    console.log(
+      "INVOKE PAYLOAD:",
+      payload
+    );
+
+    const result =
+      await supabase.functions.invoke(
+        "send-user-invite",
+        {
+          body: payload
+        }
+      );
+
+    const status =
+      result?.error?.context
+        ?.status ||
+      result?.error?.status ||
+      null;
+
+    console.log(
+      "EDGE STATUS:",
+      status
+    );
+
+    console.log(
+      "EDGE DATA:",
+      result?.data || null
+    );
+
+    console.log(
+      "EDGE ERROR:",
+      result?.error || null
+    );
+
+    console.groupEnd();
+
+    return result;
+
+  } catch (error) {
+    console.error(
+      "sendAccountActivationInvite EXCEPTION",
+      error
+    );
+
+    return {
+      data: null,
+      error: {
+        code:
+          "send_invite_exception",
+        message:
+          error?.message ||
+          "Erro inesperado no envio do convite.",
+        details: error
+      }
+    };
+  }
 }
 
 export async function markUserAccountActive(profileId) {
@@ -512,10 +619,23 @@ export async function reconcilePendingActivation(authUser, profile) {
 }
 
 export async function createAuthUserFromAdminFlow({ email, password, metadata = {}, existingAuthUserId = null }) {
-  const currentSessionResult = await supabase.auth.getSession();
-  const previousSession = currentSessionResult?.data?.session || null;
   const normalizedEmail = normalizeIdentifier(email).toLowerCase();
-  const resolvedPassword = normalizeIdentifier(password) || buildTemporaryPassword();
+
+  if (!normalizedEmail) {
+    return {
+      data: null,
+      error: {
+        code: "missing_email",
+        message: "Email obrigatorio para criacao administrativa de utilizador."
+      },
+      createdUser: null,
+      reusedExistingUser: false,
+      inviteSent: false
+    };
+  }
+
+  // Password de onboarding e definida apenas pelo utilizador via link de convite.
+  void password;
 
   if (existingAuthUserId) {
     return {
@@ -525,7 +645,7 @@ export async function createAuthUserFromAdminFlow({ email, password, metadata = 
           email: normalizedEmail,
           user_metadata: metadata
         },
-        session: previousSession
+        session: null
       },
       error: null,
       createdUser: {
@@ -533,31 +653,58 @@ export async function createAuthUserFromAdminFlow({ email, password, metadata = 
         email: normalizedEmail,
         user_metadata: metadata
       },
-      reusedExistingUser: true
+      reusedExistingUser: true,
+      inviteSent: false
     };
   }
 
-  const signUpResult = await supabase.auth.signUp({
-    email: normalizedEmail,
-    password: resolvedPassword,
-    options: {
-      data: metadata
-    }
-  });
+  const redirectTo =
+  typeof window !== "undefined"
+    ? window.location.origin
+    : undefined;
 
-  const createdUser = signUpResult?.data?.user || null;
-  const createdSession = signUpResult?.data?.session || null;
+  const inviteResult =
+    await sendAccountActivationInvite(
+      normalizedEmail,
+      redirectTo
+    );
 
-  if (!signUpResult.error && previousSession && createdSession?.user?.id !== previousSession?.user?.id) {
-    await supabase.auth.setSession({
-      access_token: previousSession.access_token,
-      refresh_token: previousSession.refresh_token
-    });
+  const invitePayload = inviteResult.data || null;
+  if (!invitePayload?.success) {
+    return {
+      data: null,
+      error: {
+        code: "invite_failed",
+        message: invitePayload?.error || "Nao foi possivel enviar convite de ativacao."
+      },
+      createdUser: null,
+      reusedExistingUser: false,
+      inviteSent: false
+    };
+  }
+
+  const invitedUser = invitePayload?.data?.user || null;
+  if (!invitedUser?.id) {
+    return {
+      data: null,
+      error: {
+        code: "missing_invited_user",
+        message: "Convite enviado sem retorno do utilizador auth."
+      },
+      createdUser: null,
+      reusedExistingUser: false,
+      inviteSent: false
+    };
   }
 
   return {
-    ...signUpResult,
-    createdUser,
-    reusedExistingUser: false
+    data: {
+      user: invitedUser,
+      session: null
+    },
+    error: null,
+    createdUser: invitedUser,
+    reusedExistingUser: false,
+    inviteSent: true
   };
 }

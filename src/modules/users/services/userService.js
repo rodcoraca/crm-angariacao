@@ -317,9 +317,11 @@ export async function guardarUsuarioComAuditoria({
         };
       }
 
-      const { error: activationInviteError } = await sendAccountActivationInvite(email);
-      if (activationInviteError) {
-        return { error: activationInviteError };
+      if (!authCreation.inviteSent) {
+        const { error: activationInviteError } = await sendAccountActivationInvite(email);
+        if (activationInviteError) {
+          return { error: activationInviteError };
+        }
       }
 
       await applyEmpresaScope(

@@ -17,6 +17,8 @@ import {
 } from "../modules/auth/services";
 import { notifyError, notifySuccess } from "../components/ui/feedbackBus";
 
+const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
+
 export default function Login({ setUser, onLogin, passwordRecoveryMode = false, onPasswordRecoveryComplete = null }) {
   const theme = useTheme();
   const [username, setUsername] = useState("");
@@ -36,6 +38,14 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
   useEffect(() => {
     setRecoveryMode(Boolean(passwordRecoveryMode));
   }, [passwordRecoveryMode]);
+
+  function clearOnboardingClientState() {
+    if (typeof window === "undefined") return;
+
+    window.localStorage.removeItem(ACTIVE_SESSION_TENANT_KEY);
+    window.localStorage.clear();
+    window.sessionStorage.clear();
+  }
 
   function montarUsuarioSessao(authUser, perfil, expiresAt = null) {
     const empresaId = perfil?.empresa_id || authUser.user_metadata?.empresa_id || null;
@@ -267,8 +277,8 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
   async function criarPrimeiroAdmin() {
     try {
-      if (!bootstrapNome || !bootstrapApelido || !bootstrapEmail || !bootstrapPassword) {
-        notifyError("Preencha nome, apelido, email e password para criar o administrador.");
+      if (!bootstrapNome || !bootstrapApelido || !bootstrapEmail) {
+        notifyError("Preencha nome, apelido e email para criar o administrador.");
         return;
       }
 
@@ -281,7 +291,6 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
       const authCreation = await createAuthUserFromAdminFlow({
         email: bootstrapEmail,
-        password: bootstrapPassword,
         metadata: {
           nome: bootstrapNome,
           apelido: bootstrapApelido,
@@ -318,8 +327,9 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
           logs: true,
         },
         ativo: true,
-        account_status: "active",
-        activated_at: new Date().toISOString(),
+        account_status: "pending_activation",
+        activation_sent_at: new Date().toISOString(),
+        activated_at: null,
         created_at: new Date().toISOString(),
       }]);
 
@@ -329,7 +339,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
         return;
       }
 
-      notifySuccess("Administrador criado com sucesso. Pode entrar agora.");
+      notifySuccess("Administrador criado. Convite enviado para definição de password.");
       setModoBootstrap(false);
     } catch (error) {
       reportError(error, "Login.criarPrimeiroAdmin");
@@ -361,8 +371,12 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
       }
 
       await supabase.auth.signOut();
+      clearOnboardingClientState();
+      setUsername("");
+      setPassword("");
       setNovaPassword("");
       setConfirmarNovaPassword("");
+      setBootstrapPassword("");
       setRecoveryMode(false);
       if (typeof onPasswordRecoveryComplete === "function") {
         onPasswordRecoveryComplete();
@@ -474,6 +488,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
             <Input
               style={styles.input}
               placeholder="Email ou User name"
+              value={username}
               disabled={isAuthenticating}
               onChange={(e) => setUsername(e.target.value)}
             />
@@ -482,6 +497,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
               style={styles.input}
               type="password"
               placeholder="Password"
+              value={password}
               disabled={isAuthenticating}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -530,6 +546,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
             <Input
               style={styles.input}
               placeholder="Nome"
+              value={bootstrapNome}
               onChange={(e) => setBootstrapNome(e.target.value)}
             />
             <Input
@@ -541,12 +558,14 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
             <Input
               style={styles.input}
               placeholder="Email"
+              value={bootstrapEmail}
               onChange={(e) => setBootstrapEmail(e.target.value)}
             />
             <Input
               style={styles.input}
               type="password"
-              placeholder="Password"
+              placeholder="Password (definida no convite)"
+              value={bootstrapPassword}
               onChange={(e) => setBootstrapPassword(e.target.value)}
             />
 
