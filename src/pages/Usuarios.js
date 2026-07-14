@@ -9,6 +9,7 @@ import {
   listarSessoesPorUtilizador,
   listarUsuarios,
   obterResumoAtividadePorUtilizador,
+  repararAssociacaoAuthUtilizador,
   reenviarConviteAtivacaoUtilizador,
   registrarAcaoNegadaUtilizadores,
 } from '../modules/users/services';
@@ -102,6 +103,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
   const [preferenciasUsuario, setPreferenciasUsuario] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
   const [isResendingInvite, setIsResendingInvite] = useState(false);
+  const [isRepairingAssociation, setIsRepairingAssociation] = useState(false);
 
   // Arquitetura SaaS (futuro): quando houver persistencia multi-tenant,
   // este formulario deve acomodar identificadores de contexto organizacional
@@ -446,6 +448,48 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
       }
     } finally {
       setIsResendingInvite(false);
+    }
+  }
+
+  async function repararAssociacaoAuth() {
+    if (!usuarioSelecionadoMeta?.id || !usuarioSelecionadoMeta?.email) return;
+
+    if (!can('users.edit')) {
+      setErro('Sem permissão para executar esta ação.');
+      await registrarAcaoNegadaUtilizadores({
+        currentUser,
+        usuarioSelecionadoId: usuarioSelecionadoMeta.id,
+        requiredPermission: 'users.edit',
+        action: 'repair_auth_association',
+      });
+      return;
+    }
+
+    setErro('');
+    setIsRepairingAssociation(true);
+
+    try {
+      const result = await repararAssociacaoAuthUtilizador({
+        usuarioId: usuarioSelecionadoMeta.id,
+        email: usuarioSelecionadoMeta.email,
+        currentUser,
+      });
+
+      if (result?.error) {
+        setErro(result.error.message || 'Falha ao reparar associação auth.');
+        return;
+      }
+
+      const refreshedUsers = await carregarUsuarios();
+      const refreshed = (refreshedUsers || []).find((item) => String(item.id) === String(usuarioSelecionadoMeta.id));
+
+      if (refreshed) {
+        iniciarEdicao(refreshed);
+      }
+
+      await carregarTimelineUsuario(refreshed || usuarioSelecionadoMeta);
+    } finally {
+      setIsRepairingAssociation(false);
     }
   }
 
@@ -987,6 +1031,8 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
                 onChange={atualizarCampo}
                 onResendInvite={etapaAtiva === 'ficha' && modoEdicao ? reenviarConvite : null}
                 resendInviteLoading={isResendingInvite}
+                onRepairAssociation={etapaAtiva === 'ficha' && modoEdicao ? repararAssociacaoAuth : null}
+                repairAssociationLoading={isRepairingAssociation}
                 styles={styles}
               />
             ) : null}

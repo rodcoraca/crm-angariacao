@@ -4,7 +4,15 @@ function resolveStatusLabel(status) {
   return "Ativo";
 }
 
-export default function UserAccountSection({ conta, onChange, onResendInvite = null, resendInviteLoading = false, styles }) {
+export default function UserAccountSection({
+  conta,
+  onChange,
+  onResendInvite = null,
+  resendInviteLoading = false,
+  onRepairAssociation = null,
+  repairAssociationLoading = false,
+  styles
+}) {
   return (
     <section style={styles.sectionCard}>
       <h4 style={styles.sectionTitle}>2. CONTA</h4>
@@ -56,6 +64,20 @@ export default function UserAccountSection({ conta, onChange, onResendInvite = n
               disabled={resendInviteLoading}
             >
               {resendInviteLoading ? "A enviar..." : "Reenviar convite"}
+            </button>
+          </label>
+        ) : null}
+
+        {conta.modoEdicao && conta.estadoAdministrativo === "auth_unlinked" && onRepairAssociation ? (
+          <label style={styles.accountFieldLabel}>
+            Associação Auth
+            <button
+              type="button"
+              style={styles.smallButton}
+              onClick={onRepairAssociation}
+              disabled={repairAssociationLoading}
+            >
+              {repairAssociationLoading ? "A reparar..." : "Reparar associação"}
             </button>
           </label>
         ) : null}

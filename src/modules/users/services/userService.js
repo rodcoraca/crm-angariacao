@@ -448,6 +448,45 @@ export async function reenviarConviteAtivacaoUtilizador({ usuarioId, currentUser
   return { error: null };
 }
 
+export async function repararAssociacaoAuthUtilizador({ usuarioId, email, currentUser }) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    throw new Error("empresa_id obrigatorio para reparacao de associacao auth.");
+  }
+
+  if (!usuarioId || !email) {
+    return { error: { message: "Utilizador inválido para reparação de associação." } };
+  }
+
+  const { data, error } = await supabase.functions.invoke("repair-user-auth-association", {
+    body: {
+      usuarioId,
+      email,
+      empresaId,
+      actorUserId: resolveActorUserId(currentUser)
+    }
+  });
+
+  if (error) {
+    return { error };
+  }
+
+  if (!data?.success) {
+    return {
+      error: {
+        message: data?.message || "Falha ao reparar associação auth do utilizador."
+      }
+    };
+  }
+
+  return {
+    data: data?.data?.profile || null,
+    autoActivated: Boolean(data?.data?.autoActivated),
+    error: null
+  };
+}
+
 export async function listarSessoesPorUtilizador({ perfilId, authUserId, limit = 50, currentUser = null }) {
   if (!perfilId && !authUserId) return { data: [], error: null };
   const empresaId = resolveEmpresaIdFromContext(currentUser);
