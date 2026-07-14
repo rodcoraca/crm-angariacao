@@ -11,7 +11,7 @@ import {
   hasEmpresaId,
   resolveEmpresaId,
   warnMissingEmpresaId
-} from "../../../utils/empresaScope";
+} from "../../../utils/empresaScope.js";
 
 export function validarTipoUpload(file, acceptedMimeTypes = DOCUMENTOS_UPLOAD_RULES.acceptedMimeTypes) {
   if (!file) return false;

@@ -3,7 +3,7 @@ import FichaImovel from "./FichaImovel";
 import { useEstoqueImoveis } from "./modules/imoveis";
 import EmptyState from "./components/ui/EmptyState";
 
-export default function EstoqueNaoPublicitado() {
+export default function EstoqueNaoPublicitado({ selectionRequest = null }) {
   const {
     busca,
     moduloAtual,
@@ -32,7 +32,7 @@ export default function EstoqueNaoPublicitado() {
     uploadFicheiro,
     downloadFicheiro,
     selecionarImovel
-  } = useEstoqueImoveis();
+  } = useEstoqueImoveis({ selectionRequest });
 
   const {
     proprietario,

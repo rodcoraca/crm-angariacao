@@ -1,5 +1,5 @@
 import { supabase } from "../../../supabase";
-import { applyEmpresaScope } from "../../../utils/empresaScope";
+import { applyEmpresaScope } from "../../../utils/empresaScope.js";
 
 const IMOVEIS_TABLE = "estoque_nao_publicitado";
 const FICHEIROS_TABLE = "imovel_ficheiros";

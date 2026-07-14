@@ -279,6 +279,22 @@ Este documento é a fonte oficial das decisões técnicas aprovadas da OSFlow e 
 | 1.1.0 | 2026-07-04 | Engenharia da Plataforma OSFlow | Inclusão da DEC-019 Arquitetura Oficial por Camadas e formalização do Cockpit Executivo como primeiro módulo no padrão por camadas. |
 | 1.0.0 | 2026-07-03 | Engenharia da Plataforma OSFlow | Consolidação do registo oficial de decisões técnicas com identificadores normalizados e referências cruzadas. |
 
+DEC-00X - Estrutura oficial de domínios
+
+Status: Aprovado
+Data: 13/07/2026
+
+www.osflow.pt      -> Landing institucional
+app.osflow.pt      -> Aplicação principal
+api.osflow.pt      -> APIs e integrações
+docs.osflow.pt     -> Documentação
+status.osflow.pt   -> Monitorização futura
+admin.osflow.pt    -> Administração SaaS futura
+
+Justificação:
+Preparação antecipada para evolução SaaS, separação de responsabilidades,
+escalabilidade e redução de futuras migrações.
+
 ## Próximas Revisões
 
 - Acrescentar contexto, trade-offs e impactos por decisão futura.

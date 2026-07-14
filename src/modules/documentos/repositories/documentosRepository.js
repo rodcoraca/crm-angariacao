@@ -1,5 +1,5 @@
 import { supabase } from "../../../supabase";
-import { applyEmpresaScope } from "../../../utils/empresaScope";
+import { applyEmpresaScope } from "../../../utils/empresaScope.js";
 import { DOCUMENTOS_STORAGE_BUCKET, DOCUMENTOS_TABLE } from "../utils";
 
 export function fetchDocumentos(empresaId = null) {

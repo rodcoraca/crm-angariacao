@@ -10,6 +10,9 @@ export {
 	loadUserProfileByLoginEmail,
 	loadAuthorizationProfileByAuthUserId,
 	requestPasswordReset,
+	sendAccountActivationInvite,
 	createAuthUserFromAdminFlow,
-	markUserAccountActive
+	markUserAccountActive,
+	reconcilePendingActivation,
+	repairUserAuthAssociations
 } from "./authService";

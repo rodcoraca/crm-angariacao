@@ -5,10 +5,10 @@ import {
   hasEmpresaId,
   resolveEmpresaIdFromContext,
   warnMissingEmpresaId
-} from "../../../utils/empresaScope";
+} from "../../../utils/empresaScope.js";
 import { normalizarPermissoes } from "../../../utils/usuarios";
 import { registrarAcessoNegado, registrarCriacao, registrarEdicao } from "../../audit/services";
-import { createAuthUserFromAdminFlow, requestPasswordReset } from "../../auth/services";
+import { createAuthUserFromAdminFlow, repairUserAuthAssociations, sendAccountActivationInvite } from "../../auth/services";
 import { fetchUserPreferencesByUserId, upsertUserPreferencesByUserId } from "../repositories";
 
 const USERS_TABLE = "usuarios";
@@ -16,6 +16,27 @@ const USER_LIST_BASE_SELECT = "id,auth_user_id,nome,apelido,email,telefone,usern
 
 function resolveActorUserId(currentUser) {
   return currentUser?.perfil_id || currentUser?.id || null;
+}
+
+function normalizeEmpresaId(value) {
+  const normalized = String(value || "").trim();
+  return normalized || null;
+}
+
+function resolveEmpresaIdForUserWrite({ currentUser, form, permissoesAtuais = {} }) {
+  const empresaIdFromAuthenticatedContext = resolveEmpresaIdFromContext(currentUser);
+  if (empresaIdFromAuthenticatedContext) {
+    return empresaIdFromAuthenticatedContext;
+  }
+
+  // Admin global pode selecionar empresa sem alterar UX atual.
+  const empresaIdFromSelection = normalizeEmpresaId(
+    form?.empresa_id
+    || form?.permissoes?.empresa_id
+    || permissoesAtuais?.empresa_id
+  );
+
+  return empresaIdFromSelection;
 }
 
 function applyUserFilter(query, { perfilId, authUserId }) {
@@ -106,10 +127,24 @@ export async function listarUsuarios({ currentUser } = {}) {
     return { data: [], error: null };
   }
 
-  return applyEmpresaScope(supabase
+  const scopedUsersResult = await applyEmpresaScope(supabase
     .from(USERS_TABLE)
     .select(USER_LIST_BASE_SELECT), empresaId)
     .order("created_at", { ascending: false });
+
+  if (scopedUsersResult.error) {
+    return scopedUsersResult;
+  }
+
+  const repairResult = await repairUserAuthAssociations({ users: scopedUsersResult.data || [] });
+  if (!repairResult.error && Number(repairResult.data?.repairedCount || 0) > 0) {
+    return applyEmpresaScope(supabase
+      .from(USERS_TABLE)
+      .select(USER_LIST_BASE_SELECT), empresaId)
+      .order("created_at", { ascending: false });
+  }
+
+  return scopedUsersResult;
 }
 
 export async function registrarAcaoNegadaUtilizadores({
@@ -151,13 +186,17 @@ export async function guardarUsuarioComAuditoria({
   const telefone = String(form.telefone || "").trim();
   const username = String(form.username || "").trim();
   const perfil = String(perfilOrganizacional || "").trim();
-  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  const empresaId = resolveEmpresaIdForUserWrite({ currentUser, form, permissoesAtuais });
+  const isCreating = !modoEdicao;
+
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
-    return { error: buildMissingEmpresaError() };
+    throw new Error("empresa_id obrigatorio para criar/atualizar utilizador.");
   }
 
-  const accountStatus = String(form.account_status || (form.ativo ? "active" : "disabled")).trim().toLowerCase();
+  const accountStatus = isCreating
+    ? "pending_activation"
+    : String(form.account_status || (form.ativo ? "active" : "disabled")).trim().toLowerCase();
   const isDisabled = accountStatus === "disabled";
   const isPendingActivation = accountStatus === "pending_activation";
 
@@ -191,6 +230,7 @@ export async function guardarUsuarioComAuditoria({
 
   let error;
   let createdProfileId = usuarioSelecionadoId || null;
+  let reusedExistingProfile = false;
 
   if (modoEdicao && usuarioSelecionadoId) {
     ({ error } = await applyEmpresaScope(
@@ -198,9 +238,22 @@ export async function guardarUsuarioComAuditoria({
       empresaId
     ));
   } else {
+    const { data: existingProfileByEmail, error: existingProfileError } = await applyEmpresaScope(
+      supabase
+        .from(USERS_TABLE)
+        .select("id,auth_user_id,email")
+        .ilike("email", email),
+      empresaId
+    ).maybeSingle();
+
+    if (existingProfileError) {
+      return { error: existingProfileError };
+    }
+
     const authCreation = await createAuthUserFromAdminFlow({
       email,
       password: form.password,
+      existingAuthUserId: existingProfileByEmail?.auth_user_id || null,
       metadata: {
         nome,
         apelido,
@@ -214,26 +267,46 @@ export async function guardarUsuarioComAuditoria({
 
     const authUserId = authCreation.createdUser.id;
 
-    const { data: insertedUser, error: insertError } = await supabase
-      .from(USERS_TABLE)
-      .insert([
-        {
-          ...payload,
-          auth_user_id: authUserId,
-          created_at: new Date().toISOString()
-        }
-      ])
-      .select("id")
-      .maybeSingle();
+    if (existingProfileByEmail?.id) {
+      reusedExistingProfile = true;
 
-    error = insertError;
-    createdProfileId = insertedUser?.id || null;
+      const { data: updatedUser, error: updateError } = await applyEmpresaScope(
+        supabase
+          .from(USERS_TABLE)
+          .update({
+            ...payload,
+            auth_user_id: authUserId,
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", existingProfileByEmail.id)
+          .select("id"),
+        empresaId
+      ).maybeSingle();
+
+      error = updateError;
+      createdProfileId = updatedUser?.id || existingProfileByEmail.id;
+    } else {
+      const { data: insertedUser, error: insertError } = await supabase
+        .from(USERS_TABLE)
+        .insert([
+          {
+            ...payload,
+            auth_user_id: authUserId,
+            created_at: new Date().toISOString()
+          }
+        ])
+        .select("id")
+        .maybeSingle();
+
+      error = insertError;
+      createdProfileId = insertedUser?.id || null;
+    }
 
     if (!error) {
       const { data: consistencyProfile, error: consistencyError } = await applyEmpresaScope(supabase
         .from(USERS_TABLE)
         .select("id,auth_user_id,email")
-        .eq("auth_user_id", authUserId),
+        .eq("id", createdProfileId),
         empresaId
       )
         .maybeSingle();
@@ -244,12 +317,21 @@ export async function guardarUsuarioComAuditoria({
         };
       }
 
-      if (isPendingActivation) {
-        const { error: activationInviteError } = await requestPasswordReset(email);
-        if (activationInviteError) {
-          return { error: activationInviteError };
-        }
+      const { error: activationInviteError } = await sendAccountActivationInvite(email);
+      if (activationInviteError) {
+        return { error: activationInviteError };
       }
+
+      await applyEmpresaScope(
+        supabase
+          .from(USERS_TABLE)
+          .update({
+            activation_sent_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          })
+          .eq("id", createdProfileId),
+        empresaId
+      );
     }
   }
 
@@ -271,7 +353,7 @@ export async function guardarUsuarioComAuditoria({
 
   const auditoriaBase = {
     userId: resolveActorUserId(currentUser),
-    empresaId: currentUser?.user_metadata?.empresa_id || null,
+    empresaId,
     modulo: "users",
     entidade: "usuarios",
     entidadeId: createdProfileId,
@@ -283,11 +365,87 @@ export async function guardarUsuarioComAuditoria({
 
   if (modoEdicao) {
     await registrarEdicao(auditoriaBase);
+  } else if (reusedExistingProfile) {
+    await registrarEdicao({
+      ...auditoriaBase,
+      metadata: {
+        ...auditoriaBase.metadata,
+        action: "reuse_existing_auth_user"
+      }
+    });
   } else {
     await registrarCriacao(auditoriaBase);
   }
 
   return { error: null, permissoesNormalizadas };
+}
+
+export async function reenviarConviteAtivacaoUtilizador({ usuarioId, currentUser }) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    throw new Error("empresa_id obrigatorio para reenviar convite.");
+  }
+
+  if (!usuarioId) {
+    return { error: { message: "Utilizador inválido para reenviar convite." } };
+  }
+
+  const { data: targetUser, error: targetError } = await applyEmpresaScope(
+    supabase
+      .from(USERS_TABLE)
+      .select("id,email,account_status")
+      .eq("id", usuarioId),
+    empresaId
+  ).maybeSingle();
+
+  if (targetError) {
+    return { error: targetError };
+  }
+
+  if (!targetUser?.email) {
+    return { error: { message: "Utilizador sem email para envio de convite." } };
+  }
+
+  const { error: inviteError } = await sendAccountActivationInvite(targetUser.email);
+  if (inviteError) {
+    return { error: inviteError };
+  }
+
+  const { error: updateError } = await applyEmpresaScope(
+    supabase
+      .from(USERS_TABLE)
+      .update({
+        account_status: "pending_activation",
+        activation_sent_at: new Date().toISOString(),
+        activated_at: null,
+        disabled_at: null,
+        ativo: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", usuarioId),
+    empresaId
+  );
+
+  if (updateError) {
+    return { error: updateError };
+  }
+
+  await registrarEdicao({
+    userId: resolveActorUserId(currentUser),
+    empresaId,
+    modulo: "users",
+    entidade: "usuarios",
+    entidadeId: usuarioId,
+    metadata: {
+      action: "resend_activation_invite",
+      email: targetUser.email,
+      previousStatus: targetUser.account_status || null,
+      nextStatus: "pending_activation"
+    }
+  });
+
+  return { error: null };
 }
 
 export async function listarSessoesPorUtilizador({ perfilId, authUserId, limit = 50, currentUser = null }) {

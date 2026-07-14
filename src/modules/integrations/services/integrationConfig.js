@@ -1,9 +1,9 @@
 const INTEGRATION_STORAGE_KEY = "osflow_integrations_config";
 
 const DEFAULT_OLX_CALLBACK_URL =
-  process.env.NODE_ENV === "production"
-    ? "https://osflow.pt/app/integrations/callback"
-    : "http://localhost:3001/app/integrations/callback";
+  typeof window !== "undefined"
+    ? `${window.location.origin}/integrations/callback`
+    : "https://app.osflow.pt/integrations/callback";
 
 function safeText(value, fallback = "") {
   if (value === null || value === undefined) return fallback;

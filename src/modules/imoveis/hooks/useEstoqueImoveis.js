@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   apagarFicheiroService,
   buildDefaultFormulario,
@@ -15,7 +15,7 @@ import { filtrarImoveisPorProprietario } from "../viewmodels";
 import { TELEFONE_ERROR_MESSAGE } from "../utils";
 import { askConfirmation, notifyError, notifySuccess } from "../../../components/ui/feedbackBus";
 
-export function useEstoqueImoveis() {
+export function useEstoqueImoveis({ selectionRequest = null } = {}) {
   const [imoveis, setImoveis] = useState([]);
   const [busca, setBusca] = useState("");
   const [moduloAtual, setModuloAtual] = useState("lista");
@@ -28,6 +28,7 @@ export function useEstoqueImoveis() {
   const [uploading, setUploading] = useState(false);
   const [progresso, setProgresso] = useState(0);
   const [imovelEdicao, setImovelEdicao] = useState(null);
+  const lastSelectionRequestRef = useRef(null);
 
   const isEditing = Boolean(imovelEdicao);
 
@@ -41,6 +42,26 @@ export function useEstoqueImoveis() {
       setForm((prev) => ({ ...prev, valorM2: valorCalculado }));
     }
   }, [form.valorVenda, form.areaBrutaPrivativa]);
+
+  useEffect(() => {
+    const requestId = selectionRequest?.id ? `${selectionRequest.id}:${selectionRequest.nonce || ""}` : "";
+    if (!requestId || requestId === lastSelectionRequestRef.current || !imoveis.length) {
+      return;
+    }
+
+    const target = imoveis.find((item) => String(item.id) === String(selectionRequest.id));
+    if (!target) {
+      return;
+    }
+
+    lastSelectionRequestRef.current = requestId;
+    setModuloAtual("lista");
+    setBusca("");
+    setImovelSelecionado(target);
+    carregarFicheirosService(target.id).then(({ data }) => {
+      setFicheiros(data || []);
+    });
+  }, [imoveis, selectionRequest]);
 
   const filtrados = useMemo(
     () => filtrarImoveisPorProprietario(imoveis, busca),

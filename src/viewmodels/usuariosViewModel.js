@@ -69,6 +69,23 @@ function resolveAccountStatus(meta, form) {
   return form?.ativo === false ? "disabled" : "active";
 }
 
+function resolveAdministrativeStatus(meta, form) {
+  const authUserId = String(meta?.auth_user_id || "").trim();
+  const empresaId = String(form?.empresa_id || meta?.empresa_id || "").trim();
+
+  if (!authUserId) return "auth_unlinked";
+  if (!empresaId) return "empresa_unlinked";
+  if (resolveAccountStatus(meta, form) === "pending_activation") return "pending_activation";
+  return "active";
+}
+
+function resolveAdministrativeStatusLabel(status) {
+  if (status === "auth_unlinked") return "Auth não associado";
+  if (status === "empresa_unlinked") return "Empresa não associada";
+  if (status === "pending_activation") return "Ativação pendente";
+  return "Ativo";
+}
+
 export function criarUsuariosViewModel({
   form,
   perfilOrganizacional,
@@ -108,6 +125,8 @@ export function criarUsuariosViewModel({
 
     conta: {
       estado: resolveAccountStatus(usuarioSelecionadoMeta, form),
+      estadoAdministrativo: resolveAdministrativeStatus(usuarioSelecionadoMeta, form),
+      estadoAdministrativoLabel: resolveAdministrativeStatusLabel(resolveAdministrativeStatus(usuarioSelecionadoMeta, form)),
       ultimoAcesso: ultimoAcessoFormatado || "Sem acessos registados",
       dataCriacao,
       username: form.username,

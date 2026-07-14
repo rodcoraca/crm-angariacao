@@ -2,7 +2,7 @@
   "name": "crm-angariacao",
   "version": "0.1.0",
   "private": true,
-  "homepage": "/app",
+  "homepage": ".",
   "proxy": "http://localhost:3001",
   "dependencies": {
     "@supabase/supabase-js": "^2.105.0",

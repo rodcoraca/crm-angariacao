@@ -87,6 +87,11 @@
   min-width: 0;
 }
 
+.cockpit-search-shell {
+  position: relative;
+  min-width: 0;
+}
+
 .cockpit-search__icon {
   width: 24px;
   height: 24px;
@@ -113,6 +118,92 @@
 
 .cockpit-search input::placeholder {
   color: var(--cockpit-muted);
+}
+
+.cockpit-search-results {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--cockpit-surface);
+  border: 1px solid var(--cockpit-border);
+  border-radius: 14px;
+  box-shadow: 0 14px 30px rgba(16, 34, 45, 0.12);
+  overflow: hidden;
+}
+
+.cockpit-search-results__state {
+  padding: 14px 16px;
+  color: var(--cockpit-muted);
+  font-size: 14px;
+}
+
+.cockpit-search-results__list {
+  display: grid;
+}
+
+.cockpit-search-result {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 0;
+  border-bottom: 1px solid rgba(215, 226, 234, 0.9);
+  background: var(--cockpit-surface);
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.cockpit-search-result:last-child {
+  border-bottom: 0;
+}
+
+.cockpit-search-result:hover,
+.cockpit-search-result--active {
+  background: var(--cockpit-surface-soft);
+}
+
+.cockpit-search-result__icon {
+  width: 36px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: rgba(14, 77, 100, 0.08);
+  font-size: 16px;
+}
+
+.cockpit-search-result__content {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.cockpit-search-result__type {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--cockpit-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.cockpit-search-result__title {
+  color: var(--cockpit-text);
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.cockpit-search-result__company,
+.cockpit-search-result__secondary {
+  color: var(--cockpit-muted);
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .cockpit-topbar__meta {

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTheme } from '../theme/ThemeContext';
 import { usePermissions } from '../modules/auth/hooks';
 import { PERMISSION_MODULES } from '../modules/auth/services/permissionCatalog';
@@ -9,6 +9,7 @@ import {
   listarSessoesPorUtilizador,
   listarUsuarios,
   obterResumoAtividadePorUtilizador,
+  reenviarConviteAtivacaoUtilizador,
   registrarAcaoNegadaUtilizadores,
 } from '../modules/users/services';
 import UserPersonalSection from '../components/users/UserPersonalSection';
@@ -46,9 +47,41 @@ function getAccountStatusLabel(status) {
   return 'Ativo';
 }
 
-export default function Usuarios({ currentUser }) {
+function resolveAdministrativeStatus(usuario) {
+  const hasAuthUser = Boolean(String(usuario?.auth_user_id || '').trim());
+  const hasEmpresa = Boolean(String(usuario?.empresa_id || '').trim());
+
+  if (!hasAuthUser) return 'auth_unlinked';
+  if (!hasEmpresa) return 'empresa_unlinked';
+  if (resolveAccountStatus(usuario) === 'pending_activation') return 'pending_activation';
+  return 'active';
+}
+
+function getAdministrativeStatusLabel(status) {
+  if (status === 'auth_unlinked') return 'Auth não associado';
+  if (status === 'empresa_unlinked') return 'Empresa não associada';
+  if (status === 'pending_activation') return 'Ativação pendente';
+  return 'Ativo';
+}
+
+function getAdministrativeBadgeStyle(theme, status) {
+  if (status === 'active') {
+    return {
+      background: `${theme.colors.success}22`,
+      color: theme.colors.success,
+    };
+  }
+
+  return {
+    background: `${theme.colors.warning}22`,
+    color: theme.colors.warning,
+  };
+}
+
+export default function Usuarios({ currentUser, selectionRequest = null }) {
   const theme = useTheme();
   const { can } = usePermissions();
+  const lastSelectionRequestRef = useRef(null);
 
   const [usuarios, setUsuarios] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -68,6 +101,7 @@ export default function Usuarios({ currentUser }) {
   const [atividadeResumo, setAtividadeResumo] = useState(null);
   const [preferenciasUsuario, setPreferenciasUsuario] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
+  const [isResendingInvite, setIsResendingInvite] = useState(false);
 
   // Arquitetura SaaS (futuro): quando houver persistencia multi-tenant,
   // este formulario deve acomodar identificadores de contexto organizacional
@@ -82,7 +116,8 @@ export default function Usuarios({ currentUser }) {
     confirmarPassword: '',
     permissoes: {},
     ativo: true,
-    account_status: 'active',
+    account_status: 'pending_activation',
+    empresa_id: currentUser?.empresa_id || currentUser?.user_metadata?.empresa_id || null,
   });
 
   useEffect(() => {
@@ -103,6 +138,38 @@ export default function Usuarios({ currentUser }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [usuarioSelecionadoMeta]);
 
+  useEffect(() => {
+    const requestId = selectionRequest?.id ? `${selectionRequest.id}:${selectionRequest.nonce || ''}` : '';
+    if (!requestId || requestId === lastSelectionRequestRef.current || !usuarios.length) {
+      return;
+    }
+
+    const target = usuarios.find((item) => String(item.id) === String(selectionRequest.id));
+    if (!target) {
+      return;
+    }
+
+    lastSelectionRequestRef.current = requestId;
+    setModoEdicao(true);
+    setUsuarioSelecionadoId(target.id);
+    setUsuarioSelecionadoMeta(target);
+    setPerfilOrganizacional(target?.permissoes?.__perfil || '');
+    setForm({
+      nome: target.nome || '',
+      apelido: target.apelido || '',
+      email: target.email || '',
+      telefone: target.telefone || '',
+      username: target.username || '',
+      password: '',
+      confirmarPassword: '',
+      permissoes: target.permissoes || {},
+      ativo: resolveAccountStatus(target) !== 'disabled',
+      account_status: resolveAccountStatus(target),
+      empresa_id: target.empresa_id || currentUser?.empresa_id || currentUser?.user_metadata?.empresa_id || null,
+    });
+    setEtapaAtiva('ficha');
+  }, [currentUser?.empresa_id, currentUser?.user_metadata?.empresa_id, selectionRequest, usuarios]);
+
   async function carregarUsuarios() {
     setLoading(true);
     setErro('');
@@ -112,11 +179,13 @@ export default function Usuarios({ currentUser }) {
       setErro(error.message || 'Falha ao carregar utilizadores.');
       setUsuarios([]);
       setLoading(false);
-      return;
+      return [];
     }
 
-    setUsuarios(data || []);
+    const lista = data || [];
+    setUsuarios(lista);
     setLoading(false);
+    return lista;
   }
 
   async function carregarTimelineUsuario(usuario) {
@@ -171,7 +240,8 @@ export default function Usuarios({ currentUser }) {
       confirmarPassword: '',
       permissoes: {},
       ativo: true,
-      account_status: 'active',
+      account_status: 'pending_activation',
+      empresa_id: currentUser?.empresa_id || currentUser?.user_metadata?.empresa_id || null,
     });
     setModoEdicao(false);
     setUsuarioSelecionadoId(null);
@@ -207,6 +277,7 @@ export default function Usuarios({ currentUser }) {
       permissoes: usuario.permissoes || {},
       ativo: resolveAccountStatus(usuario) !== 'disabled',
       account_status: resolveAccountStatus(usuario),
+      empresa_id: usuario.empresa_id || currentUser?.empresa_id || currentUser?.user_metadata?.empresa_id || null,
     });
   }
 
@@ -325,23 +396,57 @@ export default function Usuarios({ currentUser }) {
       }
     }
 
-    const { error } = await guardarUsuarioComAuditoria({
-      form,
-      modoEdicao,
-      usuarioSelecionadoId,
-      currentUser,
-      perfilOrganizacional,
-      permissoesAtuais: usuarioSelecionadoMeta?.permissoes || {},
-    });
+    let resultado;
+    try {
+      resultado = await guardarUsuarioComAuditoria({
+        form,
+        modoEdicao,
+        usuarioSelecionadoId,
+        currentUser,
+        perfilOrganizacional,
+        permissoesAtuais: usuarioSelecionadoMeta?.permissoes || {},
+      });
+    } catch (error) {
+      setErro(error?.message || 'Falha ao guardar utilizador.');
+      return;
+    }
 
-    if (error) {
-      setErro(error.message || 'Falha ao guardar utilizador.');
+    if (resultado?.error) {
+      setErro(resultado.error.message || 'Falha ao guardar utilizador.');
       return;
     }
 
     resetForm();
     await carregarUsuarios();
     setEtapaAtiva('lista');
+  }
+
+  async function reenviarConvite() {
+    if (!usuarioSelecionadoMeta?.id) return;
+
+    setErro('');
+    setIsResendingInvite(true);
+
+    try {
+      const { error } = await reenviarConviteAtivacaoUtilizador({
+        usuarioId: usuarioSelecionadoMeta.id,
+        currentUser,
+      });
+
+      if (error) {
+        setErro(error.message || 'Falha ao reenviar convite.');
+        return;
+      }
+
+      const refreshedUsers = await carregarUsuarios();
+
+      const refreshed = (refreshedUsers || []).find((item) => String(item.id) === String(usuarioSelecionadoMeta.id));
+      if (refreshed) {
+        iniciarEdicao(refreshed);
+      }
+    } finally {
+      setIsResendingInvite(false);
+    }
   }
 
   const resumo = useMemo(() => ({
@@ -373,6 +478,7 @@ export default function Usuarios({ currentUser }) {
     const nome = `${usuarioSelecionadoMeta.nome || ''} ${usuarioSelecionadoMeta.apelido || ''}`.trim() || 'Sem nome';
     const perfil = usuarioSelecionadoMeta?.permissoes?.__perfil || 'Nao definido';
     const estado = getAccountStatusLabel(resolveAccountStatus(usuarioSelecionadoMeta));
+    const estadoAdministrativo = getAdministrativeStatusLabel(resolveAdministrativeStatus(usuarioSelecionadoMeta));
 
     const ultimaSessao = sessoesUsuario[0];
     const ultimaAtividade = ultimaSessao?.last_activity_at
@@ -383,6 +489,7 @@ export default function Usuarios({ currentUser }) {
       nome,
       perfil,
       estado,
+      estadoAdministrativo,
       ultimaAtividade,
     };
   }, [usuarioSelecionadoMeta, sessoesUsuario, ultimoEventoSelecionado]);
@@ -782,6 +889,7 @@ export default function Usuarios({ currentUser }) {
               </span>
               <span style={styles.summaryItem}><strong>Perfil:</strong> {resumoSelecionado.perfil}</span>
               <span style={styles.summaryItem}><strong>Estado:</strong> {resumoSelecionado.estado}</span>
+              <span style={styles.summaryItem}><strong>Estado administrativo:</strong> {resumoSelecionado.estadoAdministrativo || 'n/d'}</span>
               <span style={styles.summaryItem}><strong>Ultima atividade:</strong> {resumoSelecionado.ultimaAtividade}</span>
             </div>
           </div>
@@ -841,6 +949,9 @@ export default function Usuarios({ currentUser }) {
                   <div style={styles.userActions}>
                     {String(usuarioSelecionadoId || '') === String(usuario.id) ? <span style={{ ...styles.badge, background: `${theme.colors.primary}22`, color: theme.colors.primary }}>Selecionado</span> : null}
                     <span style={styles.badge}>{getAccountStatusLabel(resolveAccountStatus(usuario))}</span>
+                    <span style={{ ...styles.badge, ...getAdministrativeBadgeStyle(theme, resolveAdministrativeStatus(usuario)) }}>
+                      {getAdministrativeStatusLabel(resolveAdministrativeStatus(usuario))}
+                    </span>
                   </div>
                 </div>
               ))}
@@ -870,7 +981,15 @@ export default function Usuarios({ currentUser }) {
 
           <div style={styles.sectionsWrap}>
             {['novo', 'ficha'].includes(etapaAtiva) ? <UserPersonalSection dadosPessoais={utilizadorVM.dadosPessoais} onChange={atualizarCampo} styles={styles} /> : null}
-            {['novo', 'ficha'].includes(etapaAtiva) ? <UserAccountSection conta={utilizadorVM.conta} onChange={atualizarCampo} styles={styles} /> : null}
+            {['novo', 'ficha'].includes(etapaAtiva) ? (
+              <UserAccountSection
+                conta={utilizadorVM.conta}
+                onChange={atualizarCampo}
+                onResendInvite={etapaAtiva === 'ficha' && modoEdicao ? reenviarConvite : null}
+                resendInviteLoading={isResendingInvite}
+                styles={styles}
+              />
+            ) : null}
             {['novo', 'ficha'].includes(etapaAtiva) ? <UserProfileSection perfil={utilizadorVM.perfil} onChangePerfil={setPerfilOrganizacional} styles={styles} /> : null}
 
             {etapaAtiva === 'permissoes' ? (

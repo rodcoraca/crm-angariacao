@@ -13,7 +13,7 @@ import {
   hasEmpresaId,
   resolveEmpresaId,
   warnMissingEmpresaId
-} from "../../../utils/empresaScope";
+} from "../../../utils/empresaScope.js";
 
 function normalizeNumericScore(value) {
   const parsed = Number(value);

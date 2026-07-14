@@ -76,6 +76,11 @@ const initialContactForm = {
   origem: "website",
 };
 
+const APP_URL =
+  process.env.NODE_ENV === "production"
+    ? "https://app.osflow.pt"
+    : "http://localhost:3000";
+
 function upsertMeta(name, content, isProperty = false) {
   const selector = isProperty ? `meta[property="${name}"]` : `meta[name="${name}"]`;
   let meta = document.head.querySelector(selector);
@@ -209,12 +214,12 @@ export default function LandingPage() {
     upsertMeta("og:title", title, true);
     upsertMeta("og:description", description, true);
     upsertMeta("og:url", "https://osflow.pt", true);
-    upsertMeta("og:image", "https://osflow.pt/logo512.png", true);
+    //upsertMeta("og:image", "https://osflow.pt/logo512.png", true);
 
     upsertMeta("twitter:card", "summary_large_image");
     upsertMeta("twitter:title", title);
     upsertMeta("twitter:description", description);
-    upsertMeta("twitter:image", "https://osflow.pt/logo512.png");
+    //upsertMeta("twitter:image", "https://osflow.pt/logo512.png");
 
     upsertLink("canonical", "https://osflow.pt");
   }, []);
@@ -336,7 +341,7 @@ export default function LandingPage() {
             >
               Contacto
             </a>
-            <a href="/app" className="lp-nav-cta">
+            <a href={APP_URL} className="lp-nav-cta">
               Entrar no CRM
             </a>
           </nav>
@@ -364,7 +369,7 @@ export default function LandingPage() {
             >
               Solicitar Demonstração
             </button>
-            <a className="lp-btn lp-btn-ghost" href="/app">
+            <a className="lp-btn lp-btn-ghost" href={APP_URL}>
               Entrar na Plataforma
             </a>
           </div>
@@ -516,7 +521,7 @@ export default function LandingPage() {
           <nav aria-label="Links institucionais" className="lp-footer-links">
             <a href="/politica-privacidade">Política de Privacidade</a>
             <a href="/termos">Termos de Utilização</a>
-            <a href="/app">Entrar no CRM</a>
+            <a href={APP_URL}>Entrar no CRM</a>
             <a href="https://www.linkedin.com/company/osflow" target="_blank" rel="noreferrer">
               LinkedIn (placeholder)
             </a>

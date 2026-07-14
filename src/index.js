@@ -8,15 +8,22 @@ import { ThemeProvider } from './theme/ThemeContext';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 
-const isCrmRoute = window.location.pathname === '/app' || window.location.pathname.startsWith('/app/');
-const isIntegrationCallbackRoute = window.location.pathname === '/app/integrations/callback';
+const hostname = window.location.hostname;
+
+const isAppDomain =
+  hostname === 'app.osflow.pt' ||
+  hostname === 'localhost' ||
+  hostname === '127.0.0.1';
+
+const isIntegrationCallbackRoute =
+  window.location.pathname === '/integrations/callback';
 
 root.render(
   isIntegrationCallbackRoute ? (
     <ThemeProvider>
       <IntegrationCallback />
     </ThemeProvider>
-  ) : isCrmRoute ? (
+  ) : isAppDomain ? (
     <ThemeProvider>
       <App />
     </ThemeProvider>

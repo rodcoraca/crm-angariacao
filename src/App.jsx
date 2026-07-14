@@ -24,6 +24,7 @@ import {
   getRequiredPermission,
   loadAuthorizationProfileByAuthUserId,
   normalizePermissions,
+  reconcilePendingActivation,
   registerUserSession,
   startSessionActivityTracking,
   updateSessionActivity,
@@ -33,7 +34,15 @@ import { registrarAcessoNegado, registrarLogout, registrarNavegacao } from "./mo
 import FeedbackHost from "./components/ui/FeedbackHost";
 import { notifyError, notifyInfo } from "./components/ui/feedbackBus";
 
+const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
+
+function detectPasswordRecoveryHash() {
+  if (typeof window === "undefined") return false;
+  return String(window.location.hash || "").includes("type=recovery");
+}
+
 export default function App() {
+  const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(detectPasswordRecoveryHash);
   const [user, setUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -44,6 +53,8 @@ export default function App() {
   const [viewAnteriorFicha, setViewAnteriorFicha] = useState("fluxo");
   const [logsModo, setLogsModo] = useState("geral");
   const [docSelecionado, setDocSelecionado] = useState("arquitetura");
+  const [imovelSelectionRequest, setImovelSelectionRequest] = useState(null);
+  const [userSelectionRequest, setUserSelectionRequest] = useState(null);
   const [forbiddenState, setForbiddenState] = useState({ requestedView: null, requiredPermission: null });
   const isManualLogoutRef = useRef(false);
   const latestUserRef = useRef(null);
@@ -111,10 +122,13 @@ export default function App() {
   }, [serializePermissions]);
 
   const montarUsuarioSessao = useCallback((authUser, perfilAtual, expiresAt = null) => {
+    const empresaId = perfilAtual?.empresa_id || authUser.user_metadata?.empresa_id || null;
+
     return {
       id: authUser.id,
       auth_user_id: authUser.id,
       perfil_id: perfilAtual?.id || null,
+      empresa_id: empresaId,
       email: authUser.email,
       expires_at: expiresAt,
       user_metadata: {
@@ -123,10 +137,18 @@ export default function App() {
         username: perfilAtual?.username || authUser.user_metadata?.username || authUser.email || "",
         telefone: perfilAtual?.telefone || authUser.user_metadata?.telefone || "",
         perfil: authUser.user_metadata?.perfil || "",
-        empresa_id: perfilAtual?.empresa_id || authUser.user_metadata?.empresa_id || null,
+        empresa_id: empresaId,
         permissoes: perfilAtual?.permissoes || authUser.user_metadata?.permissoes || {}
       }
     };
+  }, []);
+
+  const restoreEmpresaIdFromStorage = useCallback(() => {
+    if (typeof window === "undefined") return null;
+
+    const stored = window.localStorage.getItem(ACTIVE_SESSION_TENANT_KEY);
+    const normalized = String(stored || "").trim();
+    return normalized || null;
   }, []);
 
   const hydrateSessionFromAuth = useCallback(async (authSession, { notifyOnExpired = false } = {}) => {
@@ -143,7 +165,7 @@ export default function App() {
 
     try {
       const { data: perfilAtual, error } = await withTimeout(
-        loadAuthorizationProfileByAuthUserId(authUser.id),
+        loadAuthorizationProfileByAuthUserId(authUser),
         8000,
         "authz_init_timeout"
       );
@@ -162,7 +184,14 @@ export default function App() {
         return { ok: false, reason: "missing_profile" };
       }
 
-      if (perfilAtual.ativo === false) {
+      const activationReconciliation = await reconcilePendingActivation(authUser, perfilAtual);
+      if (activationReconciliation.error) {
+        reportAuthError(activationReconciliation.error, "App.hydrateSessionFromAuth.reconcilePendingActivation");
+      }
+
+      const perfilResolvido = activationReconciliation.data || perfilAtual;
+
+      if (perfilResolvido.ativo === false) {
         await supabase.auth.signOut();
         setUser(null);
         setPerfil(null);
@@ -170,8 +199,12 @@ export default function App() {
         return { ok: false, reason: "inactive_user" };
       }
 
-      const nextPerfil = { ...perfilAtual, permissoes: perfilAtual.permissoes || {} };
-      const nextUser = montarUsuarioSessao(authUser, perfilAtual, authSession?.expires_at || null);
+      if (perfilResolvido?.empresa_id && typeof window !== "undefined") {
+        window.localStorage.setItem(ACTIVE_SESSION_TENANT_KEY, String(perfilResolvido.empresa_id));
+      }
+
+      const nextPerfil = { ...perfilResolvido, permissoes: perfilResolvido.permissoes || {} };
+      const nextUser = montarUsuarioSessao(authUser, perfilResolvido, authSession?.expires_at || null);
       const profileChanged = !isSameProfile(latestPerfilRef.current, nextPerfil);
       const userChanged = !isSameUserSession(latestUserRef.current, nextUser);
 
@@ -183,8 +216,8 @@ export default function App() {
         setUser(nextUser);
       }
 
-      const sessionUserId = perfilAtual.id || authUser.id;
-      const sessionEmpresaId = perfilAtual.empresa_id || null;
+      const sessionUserId = perfilResolvido.id || authUser.id;
+      const sessionEmpresaId = perfilResolvido.empresa_id || null;
 
       if (
         sessionInitializedRef.current
@@ -267,6 +300,13 @@ export default function App() {
 
     async function bootstrapAuthSession() {
       try {
+        if (isPasswordRecoveryMode) {
+          setUser(null);
+          setPerfil(null);
+          setAuthzReady(true);
+          return;
+        }
+
         const { data, error } = await supabase.auth.getSession();
         if (!isMounted) return;
 
@@ -278,7 +318,9 @@ export default function App() {
         }
 
         if (data?.session?.user) {
-          const nextUser = montarUsuarioSessao(data.session.user, null, data.session?.expires_at || null);
+          const restoredEmpresaId = restoreEmpresaIdFromStorage();
+          const bootstrapProfile = restoredEmpresaId ? { empresa_id: restoredEmpresaId } : null;
+          const nextUser = montarUsuarioSessao(data.session.user, bootstrapProfile, data.session?.expires_at || null);
           setUser((prev) => (isSameUserSession(prev, nextUser) ? prev : nextUser));
           hydrateSessionFromAuth(data.session, { notifyOnExpired: true });
         } else {
@@ -300,6 +342,14 @@ export default function App() {
 
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
+
+      if (event === "PASSWORD_RECOVERY") {
+        setIsPasswordRecoveryMode(true);
+        setUser(null);
+        setPerfil(null);
+        setAuthzReady(true);
+        return;
+      }
 
       if (event === "SIGNED_OUT") {
         sessionInitializedRef.current = false;
@@ -326,7 +376,16 @@ export default function App() {
         return;
       }
 
-      const nextUser = montarUsuarioSessao(session.user, null, session?.expires_at || null);
+      if (isPasswordRecoveryMode) {
+        setUser(null);
+        setPerfil(null);
+        setAuthzReady(true);
+        return;
+      }
+
+      const restoredEmpresaId = restoreEmpresaIdFromStorage();
+      const bootstrapProfile = restoredEmpresaId ? { empresa_id: restoredEmpresaId } : null;
+      const nextUser = montarUsuarioSessao(session.user, bootstrapProfile, session?.expires_at || null);
       setUser((prev) => (isSameUserSession(prev, nextUser) ? prev : nextUser));
       hydrateSessionFromAuth(session, { notifyOnExpired: event !== "SIGNED_IN" });
     });
@@ -335,7 +394,7 @@ export default function App() {
       isMounted = false;
       listener?.subscription?.unsubscribe?.();
     };
-  }, [hydrateSessionFromAuth, isSameUserSession, montarUsuarioSessao]);
+  }, [hydrateSessionFromAuth, isPasswordRecoveryMode, isSameUserSession, montarUsuarioSessao, restoreEmpresaIdFromStorage]);
 
   function getHeaderContextTitle() {
     if (leadSelecionadoId) return "Leads";
@@ -379,6 +438,10 @@ export default function App() {
       await supabase.auth.signOut();
       notifyError("Erro de comunicação no logout. Sessão local encerrada.");
     } finally {
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(ACTIVE_SESSION_TENANT_KEY);
+      }
+
       setUser(null);
       setPerfil(null);
       setAuthzReady(true);
@@ -388,6 +451,45 @@ export default function App() {
   function abrirFichaLead(id) {
     setLeadSelecionadoId(id);
     setViewAnteriorFicha(view);
+  }
+
+  async function abrirResultadoPesquisaCockpit(result) {
+    if (!result?.targetId || !result?.targetType) {
+      return;
+    }
+
+    if (result.targetType === "lead") {
+      abrirFichaLead(result.targetId);
+      await registrarLog("pesquisa_global", `Abriu ${result.type}: ${result.title}`);
+      return;
+    }
+
+    if (result.targetType === "imovel") {
+      const authorization = authorizeProtectedView("estoque_np", createAuthorizationContext());
+      if (!authorization.allowed) {
+        await handleForbiddenAccess("estoque_np", authorization.requiredPermission, authorization.reason);
+        return;
+      }
+
+      setImovelSelectionRequest({ id: result.targetId, nonce: Date.now() });
+      setLeadSelecionadoId(null);
+      setView("estoque_np");
+      await registrarLog("pesquisa_global", `Abriu Imóvel: ${result.title}`);
+      return;
+    }
+
+    if (result.targetType === "user") {
+      const authorization = authorizeProtectedView("usuarios", createAuthorizationContext());
+      if (!authorization.allowed) {
+        await handleForbiddenAccess("usuarios", authorization.requiredPermission, authorization.reason);
+        return;
+      }
+
+      setUserSelectionRequest({ id: result.targetId, nonce: Date.now() });
+      setLeadSelecionadoId(null);
+      setView("usuarios");
+      await registrarLog("pesquisa_global", `Abriu Utilizador: ${result.title}`);
+    }
   }
 
   function mudarView(nextView) {
@@ -520,7 +622,7 @@ export default function App() {
 
     if (usuario?.user_metadata?.permissoes && typeof usuario.user_metadata.permissoes === "object") {
       const nextPerfil = {
-        empresa_id: usuario.user_metadata?.empresa_id || null,
+        empresa_id: usuario.empresa_id || usuario.user_metadata?.empresa_id || null,
         permissoes: normalizePermissions(usuario.user_metadata.permissoes)
       };
 
@@ -551,14 +653,23 @@ export default function App() {
   if (!authReady || !user) {
     return (
       <>
-        <Login onLogin={handleLogin} />
+        <Login
+          onLogin={handleLogin}
+          passwordRecoveryMode={isPasswordRecoveryMode}
+          onPasswordRecoveryComplete={() => {
+            setIsPasswordRecoveryMode(false);
+            if (typeof window !== "undefined") {
+              window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+            }
+          }}
+        />
         <FeedbackHost />
       </>
     );
   }
 
   const screens = {
-    home: canAccessView("home") ? <Home user={user} /> : <Forbidden requestedView="home" requiredPermission={getRequiredPermission("home")} />,
+    home: canAccessView("home") ? <Home user={user} onOpenSearchResult={abrirResultadoPesquisaCockpit} /> : <Forbidden requestedView="home" requiredPermission={getRequiredPermission("home")} />,
     radar: canAccessView("radar") ? <Radar /> : <Forbidden requestedView="radar" requiredPermission={getRequiredPermission("radar")} />,
     radar_imovirtual: canAccessView("radar_imovirtual") ? <RadarImovirtual /> : <Forbidden requestedView="radar_imovirtual" requiredPermission={getRequiredPermission("radar_imovirtual")} />,
     admin_documentacao: canAccessView("admin_documentacao") ? <AdministracaoDocumentacao selectedDoc={docSelecionado} /> : <Forbidden requestedView="admin_documentacao" requiredPermission={getRequiredPermission("admin_documentacao")} />,
@@ -569,8 +680,8 @@ export default function App() {
     morno: canAccessView("morno") ? <LeadsPorTipo tipo="morno" user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="morno" requiredPermission={getRequiredPermission("morno")} />,
     frio: canAccessView("frio") ? <LeadsPorTipo tipo="frio" user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="frio" requiredPermission={getRequiredPermission("frio")} />,
     mensagens: canAccessView("mensagens") ? <MensagensPadrao /> : <Forbidden requestedView="mensagens" requiredPermission={getRequiredPermission("mensagens")} />,
-    estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
-    usuarios: canAccessView("usuarios") ? <Usuarios currentUser={user} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
+    estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
+    usuarios: canAccessView("usuarios") ? <Usuarios currentUser={user} selectionRequest={userSelectionRequest} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
     logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={user} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
   };
 

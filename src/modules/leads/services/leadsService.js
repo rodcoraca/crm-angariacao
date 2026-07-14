@@ -15,7 +15,7 @@ import {
   hasEmpresaId,
   resolveEmpresaId,
   warnMissingEmpresaId
-} from "../../../utils/empresaScope";
+} from "../../../utils/empresaScope.js";
 
 async function executarMutacaoComErro(mutationHandler) {
   const result = await mutationHandler();

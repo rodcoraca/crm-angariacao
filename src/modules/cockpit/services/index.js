@@ -5,3 +5,4 @@ export { fetchCockpitAgenda as fetchAgendaOperacional } from "./cockpitAgendaSer
 export { fetchCockpitRisk as fetchImoveisSaude } from "./cockpitRiskService";
 export { fetchCockpitProductivity as fetchProdutividade } from "./cockpitProductivityService";
 export { fetchCockpitActivity as fetchUltimasAtividades } from "./cockpitActivityService";
+export { searchCockpitGlobal } from "./cockpitSearchService";

@@ -1,4 +1,10 @@
-export default function UserAccountSection({ conta, onChange, styles }) {
+function resolveStatusLabel(status) {
+  if (status === "pending_activation") return "Pendente ativação";
+  if (status === "disabled") return "Desativado";
+  return "Ativo";
+}
+
+export default function UserAccountSection({ conta, onChange, onResendInvite = null, resendInviteLoading = false, styles }) {
   return (
     <section style={styles.sectionCard}>
       <h4 style={styles.sectionTitle}>2. CONTA</h4>
@@ -10,6 +16,8 @@ export default function UserAccountSection({ conta, onChange, styles }) {
             <option value="active">Ativo</option>
             <option value="disabled">Desativado</option>
           </select>
+          <span style={styles.helperText}>Estado atual: {resolveStatusLabel(conta.estado)}</span>
+          <span style={styles.helperText}>Estado administrativo: {conta.estadoAdministrativoLabel || "Ativo"}</span>
         </label>
 
         <label style={styles.accountFieldLabel}>
@@ -37,6 +45,20 @@ export default function UserAccountSection({ conta, onChange, styles }) {
           Confirmar Password
           <input style={styles.input} type="password" placeholder={conta.modoEdicao ? "Opcional" : "Obrigatória"} value={conta.confirmarPassword} onChange={(e) => onChange("confirmarPassword", e.target.value)} />
         </label>
+
+        {conta.modoEdicao && onResendInvite ? (
+          <label style={styles.accountFieldLabel}>
+            Convite de ativação
+            <button
+              type="button"
+              style={styles.smallButton}
+              onClick={onResendInvite}
+              disabled={resendInviteLoading}
+            >
+              {resendInviteLoading ? "A enviar..." : "Reenviar convite"}
+            </button>
+          </label>
+        ) : null}
       </div>
     </section>
   );

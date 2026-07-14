@@ -1,5 +1,5 @@
 import { supabase } from "../../../supabase";
-import { applyEmpresaScope, resolveEmpresaId } from "../../../utils/empresaScope";
+import { applyEmpresaScope, resolveEmpresaId } from "../../../utils/empresaScope.js";
 
 function toNullableNumber(value) {
   if (value === null || value === undefined || value === "") return null;

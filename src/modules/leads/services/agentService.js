@@ -1,5 +1,5 @@
 import { formatarNomeApresentacao } from "../../../utils/nomes";
-import { resolveEmpresaIdFromContext } from "../../../utils/empresaScope";
+import { resolveEmpresaIdFromContext } from "../../../utils/empresaScope.js";
 import { fetchAgentesAtivos, fetchLeadAgenteIds } from "../repositories/leadsRepository";
 import { pertenceAoMesmoContrato, resolverContratoIdentidade } from "../utils/identityContract";
 

@@ -104,6 +104,27 @@ Pronto para:
 
 - v0.9.1 Beta
 
+## RC1.5.2 - Recuperação de Password
+
+Data: 2026-07-13
+
+### Implementação
+- Fluxo de recuperação autónoma ativado no login com envio de email via Supabase Auth.
+- Utilização explícita de `resetPasswordForEmail` através do serviço `requestPasswordReset`.
+- Definição de nova password já suportada no modo `type=recovery` com retorno ao login após sucesso.
+
+### UX e Regras de Negócio
+- Botão `Recuperar password` mantido no ecrã de login sem alterações de layout/experiência.
+- Feedback visual garantido para:
+- `Email de recuperação enviado`.
+- `Email inexistente`.
+- `Erro` de comunicação/interno ao recuperar password.
+- Fluxo de autenticação existente preservado.
+- `account_status` preservado sem alterações de estado durante recuperação de password.
+
+### SQL
+- Sem alterações SQL para RC1.5.2.
+
 ## 4. Categorias de Alteração
 
 - Documentação

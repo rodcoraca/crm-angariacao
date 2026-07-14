@@ -1,5 +1,5 @@
 import { supabase } from "../../../supabase";
-import { applyEmpresaScope } from "../../../utils/empresaScope";
+import { applyEmpresaScope } from "../../../utils/empresaScope.js";
 
 export function fetchLeadsByTipo(tipo, empresaId = null) {
   return applyEmpresaScope(supabase

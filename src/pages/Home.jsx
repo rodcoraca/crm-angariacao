@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "../theme/ThemeContext";
+import { usePermissions } from "../modules/auth/hooks";
 import Badge from "../components/ui/Badge";
 import Card from "../components/ui/Card";
 import KpiCard from "../components/ui/KpiCard";
@@ -12,6 +13,7 @@ import {
   useCockpitProductivity,
   useCockpitRisk
 } from "../modules/cockpit/hooks";
+import { searchCockpitGlobal } from "../modules/cockpit/services";
 import { createCockpitViewModel } from "../modules/cockpit/viewmodels";
 import {
   formatarResumoSaudeImovel
@@ -62,8 +64,18 @@ function criarSparkline(value, index) {
   });
 }
 
-export default function Home({ user }) {
+export default function Home({ user, onOpenSearchResult = null }) {
   const theme = useTheme();
+  const { can } = usePermissions();
+  const [searchTerm, setSearchTerm] = useState("");
+  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isSearchLoading, setIsSearchLoading] = useState(false);
+  const [searchError, setSearchError] = useState("");
+  const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const searchRef = useRef(null);
+  const searchRequestRef = useRef(0);
 
   const agora = new Date();
   const hora = agora.getHours();
@@ -102,6 +114,7 @@ export default function Home({ user }) {
     || "OSFlow"
   ).toString();
   const avatarIniciais = obterIniciais(nomeUtilizador || user?.email || "OSFlow");
+  const canViewUsers = can("users.view");
 
   const {
     kpis,
@@ -250,6 +263,135 @@ export default function Home({ user }) {
     }
   ];
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      setDebouncedSearchTerm(searchTerm);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    const normalized = String(debouncedSearchTerm || "").trim();
+    if (normalized.length < 2) {
+      setSearchResults([]);
+      setSearchError("");
+      setIsSearchLoading(false);
+      setHighlightedIndex(0);
+      return;
+    }
+
+    const requestId = searchRequestRef.current + 1;
+    searchRequestRef.current = requestId;
+    setIsSearchLoading(true);
+    setSearchError("");
+    setIsSearchOpen(true);
+
+    let cancelled = false;
+
+    async function runSearch() {
+      const { data, error } = await searchCockpitGlobal({
+        term: normalized,
+        currentUser: user,
+        canViewUsers,
+        companyName: empresaSelecionada
+      });
+
+      if (cancelled || requestId !== searchRequestRef.current) {
+        return;
+      }
+
+      if (error) {
+        console.error("[Home.searchCockpitGlobal]", error);
+        setSearchResults([]);
+        setSearchError("Não foi possível pesquisar agora.");
+        setIsSearchLoading(false);
+        setHighlightedIndex(0);
+        return;
+      }
+
+      setSearchResults(data || []);
+      setSearchError("");
+      setIsSearchLoading(false);
+      setHighlightedIndex(0);
+    }
+
+    runSearch();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canViewUsers, debouncedSearchTerm, empresaSelecionada, user]);
+
+  useEffect(() => {
+    function handlePointerDown(event) {
+      if (!searchRef.current?.contains(event.target)) {
+        setIsSearchOpen(false);
+      }
+    }
+
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, []);
+
+  function closeSearch() {
+    setIsSearchOpen(false);
+    setHighlightedIndex(0);
+  }
+
+  function openSearchResult(result) {
+    if (!result) return;
+
+    onOpenSearchResult?.(result);
+    setSearchTerm("");
+    setDebouncedSearchTerm("");
+    setSearchResults([]);
+    setSearchError("");
+    closeSearch();
+  }
+
+  function handleSearchSubmit(event) {
+    event.preventDefault();
+    const selected = searchResults[highlightedIndex] || searchResults[0] || null;
+    if (selected) {
+      openSearchResult(selected);
+    }
+  }
+
+  function handleSearchKeyDown(event) {
+    if (!isSearchOpen && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+      setIsSearchOpen(true);
+      return;
+    }
+
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSearch();
+      return;
+    }
+
+    if (!searchResults.length) {
+      return;
+    }
+
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setHighlightedIndex((value) => (value + 1) % searchResults.length);
+      return;
+    }
+
+    if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setHighlightedIndex((value) => (value - 1 + searchResults.length) % searchResults.length);
+      return;
+    }
+
+    if (event.key === "Enter") {
+      event.preventDefault();
+      openSearchResult(searchResults[highlightedIndex] || searchResults[0]);
+    }
+  }
+
   return (
     <div
       className="cockpit-premium"
@@ -283,10 +425,61 @@ export default function Home({ user }) {
           </div>
         </div>
 
-        <label className="cockpit-search" aria-label="Pesquisar no cockpit">
-          <span className="cockpit-search__icon">P</span>
-          <input type="search" placeholder="Pesquisar clientes, leads, imoveis ou tarefas" />
-        </label>
+        <form className="cockpit-search-shell" onSubmit={handleSearchSubmit} ref={searchRef}>
+          <label className="cockpit-search" aria-label="Pesquisar no cockpit">
+            <span className="cockpit-search__icon">P</span>
+            <input
+              type="search"
+              placeholder="Pesquisar leads, imóveis, negócios ou utilizadores"
+              value={searchTerm}
+              onChange={(event) => {
+                setSearchTerm(event.target.value);
+                setIsSearchOpen(Boolean(event.target.value.trim()));
+              }}
+              onKeyDown={handleSearchKeyDown}
+              onFocus={() => {
+                if (searchTerm.trim()) {
+                  setIsSearchOpen(true);
+                }
+              }}
+              aria-controls="cockpit-global-search-results"
+              aria-autocomplete="list"
+            />
+          </label>
+
+          {isSearchOpen ? (
+            <div className="cockpit-search-results" id="cockpit-global-search-results" role="listbox">
+              {isSearchLoading ? <div className="cockpit-search-results__state">A pesquisar...</div> : null}
+              {!isSearchLoading && searchError ? <div className="cockpit-search-results__state">{searchError}</div> : null}
+              {!isSearchLoading && !searchError && !searchResults.length ? (
+                <div className="cockpit-search-results__state">Sem resultados para a pesquisa atual.</div>
+              ) : null}
+              {!isSearchLoading && !searchError && searchResults.length ? (
+                <div className="cockpit-search-results__list">
+                  {searchResults.map((result, index) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      className={`cockpit-search-result${index === highlightedIndex ? " cockpit-search-result--active" : ""}`}
+                      onMouseEnter={() => setHighlightedIndex(index)}
+                      onClick={() => openSearchResult(result)}
+                      role="option"
+                      aria-selected={index === highlightedIndex}
+                    >
+                      <span className="cockpit-search-result__icon" aria-hidden="true">{result.icon}</span>
+                      <span className="cockpit-search-result__content">
+                        <span className="cockpit-search-result__type">{result.type}</span>
+                        <strong className="cockpit-search-result__title">{result.title}</strong>
+                        <span className="cockpit-search-result__company">{result.company}</span>
+                        <span className="cockpit-search-result__secondary">{result.secondary}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </form>
 
         <div className="cockpit-topbar__right">
           <div className="cockpit-topbar__meta">

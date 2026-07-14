@@ -15,7 +15,7 @@ import {
   hasEmpresaId,
   resolveEmpresaId,
   warnMissingEmpresaId
-} from "../../../utils/empresaScope";
+} from "../../../utils/empresaScope.js";
 
 export async function carregarImoveisService() {
   const empresaId = await resolveEmpresaId();
