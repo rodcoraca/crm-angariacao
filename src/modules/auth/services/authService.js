@@ -434,7 +434,23 @@ export async function requestPasswordReset(email, redirectTo) {
 }
 
 export async function sendAccountActivationInvite(email, redirectTo) {
-  return requestPasswordReset(email, redirectTo);
+  const normalizedEmail = normalizeIdentifier(email);
+  if (!normalizedEmail) {
+    return {
+      data: null,
+      error: {
+        code: "missing_email",
+        message: "Email obrigatorio para envio de convite de ativacao."
+      }
+    };
+  }
+
+  return supabase.functions.invoke("send-user-invite", {
+    body: {
+      email: normalizedEmail,
+      redirectTo: redirectTo || undefined
+    }
+  });
 }
 
 export async function markUserAccountActive(profileId) {
