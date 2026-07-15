@@ -694,6 +694,31 @@ export default function App() {
     logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={user} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
   };
 
+  const authenticatedFooter = (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: "12px",
+        flexWrap: "wrap"
+      }}
+    >
+      <div style={{ display: "flex", alignItems: "center", gap: "8px", flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 600, letterSpacing: "0.02em" }}>OSFlow v1.0</span>
+        <span aria-hidden="true" style={{ opacity: 0.6 }}>•</span>
+        <span>© 2026 OSFlow — Plataforma proprietária.</span>
+        <span>Todos os direitos reservados.</span>
+      </div>
+
+      <nav aria-label="Links legais" style={{ display: "flex", alignItems: "center", gap: "12px", opacity: 0.72 }}>
+        <span>Termos de Utilização</span>
+        <span aria-hidden="true" style={{ opacity: 0.7 }}>|</span>
+        <span>Política de Privacidade</span>
+      </nav>
+    </div>
+  );
+
   return (
     <AuthProvider value={authContextValue}>
       <TenantProvider currentUser={user}>
@@ -706,7 +731,7 @@ export default function App() {
             <span style={{ color: "var(--os-color-text-light)", opacity: 0.92, fontSize: "14px" }}>Fluxo inteligente | Resultados reais</span>
           </div>
         }
-        footer={<span>OSFlow • Gestão operacional</span>}
+        footer={authenticatedFooter}
         sidebar={
           <Sidebar
             setView={mudarView}
