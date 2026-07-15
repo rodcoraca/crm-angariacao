@@ -24,6 +24,7 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
 
   const podeVer = (permissionCode) => hasPermission(perfil, permissionCode);
   const podeVerAdministracao = [
+    "empresas_admin",
     "admin_docs_arquitetura",
     "admin_docs_banco_dados",
     "admin_docs_roadmap",
@@ -202,6 +203,7 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
           <>
             {(() => {
               const isAdministracaoActive = [
+                "empresas_admin",
                 "admin_documentacao",
                 "admin_docs_arquitetura",
                 "admin_docs_banco_dados",
@@ -225,6 +227,7 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
 
             {menuAdministracaoAberto && !collapsed && (
               <div style={subMenu}>
+                {podeVerRota("empresas_admin") ? <SidebarItem style={getSubMenuStyle(activeView === "empresas_admin")} onClick={() => handleSelectView("empresas_admin")}>Empresas</SidebarItem> : null}
                 <SidebarItem style={getSubMenuStyle(activeView.startsWith("admin_docs_"))} onClick={() => setMenuDocumentacaoAberto((v) => !v)}>
                   Documentos {menuDocumentacaoAberto ? "▾" : "▸"}
                 </SidebarItem>

@@ -15,6 +15,7 @@ import EstoqueNaoPublicitado from "./EstoqueNaoPublicitado";
 import FichaLead from "./FichaLead";
 import Usuarios from "./pages/Usuarios";
 import Logs from "./pages/Logs";
+import EmpresasAdmin from "./pages/EmpresasAdmin";
 
 import Sidebar from "./components/Sidebar";
 import Layout from "./components/Layout";
@@ -30,6 +31,7 @@ import {
   updateSessionActivity,
 } from "./modules/auth/services";
 import { AuthProvider } from "./modules/auth/context";
+import { TenantProvider } from "./modules/tenant";
 import { registrarAcessoNegado, registrarLogout, registrarNavegacao } from "./modules/audit/services";
 import FeedbackHost from "./components/ui/FeedbackHost";
 import { notifyError, notifyInfo } from "./components/ui/feedbackBus";
@@ -411,6 +413,7 @@ export default function App() {
       frio: "Leads",
       estoque_np: "Imóveis",
       admin_documentacao: "Documentos",
+      empresas_admin: "Administração",
       mensagens: "Mensagens",
       usuarios: "Administração",
       logs: "Auditoria",
@@ -678,6 +681,7 @@ export default function App() {
     radar: canAccessView("radar") ? <Radar /> : <Forbidden requestedView="radar" requiredPermission={getRequiredPermission("radar")} />,
     radar_imovirtual: canAccessView("radar_imovirtual") ? <RadarImovirtual /> : <Forbidden requestedView="radar_imovirtual" requiredPermission={getRequiredPermission("radar_imovirtual")} />,
     admin_documentacao: canAccessView("admin_documentacao") ? <AdministracaoDocumentacao selectedDoc={docSelecionado} /> : <Forbidden requestedView="admin_documentacao" requiredPermission={getRequiredPermission("admin_documentacao")} />,
+    empresas_admin: canAccessView("empresas_admin") ? <EmpresasAdmin /> : <Forbidden requestedView="empresas_admin" requiredPermission={getRequiredPermission("empresas_admin")} />,
     forbidden: <Forbidden requestedView={forbiddenState.requestedView} requiredPermission={forbiddenState.requiredPermission} />,
     fluxo: canAccessView("fluxo") ? <Fluxo user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="fluxo" requiredPermission={getRequiredPermission("fluxo")} />,
     dashboard: canAccessView("dashboard") ? <Dashboard onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="dashboard" requiredPermission={getRequiredPermission("dashboard")} />,
@@ -692,6 +696,7 @@ export default function App() {
 
   return (
     <AuthProvider value={authContextValue}>
+      <TenantProvider currentUser={user}>
       <Layout
         collapsed={sidebarCollapsed}
         header={
@@ -720,6 +725,7 @@ export default function App() {
         )}
       </Layout>
       <FeedbackHost />
+      </TenantProvider>
     </AuthProvider>
   );
 }

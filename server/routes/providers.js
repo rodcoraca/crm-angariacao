@@ -5,6 +5,8 @@ import { ProviderSyncExecutor } from '../services/ProviderSyncExecutor.js';
 
 const router = express.Router();
 
+// LEGADO: endpoint mantido apenas para homologação e fallback local.
+// Arquitetura ativa em produção: Supabase Edge Function `provider-sync`.
 router.post('/:provider/sync', async (req, res) => {
   const { provider } = req.params;
 
@@ -12,7 +14,7 @@ router.post('/:provider/sync', async (req, res) => {
     return res.status(400).json({ error: 'Provider não suportado nesta fase.' });
   }
 
-  console.log(`[API Global] Iniciando sincronização para: ${provider}`);
+  console.log(`[API Global][LEGACY] Iniciando sincronização para: ${provider}`);
 
   try {
     const imovirtual = new ImovirtualProvider({ enableLogs: true });

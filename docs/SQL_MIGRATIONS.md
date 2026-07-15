@@ -4,10 +4,10 @@
 Estabelecer este documento como o repositório oficial de todas as migrações SQL da plataforma OSFlow, centralizando o histórico estrutural da base de dados e a preparação das futuras alterações.
 
 ## Última revisão
-2026-07-13
+2026-07-15
 
 ## Versão do documento
-1.3.3
+1.3.5
 
 ## Responsável
 Engenharia da Plataforma OSFlow
@@ -86,6 +86,8 @@ Cada migração deverá possuir, no mínimo, os seguintes campos:
 | DB-026 | 2026-07-10 | Imovirtual Discovery — Campos Normalizados | Adição idempotente de campos de anúncio, proprietário, localização e publicação em `provider_leads`, com backfill a partir de `raw_data`. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.2 Beta | [sql/migrations/20260710_db026_provider_leads_imovirtual_fields.sql](../sql/migrations/20260710_db026_provider_leads_imovirtual_fields.sql) | Sem alteração de RLS, autenticação ou RBAC. |
 | DB-027 | 2026-07-13 | Ciclo de Vida de Conta de Utilizador | Adição de `account_status` em `usuarios` com estados `pending_activation/active/disabled` e carimbos `activation_sent_at`, `activated_at`, `disabled_at`, incluindo backfill idempotente. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.3 Beta | [sql/migrations/20260713_db027_user_account_lifecycle.sql](../sql/migrations/20260713_db027_user_account_lifecycle.sql) | Preparação estrutural para ativação por convite e bloqueio administrativo sem sistema próprio de recuperação de password. |
 | DB-028 | 2026-07-13 | Multi-tenant Scope Fase A | Adição de `empresa_id` (nullable) em `leads`, `provider_leads` e `estoque_nao_publicitado`, com índices de escopo e chave única de `provider_leads` por empresa. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.3 Beta | [sql/migrations/20260713_db028_multi_tenant_scope_phase_a.sql](../sql/migrations/20260713_db028_multi_tenant_scope_phase_a.sql) | Isolamento mínimo por empresa no domínio operacional, sem RLS completo nesta fase. |
+| DB-029 | 2026-07-15 | Administração de Empresas Beta (Mínima) | Criação da tabela `empresas` (`id`, `nome`, `slug`, `estado`, `created_at`, `updated_at`) com trigger de atualização e seed idempotente `osflow-beta`. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.4 Beta | [sql/migrations/20260715_db029_empresas_beta_minima.sql](../sql/migrations/20260715_db029_empresas_beta_minima.sql) | Base mínima para evitar novos fluxos com `empresa_id` nulo em contexto Beta. |
+| DB-030 | 2026-07-15 | Sincronização de Schema Empresas | Migração complementar para ambientes legados: adiciona `slug`, `estado` e `updated_at` em `empresas` com backfill de `slug` a partir de `nome`. | 🟡 Pendente | Engenharia da Plataforma OSFlow | 0.9.4 Beta | [sql/migrations/20260715_db030_empresas_schema_sync.sql](../sql/migrations/20260715_db030_empresas_schema_sync.sql) | Corrige divergência entre schema legado (`id,nome,ativo,created_at`) e módulo Administração → Empresas. |
 
 ## 5. Migrações Planeadas
 
@@ -116,6 +118,8 @@ Toda mudança estrutural futura deverá ser documentada aqui antes da implementa
 
 | Versão | Data | Autor | Descrição |
 | --- | --- | --- | --- |
+| 1.3.5 | 2026-07-15 | Engenharia da Plataforma OSFlow | Registo da DB-030 (pendente) para sincronização complementar do schema de `empresas` com colunas `slug`, `estado` e `updated_at` + backfill de slug. |
+| 1.3.4 | 2026-07-15 | Engenharia da Plataforma OSFlow | Registo da DB-029 (pendente) para Administração de Empresas Beta mínima com tabela `empresas`, trigger de `updated_at` e seed idempotente `osflow-beta`. |
 | 1.3.3 | 2026-07-13 | Engenharia da Plataforma OSFlow | Registo da DB-028 (pendente) com escopo multi-tenant Fase A em `leads`, `provider_leads` e `estoque_nao_publicitado`. |
 | 1.3.2 | 2026-07-13 | Engenharia da Plataforma OSFlow | Registo da DB-027 (pendente) com ciclo de vida de conta em `usuarios` (`pending_activation`, `active`, `disabled`) e timestamps de ativação/desativação. |
 | 1.3.0 | 2026-07-10 | Engenharia da Plataforma OSFlow | Registo da DB-025, infraestrutura do Discovery Engine para `provider_leads`, sem alteração de UX, autenticação ou RBAC. |

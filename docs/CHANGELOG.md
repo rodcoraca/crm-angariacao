@@ -147,6 +147,30 @@ Data: 2026-07-14
 ### SQL
 - Sem alterações SQL para RC1.5.3.6.
 
+## RC-009B - Administração de Empresas Beta (Mínima)
+
+Data: 2026-07-15
+
+### Implementação
+- Criação do módulo mínimo de Administração → Empresas (listar, criar, editar e associar utilizadores).
+- Introdução de TenantContext central com `resolveEmpresaId`, `requireEmpresaId` e `getActiveEmpresa`.
+- Provider Sync atualizado para enviar e exigir `empresa_id` no pipeline de inserção em `provider_leads`.
+
+### SQL
+- Nova migração pendente DB-029: tabela `empresas` com `id`, `nome`, `slug`, `estado`, `created_at`, `updated_at` e seed idempotente `osflow-beta`.
+
+## RC-009C.2 - Sincronização de Schema da Tabela Empresas
+
+Data: 2026-07-15
+
+### Implementação
+- Criada migração complementar DB-030 para alinhar ambientes legados com o módulo Empresas.
+- Inclusão das colunas `slug`, `estado` (default `ativa`) e `updated_at` em `empresas` quando ausentes.
+- Backfill de `slug` com transformação de `nome` para formato slug.
+
+### SQL
+- Nova migração pendente DB-030: [sql/migrations/20260715_db030_empresas_schema_sync.sql](../sql/migrations/20260715_db030_empresas_schema_sync.sql)
+
 ## 4. Categorias de Alteração
 
 - Documentação

@@ -13,6 +13,7 @@ export const PROTECTED_VIEW_RULES = {
   estoque_np: { permission: "inventory.view" },
   usuarios: { permission: "users.view" },
   logs: { permission: "logs.view" },
+  empresas_admin: { permission: "settings.manage" },
   admin_documentacao: { permission: "settings.view" },
   admin_docs_arquitetura: { permission: "docs.architecture.view" },
   admin_docs_banco_dados: { permission: "docs.database.view" },
