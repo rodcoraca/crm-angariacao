@@ -30,6 +30,7 @@ export default function DataTable({
   sortable = true,
   striped = false,
   onRowClick,
+  rowProps,
   style,
   tableStyle
 }) {
@@ -125,6 +126,8 @@ export default function DataTable({
           {sortedRows.length ? (
             sortedRows.map((row, index) => {
               const computedKey = typeof rowKey === "function" ? rowKey(row) : row[rowKey] || index;
+              const extraRowProps = typeof rowProps === "function" ? rowProps(row, index, computedKey) || {} : rowProps || {};
+              const { style: extraRowStyle, ...restRowProps } = extraRowProps;
 
               return (
                 <tr
@@ -133,6 +136,7 @@ export default function DataTable({
                   onMouseEnter={() => setHoveredRowKey(computedKey)}
                   onMouseLeave={() => setHoveredRowKey(null)}
                   data-clickable={onRowClick ? "true" : "false"}
+                  {...restRowProps}
                   style={{
                     borderBottom: `1px solid ${theme.colors.border}`,
                     background: onRowClick && hoveredRowKey === computedKey
@@ -143,7 +147,8 @@ export default function DataTable({
                     cursor: onRowClick ? "pointer" : "default",
                     transform: onRowClick && hoveredRowKey === computedKey ? "translateY(-2px)" : "translateY(0)",
                     boxShadow: onRowClick && hoveredRowKey === computedKey ? theme.elevation[1] : "none",
-                    transition: "transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease"
+                    transition: "transform 200ms ease, box-shadow 200ms ease, background-color 200ms ease",
+                    ...extraRowStyle
                   }}
                 >
                   {columns.map((column) => (

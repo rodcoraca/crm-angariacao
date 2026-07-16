@@ -9,10 +9,16 @@ export default function UserAccountSection({
   onChange,
   onResendInvite = null,
   resendInviteLoading = false,
+  onSendPasswordReset = null,
+  sendPasswordResetLoading = false,
   onRepairAssociation = null,
   repairAssociationLoading = false,
   styles
 }) {
+  const shouldShowInviteButton = conta.modoEdicao && onResendInvite && !conta.ocultarReenviarConvite;
+  const hasPasswordValue = String(conta.password || "").trim().length > 0;
+  const passwordTooShort = hasPasswordValue && String(conta.password || "").length < 8;
+
   return (
     <section style={styles.sectionCard}>
       <h4 style={styles.sectionTitle}>2. CONTA</h4>
@@ -45,7 +51,15 @@ export default function UserAccountSection({
 
         <label style={styles.accountFieldLabel}>
           Password
-          <input style={styles.input} type="password" placeholder={conta.modoEdicao ? "Opcional" : "Obrigatória"} value={conta.password} onChange={(e) => onChange("password", e.target.value)} />
+          <input
+            style={passwordTooShort ? { ...styles.input, borderColor: styles.error?.color || "#dc2626" } : styles.input}
+            type="password"
+            placeholder="Palavra-passe (mínimo 8 caracteres)"
+            value={conta.password}
+            onChange={(e) => onChange("password", e.target.value)}
+          />
+          <span style={styles.helperText}>A palavra-passe deve conter pelo menos 8 caracteres.</span>
+          {passwordTooShort ? <span style={{ ...styles.helperText, color: styles.error?.color || "#dc2626" }}>A palavra-passe deve possuir pelo menos 8 caracteres.</span> : null}
           <span style={styles.helperText}>Deixe em branco para manter a palavra-passe atual.</span>
         </label>
 
@@ -54,7 +68,7 @@ export default function UserAccountSection({
           <input style={styles.input} type="password" placeholder={conta.modoEdicao ? "Opcional" : "Obrigatória"} value={conta.confirmarPassword} onChange={(e) => onChange("confirmarPassword", e.target.value)} />
         </label>
 
-        {conta.modoEdicao && onResendInvite ? (
+        {shouldShowInviteButton ? (
           <label style={styles.accountFieldLabel}>
             Convite de ativação
             <button
@@ -65,6 +79,23 @@ export default function UserAccountSection({
             >
               {resendInviteLoading ? "A enviar..." : "Reenviar convite"}
             </button>
+          </label>
+        ) : null}
+
+        {conta.modoEdicao && conta.ocultarReenviarConvite ? (
+          <label style={styles.accountFieldLabel}>
+            Convite de ativação
+            <span style={styles.helperText}>{conta.mensagemConvite || "Conta já ativa"}</span>
+            {conta.mostrarAcaoRedefinicao && onSendPasswordReset ? (
+              <button
+                type="button"
+                style={styles.smallButton}
+                onClick={onSendPasswordReset}
+                disabled={sendPasswordResetLoading}
+              >
+                {sendPasswordResetLoading ? "A enviar..." : "Enviar redefinição de palavra-passe"}
+              </button>
+            ) : null}
           </label>
         ) : null}
 

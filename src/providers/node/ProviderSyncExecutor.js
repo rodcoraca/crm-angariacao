@@ -12,7 +12,7 @@ export class ProviderSyncExecutor {
     this.providerName = providerName;
   }
 
-  async processListings(listings, fetchedAt) {
+  async processListings(listings, fetchedAt, syncStartedAtMs = Date.now()) {
     const empresaId = String(process.env.OSFLOW_EMPRESA_ID || "").trim() || null;
 
     return executeProviderSync({
@@ -21,6 +21,7 @@ export class ProviderSyncExecutor {
       listings,
       fetchedAt,
       supabaseClient: supabase,
+      syncStartedAtMs,
       scoreCalculator: (listing) => calcularScoreInteligente({
         created_at_first: listing.createdAtFirst,
         is_private_owner: listing.isPrivateOwner === true,

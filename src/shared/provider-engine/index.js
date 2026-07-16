@@ -18,4 +18,6 @@ export {
   imovirtualListingSelectors
 } from "./imovirtual/parsers.js";
 
+export { collectImovirtualPaginatedListings } from "./imovirtual/collectPaginatedListings.js";
+
 export { executeProviderSync } from "./sync/executeProviderSync.js";

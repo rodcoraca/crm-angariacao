@@ -11,6 +11,8 @@ export {
 	loadAuthorizationProfileByAuthUserId,
 	requestPasswordReset,
 	sendAccountActivationInvite,
+	getAuthUserInviteStatus,
+	alterarPasswordUtilizador,
 	createAuthUserFromAdminFlow,
 	markUserAccountActive,
 	reconcilePendingActivation,

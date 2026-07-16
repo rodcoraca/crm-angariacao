@@ -36,7 +36,48 @@ function logAndRespond(
   return response(status, body);
 }
 
-Deno.serve(async (req) => {
+type AuthAdminUser = {
+  id: string;
+  email?: string | null;
+  email_confirmed_at?: string | null;
+};
+
+function normalizeEmail(value: unknown) {
+  return String(value || "").trim().toLowerCase();
+}
+
+async function findAuthUserByEmail(adminClient: any, email: string) {
+  const targetEmail = normalizeEmail(email);
+  if (!targetEmail) {
+    return null;
+  }
+
+  let page = 1;
+  const perPage = 200;
+
+  for (;;) {
+    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+    if (error) {
+      throw error;
+    }
+
+    const users = (data?.users || []) as AuthAdminUser[];
+    const found = users.find((item) => normalizeEmail(item?.email) === targetEmail) || null;
+    if (found) {
+      return found;
+    }
+
+    if (!users.length || !data?.nextPage) {
+      break;
+    }
+
+    page = data.nextPage;
+  }
+
+  return null;
+}
+
+Deno.serve(async (req: Request) => {
   // PRE-FLIGHT
   if (req.method === "OPTIONS") {
     console.log("OPTIONS REQUEST", { method: req.method });
@@ -155,12 +196,9 @@ Deno.serve(async (req) => {
 
     console.log("REQUEST BODY", body);
 
-    const email =
-      String(
-        body.email || ""
-      )
-      .trim()
-      .toLowerCase();
+    const email = normalizeEmail(body.email);
+
+    const action = String(body.action || "invite").trim().toLowerCase();
 
     const redirectTo =
       body.redirectTo;
@@ -192,31 +230,71 @@ Deno.serve(async (req) => {
       });
     }
 
-    const users =
-      await admin.auth.admin.listUsers();
+    const existingUser = await findAuthUserByEmail(admin, email);
+    const emailConfirmed = Boolean(existingUser?.email_confirmed_at);
 
-    const existingUser =
-      users.data.users.find(
-        user =>
-          user.email?.toLowerCase()
-          === email.toLowerCase()
-      );
+    if (action === "status") {
+      return logAndRespond("status", 200, {
+        success: true,
+        alreadyExists: Boolean(existingUser),
+        emailConfirmed,
+        data: {
+          user: existingUser
+            ? {
+                id: existingUser.id,
+                email: existingUser.email,
+                email_confirmed_at: existingUser.email_confirmed_at || null
+              }
+            : null
+        }
+      });
+    }
 
-    if (existingUser) {
-      return logAndRespond(
-        "existing_user",
-        200,
-        {
-          success: true,
-          alreadyExists: true,
-          data: {
-            user: {
-              id: existingUser.id,
-              email: existingUser.email
-            }
+    if (existingUser && emailConfirmed) {
+      return logAndRespond("existing_user_confirmed", 200, {
+        success: true,
+        alreadyExists: true,
+        emailConfirmed: true,
+        inviteSent: false,
+        data: {
+          user: {
+            id: existingUser.id,
+            email: existingUser.email,
+            email_confirmed_at: existingUser.email_confirmed_at || null
           }
         }
-      );
+      });
+    }
+
+    if (existingUser && !emailConfirmed) {
+      const generated = await admin.auth.admin.generateLink({
+        type: "invite",
+        email,
+        options: redirectTo ? { redirectTo: String(redirectTo) } : undefined
+      });
+
+      if (generated.error) {
+        return logAndRespond("invite_generate_link_error", Number(generated.error.status || 500), {
+          success: false,
+          error: generated.error.message,
+          details: generated.error
+        });
+      }
+
+      return logAndRespond("invite_regenerated", 200, {
+        success: true,
+        alreadyExists: true,
+        emailConfirmed: false,
+        inviteSent: true,
+        data: {
+          user: {
+            id: existingUser.id,
+            email: existingUser.email,
+            email_confirmed_at: existingUser.email_confirmed_at || null
+          },
+          generatedLink: generated.data?.properties?.action_link || null
+        }
+      });
     }
 
     const {
@@ -234,78 +312,40 @@ Deno.serve(async (req) => {
         );
 
     if (error) {
-  console.error(
-    "INVITE ERROR",
-    error
-  );
+      console.error(
+        "INVITE ERROR",
+        error
+      );
 
-  const authError =
-    error as {
-      status?: number;
-      code?: string;
-      message?: string;
-    };
+      const authError =
+        error as {
+          status?: number;
+          code?: string;
+          message?: string;
+        };
 
-  if (
-    authError.code === "email_exists"
-    || authError.status === 422
-  ) {
-    return logAndRespond(
-      "invite_email_exists",
-      200,
-      {
-        success: true,
-        alreadyExists: true,
-        data: {
-          user: null
+      const status =
+        Number(
+          authError.status || 500
+        );
+
+      return logAndRespond(
+        "invite_error",
+        status,
+        {
+          success: false,
+          error:
+            authError.message,
+          details: authError
         }
-      }
-    );
-  }
-
-  //
-  // UTILIZADOR JÁ EXISTE
-  //
-  if (
-    authError.code ===
-      "email_exists" ||
-    authError.status === 422
-  ) {
-    console.warn(
-      "EMAIL ALREADY EXISTS",
-      email
-    );
-
-    return logAndRespond(
-      "invite_email_exists",
-      200,
-      {
-        success: true,
-        alreadyExists: true,
-        email
-      }
-    );
-  }
-
-  const status =
-    Number(
-      authError.status || 500
-    );
-
-  return logAndRespond(
-    "invite_error",
-    status,
-    {
-      success: false,
-      error:
-        authError.message,
-      details: authError
+      );
     }
-  );
-}
 
     return logAndRespond("invite_success", 200, {
       success: true,
+      alreadyExists: false,
+      emailConfirmed: false,
+      inviteSent: true,
       data
     });
 

@@ -10,7 +10,7 @@ export class ProviderSyncExecutor {
     this.providerName = providerName;
   }
 
-  async processListings(listings, fetchedAt) {
+  async processListings(listings, fetchedAt, syncStartedAtMs = Date.now()) {
     const empresaId = String(process.env.OSFLOW_EMPRESA_ID || "").trim() || null;
 
     return executeProviderSync({
@@ -18,7 +18,8 @@ export class ProviderSyncExecutor {
       empresaId,
       listings,
       fetchedAt,
-      supabaseClient: supabase
+      supabaseClient: supabase,
+      syncStartedAtMs
     });
   }
 }

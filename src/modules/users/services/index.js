@@ -2,6 +2,7 @@ export {
 	listarUsuarios,
 	guardarUsuarioComAuditoria,
 	reenviarConviteAtivacaoUtilizador,
+	enviarRedefinicaoPasswordUtilizador,
 	repararAssociacaoAuthUtilizador,
 	listarPreferenciasPorUtilizador,
 	listarUtilizadoresInconsistentes,

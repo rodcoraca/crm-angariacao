@@ -74,7 +74,7 @@ export async function listNewLeads() {
 
 export async function listImovirtualLeads({ privateOnly, last24Hours, district, minPrice, maxPrice } = {}) {
   let query = supabase.from(PROVIDER_LEADS_TABLE)
-    .select("id, external_id, title, price, area, rooms, city, district, owner_name, is_private_owner, url, created_at_first, detected_at, short_description, source, status")
+    .select("id, external_id, title, price, area, rooms, city, district, owner_name, is_private_owner, url, created_at_first, detected_at, short_description, source, status, raw_data")
     .eq("provider", "imovirtual")
     .order("created_at_first", { ascending: false, nullsFirst: false });
   if (privateOnly) query = query.eq("is_private_owner", true);

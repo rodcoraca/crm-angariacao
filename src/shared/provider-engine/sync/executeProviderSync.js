@@ -1,9 +1,94 @@
 import { requireEmpresaId, warnMissingEmpresaId } from "../tenant/empresaContext.js";
 
+const PRIVATE_OWNER_WINDOW_DAYS = 30;
+const AGENCY_WINDOW_DAYS = 7;
+const DAY_IN_MS = 24 * 60 * 60 * 1000;
+
+function toDateOrNull(value) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
 function toIsoOrNull(value) {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+// Estrategia Beta:
+//
+// Particular:
+// janela de 30 dias
+// devido ao maior valor comercial
+// e necessidade de recuperacao apos downtime.
+//
+// Agencia:
+// janela de 7 dias
+// para reduzir volume de processamento.
+//
+// Deduplicacao por:
+// provider + external_id.
+//
+// Arquitetura futura:
+// tornar janelas configuraveis por empresa
+// no modulo SaaS.
+function isListingWithinWindow(listing, referenceDate) {
+  const publishedAt = toDateOrNull(listing?.createdAtFirst);
+  if (!publishedAt) return false;
+
+  const maxWindowDays = listing?.isPrivateOwner === true
+    ? PRIVATE_OWNER_WINDOW_DAYS
+    : AGENCY_WINDOW_DAYS;
+
+  const ageMs = referenceDate.getTime() - publishedAt.getTime();
+  if (ageMs < 0) return true;
+
+  return ageMs <= (maxWindowDays * DAY_IN_MS);
+}
+
+async function updateExistingListing({ supabaseClient, scopedEmpresaId, providerName, externalId, listing }) {
+  const nowIso = new Date().toISOString();
+  const updatePayload = {
+    price: listing.price ?? null,
+    short_description: listing.shortDescription || null,
+    owner_name: listing.ownerName || null,
+    updated_at: nowIso,
+    imported_at: nowIso
+  };
+
+  const baseUpdateQuery = supabaseClient
+    .from("provider_leads")
+    .update(updatePayload)
+    .eq("empresa_id", scopedEmpresaId)
+    .eq("provider", providerName)
+    .eq("external_id", externalId);
+
+  const { error } = await baseUpdateQuery;
+  if (!error) {
+    return null;
+  }
+
+  const importedAtMissing = /imported_at/i.test(String(error.message || ""));
+  if (!importedAtMissing) {
+    return error;
+  }
+
+  const fallbackPayload = {
+    price: updatePayload.price,
+    short_description: updatePayload.short_description,
+    owner_name: updatePayload.owner_name,
+    updated_at: updatePayload.updated_at
+  };
+
+  const { error: fallbackError } = await supabaseClient
+    .from("provider_leads")
+    .update(fallbackPayload)
+    .eq("empresa_id", scopedEmpresaId)
+    .eq("provider", providerName)
+    .eq("external_id", externalId);
+
+  return fallbackError || null;
 }
 
 export async function executeProviderSync({
@@ -13,8 +98,16 @@ export async function executeProviderSync({
   fetchedAt,
   supabaseClient,
   scoreCalculator,
-  detectedAtFallbackNow = false
+  detectedAtFallbackNow = false,
+  syncStartedAtMs = Date.now()
 }) {
+  const startedAtMs = Number.isFinite(syncStartedAtMs) ? syncStartedAtMs : Date.now();
+  const referenceDate = toDateOrNull(fetchedAt) || new Date();
+  const receivedListings = Array.isArray(listings) ? listings : [];
+  const eligibleListings = receivedListings.filter((listing) => isListingWithinWindow(listing, referenceDate));
+  const analyzedPrivateOwners = eligibleListings.filter((listing) => listing?.isPrivateOwner === true).length;
+  const analyzedAgencies = eligibleListings.length - analyzedPrivateOwners;
+
   let created = 0;
   let skipped = 0;
   const errors = [];
@@ -22,7 +115,9 @@ export async function executeProviderSync({
   console.log("[ProviderSync][Diagnostics] process_listings_start", {
     provider: providerName,
     empresaId: empresaId || null,
-    received: Array.isArray(listings) ? listings.length : 0,
+    received: receivedListings.length,
+    eligibleByWindow: eligibleListings.length,
+    filteredByWindow: receivedListings.length - eligibleListings.length,
     fetchedAt: fetchedAt || null
   });
 
@@ -31,17 +126,21 @@ export async function executeProviderSync({
     return {
       provider: providerName,
       empresaId: null,
-      discovered: Array.isArray(listings) ? listings.length : 0,
-      privateOwners: Array.isArray(listings) ? listings.filter((listing) => listing?.isPrivateOwner).length : 0,
+      discovered: eligibleListings.length,
+      privateOwners: analyzedPrivateOwners,
+      analyzedPrivateOwners,
+      analyzedAgencies,
+      filteredByWindow: receivedListings.length - eligibleListings.length,
       created: 0,
       skipped: 0,
+      executionSeconds: Number(((Date.now() - startedAtMs) / 1000).toFixed(2)),
       errors: [{ externalId: "*", error: "Operacao sem empresa_id" }]
     };
   }
 
   const scopedEmpresaId = requireEmpresaId(empresaId);
 
-  for (const listing of listings) {
+  for (const listing of eligibleListings) {
     const externalId = String(listing?.externalId || "").trim();
     if (!externalId) {
       errors.push({ externalId: "unknown", error: "externalId em falta no listing." });
@@ -62,6 +161,18 @@ export async function executeProviderSync({
     }
 
     if (existing) {
+      const updateError = await updateExistingListing({
+        supabaseClient,
+        scopedEmpresaId,
+        providerName,
+        externalId,
+        listing
+      });
+
+      if (updateError) {
+        errors.push({ externalId, error: updateError.message });
+      }
+
       skipped += 1;
       continue;
     }
@@ -107,13 +218,19 @@ export async function executeProviderSync({
     }
   }
 
+  const executionSeconds = Number(((Date.now() - startedAtMs) / 1000).toFixed(2));
+
   const result = {
     provider: providerName,
     empresaId: scopedEmpresaId,
-    discovered: listings.length,
-    privateOwners: listings.filter((listing) => listing?.isPrivateOwner).length,
+    discovered: eligibleListings.length,
+    privateOwners: analyzedPrivateOwners,
+    analyzedPrivateOwners,
+    analyzedAgencies,
+    filteredByWindow: receivedListings.length - eligibleListings.length,
     created,
     skipped,
+    executionSeconds,
     errors
   };
 
@@ -124,6 +241,20 @@ export async function executeProviderSync({
     skipped: result.skipped,
     errors: result.errors.length
   });
+
+  console.log("------------------------------------------------");
+  console.log("Imovirtual Sync Summary");
+  console.log("");
+  console.log(`Particulares analisados: ${result.analyzedPrivateOwners}`);
+  console.log("");
+  console.log(`Agencias analisadas: ${result.analyzedAgencies}`);
+  console.log("");
+  console.log(`Novos anuncios: ${result.created}`);
+  console.log("");
+  console.log(`Duplicados ignorados: ${result.skipped}`);
+  console.log("");
+  console.log(`Tempo execucao: ${result.executionSeconds} segundos`);
+  console.log("------------------------------------------------");
 
   return result;
 }

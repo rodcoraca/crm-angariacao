@@ -8,11 +8,20 @@ import {
 } from "../../../utils/empresaScope.js";
 import { normalizarPermissoes } from "../../../utils/usuarios";
 import { registrarAcessoNegado, registrarCriacao, registrarEdicao } from "../../audit/services";
-import { createAuthUserFromAdminFlow, repairUserAuthAssociations, sendAccountActivationInvite } from "../../auth/services";
+import {
+  alterarPasswordUtilizador,
+  createAuthUserFromAdminFlow,
+  getAuthUserInviteStatus,
+  markUserAccountActive,
+  repairUserAuthAssociations,
+  requestPasswordReset,
+  sendAccountActivationInvite
+} from "../../auth/services";
 import { fetchUserPreferencesByUserId, upsertUserPreferencesByUserId } from "../repositories";
 
 const USERS_TABLE = "usuarios";
 const USER_LIST_BASE_SELECT = "id,auth_user_id,nome,apelido,email,telefone,username,ativo,account_status,activation_sent_at,activated_at,disabled_at,permissoes,empresa_id,created_at,updated_at";
+const ADMIN_PASSWORD_MIN_LENGTH = 8;
 
 function resolveActorUserId(currentUser) {
   return currentUser?.perfil_id || currentUser?.id || null;
@@ -188,6 +197,7 @@ export async function guardarUsuarioComAuditoria({
   const perfil = String(perfilOrganizacional || "").trim();
   const empresaId = resolveEmpresaIdForUserWrite({ currentUser, form, permissoesAtuais });
   const isCreating = !modoEdicao;
+  const hasPasswordInput = String(form.password || "").trim().length > 0;
 
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
@@ -231,8 +241,23 @@ export async function guardarUsuarioComAuditoria({
   let error;
   let createdProfileId = usuarioSelecionadoId || null;
   let reusedExistingProfile = false;
+  let authUserIdForPasswordUpdate = null;
 
   if (modoEdicao && usuarioSelecionadoId) {
+    const { data: editProfile, error: editProfileError } = await applyEmpresaScope(
+      supabase
+        .from(USERS_TABLE)
+        .select("id,auth_user_id")
+        .eq("id", usuarioSelecionadoId),
+      empresaId
+    ).maybeSingle();
+
+    if (editProfileError) {
+      return { error: editProfileError };
+    }
+
+    authUserIdForPasswordUpdate = String(editProfile?.auth_user_id || "").trim() || null;
+
     ({ error } = await applyEmpresaScope(
       supabase.from(USERS_TABLE).update(payload).eq("id", usuarioSelecionadoId),
       empresaId
@@ -266,6 +291,7 @@ export async function guardarUsuarioComAuditoria({
     }
 
     const authUserId = authCreation.createdUser.id;
+    authUserIdForPasswordUpdate = authUserId;
 
     if (existingProfileByEmail?.id) {
       reusedExistingProfile = true;
@@ -341,6 +367,26 @@ export async function guardarUsuarioComAuditoria({
     return { error };
   }
 
+  if (hasPasswordInput && authUserIdForPasswordUpdate) {
+    if (String(form.password || "").length < ADMIN_PASSWORD_MIN_LENGTH) {
+      return {
+        error: {
+          code: "weak_password",
+          message: "A palavra-passe deve possuir pelo menos 8 caracteres."
+        }
+      };
+    }
+
+    const passwordUpdateResult = await alterarPasswordUtilizador({
+      authUserId: authUserIdForPasswordUpdate,
+      password: form.password
+    });
+
+    if (passwordUpdateResult.error) {
+      return { error: passwordUpdateResult.error };
+    }
+  }
+
   const preferenciasPayload = mapPreferenciasFromPermissoes(permissoesNormalizadas);
   if (createdProfileId && preferenciasPayload) {
     const preferenciasResult = await upsertUserPreferencesByUserId({
@@ -409,6 +455,41 @@ export async function reenviarConviteAtivacaoUtilizador({ usuarioId, currentUser
     return { error: { message: "Utilizador sem email para envio de convite." } };
   }
 
+  const statusResult = await getAuthUserInviteStatus(targetUser.email);
+  if (statusResult.error) {
+    return { error: statusResult.error };
+  }
+
+  const authExists = Boolean(statusResult.data?.exists);
+  const emailConfirmed = Boolean(statusResult.data?.emailConfirmed);
+
+  if (authExists && emailConfirmed) {
+    const activationResult = await markUserAccountActive(targetUser.id);
+    if (activationResult.error) {
+      return { error: activationResult.error };
+    }
+
+    await registrarEdicao({
+      userId: resolveActorUserId(currentUser),
+      empresaId,
+      modulo: "users",
+      entidade: "usuarios",
+      entidadeId: usuarioId,
+      metadata: {
+        action: "skip_resend_invite_already_active",
+        email: targetUser.email,
+        previousStatus: targetUser.account_status || null,
+        nextStatus: "active"
+      }
+    });
+
+    return {
+      error: null,
+      action: "already_active",
+      message: "Conta já ativa"
+    };
+  }
+
   const { error: inviteError } = await sendAccountActivationInvite(targetUser.email);
   if (inviteError) {
     return { error: inviteError };
@@ -444,6 +525,65 @@ export async function reenviarConviteAtivacaoUtilizador({ usuarioId, currentUser
       email: targetUser.email,
       previousStatus: targetUser.account_status || null,
       nextStatus: "pending_activation"
+    }
+  });
+
+  return {
+    error: null,
+    action: authExists ? "resend_invite" : "send_invite"
+  };
+}
+
+export async function enviarRedefinicaoPasswordUtilizador({ usuarioId, currentUser, redirectTo } = {}) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    throw new Error("empresa_id obrigatorio para envio de redefinicao de password.");
+  }
+
+  if (!usuarioId) {
+    return { error: { message: "Utilizador inválido para redefinição de password." } };
+  }
+
+  const { data: targetUser, error: targetError } = await applyEmpresaScope(
+    supabase
+      .from(USERS_TABLE)
+      .select("id,email")
+      .eq("id", usuarioId),
+    empresaId
+  ).maybeSingle();
+
+  if (targetError) {
+    return { error: targetError };
+  }
+
+  if (!targetUser?.email) {
+    return { error: { message: "Utilizador sem email para redefinição de password." } };
+  }
+
+  const statusResult = await getAuthUserInviteStatus(targetUser.email);
+  if (statusResult.error) {
+    return { error: statusResult.error };
+  }
+
+  if (!statusResult.data?.exists) {
+    return { error: { message: "Conta Auth inexistente. Reenvie convite de ativação." } };
+  }
+
+  const resetResult = await requestPasswordReset(targetUser.email, redirectTo);
+  if (resetResult.error) {
+    return { error: resetResult.error };
+  }
+
+  await registrarEdicao({
+    userId: resolveActorUserId(currentUser),
+    empresaId,
+    modulo: "users",
+    entidade: "usuarios",
+    entidadeId: usuarioId,
+    metadata: {
+      action: "send_password_reset",
+      email: targetUser.email
     }
   });
 

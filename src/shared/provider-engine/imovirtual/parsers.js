@@ -22,6 +22,20 @@ function getExternalId(element, url) {
   return idFromUrl?.[1] || null;
 }
 
+function getLocationPath(item) {
+  const location = item?.location || {};
+  const address = location?.address || {};
+
+  return {
+    district: address?.province?.name || null,
+    municipality: address?.county?.name || null,
+    county: address?.county?.name || null,
+    city: address?.city?.name || null,
+    region: address?.province?.name || null,
+    freguesia: address?.parish?.name || address?.freguesia?.name || null
+  };
+}
+
 export function parseListingIds(html) {
   if (!html || typeof DOMParser === "undefined") {
     console.info("[ProviderEngine][Imovirtual] parse_listing_ids", { totalListings: 0 });
@@ -83,14 +97,20 @@ export function mapNextDataItemToListing(item) {
     return null;
   }
 
+  const locationPath = getLocationPath(item);
+
   return {
     externalId: String(item.id),
     title: item.title || null,
     price: item.totalPrice?.value ?? null,
     area: item.areaInSquareMeters ?? null,
     rooms: item.roomsNumber || null,
-    city: item.location?.address?.city?.name || null,
-    district: item.location?.address?.province?.name || null,
+    city: locationPath.city,
+    district: locationPath.district,
+    municipality: locationPath.municipality,
+    county: locationPath.county,
+    region: locationPath.region,
+    freguesia: locationPath.freguesia,
     ownerName: item.advertOwner?.name?.trim() || null,
     url: buildImovirtualPublicUrl(item.href),
     isPrivateOwner: Boolean(item.isPrivateOwner),

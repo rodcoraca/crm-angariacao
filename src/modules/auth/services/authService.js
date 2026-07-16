@@ -560,6 +560,117 @@ export async function sendAccountActivationInvite(email, redirectTo) {
   }
 }
 
+export async function getAuthUserInviteStatus(email) {
+  const normalizedEmail = normalizeIdentifier(email).toLowerCase();
+
+  if (!normalizedEmail) {
+    return {
+      data: null,
+      error: {
+        code: "missing_email",
+        message: "Email obrigatorio para verificar estado de convite."
+      }
+    };
+  }
+
+  const result = await supabase.functions.invoke("send-user-invite", {
+    body: {
+      email: normalizedEmail,
+      action: "status"
+    }
+  });
+
+  if (result.error) {
+    return { data: null, error: result.error };
+  }
+
+  const payload = result.data || {};
+  return {
+    data: {
+      exists: Boolean(payload.alreadyExists),
+      emailConfirmed: Boolean(payload.emailConfirmed),
+      user: payload?.data?.user || null
+    },
+    error: null
+  };
+}
+
+export async function alterarPasswordUtilizador({ authUserId, password }) {
+  const normalizedAuthUserId = normalizeIdentifier(authUserId);
+  const normalizedPassword = String(password || "");
+
+  if (!normalizedAuthUserId) {
+    return {
+      data: null,
+      error: {
+        code: "missing_auth_user_id",
+        message: "authUserId obrigatorio para alteração administrativa de password."
+      }
+    };
+  }
+
+  if (!normalizedPassword) {
+    return {
+      data: null,
+      error: {
+        code: "missing_password",
+        message: "Password obrigatoria para alteração administrativa."
+      }
+    };
+  }
+
+  console.log({
+    authUserId: normalizedAuthUserId,
+    passwordLength: normalizedPassword?.length
+  });
+
+  const result = await supabase.functions.invoke("change-user-password", {
+    body: {
+      authUserId: normalizedAuthUserId,
+      password: normalizedPassword
+    }
+  });
+
+  console.log(result?.data);
+  console.log(result?.error);
+
+  if (result?.error?.context) {
+    let edgeErrorBody = null;
+
+    try {
+      if (typeof result.error.context.clone === "function") {
+        edgeErrorBody = await result.error.context.clone().json();
+      } else if (typeof result.error.context.json === "function") {
+        edgeErrorBody = await result.error.context.json();
+      }
+    } catch (_error) {
+      edgeErrorBody = null;
+    }
+
+    console.log("change-user-password edge error diagnostics", {
+      status: result?.error?.context?.status || result?.error?.status || null,
+      message: result?.error?.message || null,
+      body: edgeErrorBody
+    });
+  }
+
+  if (result.error) {
+    return { data: null, error: result.error };
+  }
+
+  if (!result.data?.success) {
+    return {
+      data: null,
+      error: {
+        code: result.data?.error || "auth_password_update_failed",
+        message: result.data?.message || "Falha ao alterar password no auth.users."
+      }
+    };
+  }
+
+  return { data: result.data?.data || null, error: null };
+}
+
 export async function markUserAccountActive(profileId) {
   if (!profileId) {
     return {

@@ -47,6 +47,30 @@ function normalizeProviderEstado(lead) {
   return "novo";
 }
 
+async function fetchAllProviderLeads(baseQuery, pageSize = 1000) {
+  const records = [];
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await baseQuery
+      .order("created_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) {
+      return { data: records, error };
+    }
+
+    const batch = data || [];
+    records.push(...batch);
+
+    if (batch.length < pageSize) {
+      return { data: records, error: null };
+    }
+
+    offset += pageSize;
+  }
+}
+
 function mapProviderLeadToOpportunity(lead) {
   const raw = lead?.raw_data || {};
   const title = lead?.title || raw?.title || "";
@@ -56,9 +80,10 @@ function mapProviderLeadToOpportunity(lead) {
   const providerOrigin = String(lead?.provider || lead?.origem || lead?.source || raw?.source || "imovirtual").trim().toLowerCase();
   const source = normalizeOpportunitySource(providerOrigin);
   const ownerName = lead?.owner_name || raw?.ownerName || raw?.advertOwner?.name || "N/A";
-  const city = lead?.city || raw?.city || raw?.location?.address?.city?.name || "";
+  const freguesia = lead?.freguesia || raw?.freguesia || raw?.location?.address?.city?.name || "";
+  const city = lead?.city || raw?.city || freguesia || "";
   const district = lead?.district || raw?.district || raw?.location?.address?.province?.name || "";
-  const municipality = raw?.municipality || raw?.location?.address?.county?.name || city || "";
+  const municipality = raw?.municipality || raw?.location?.address?.county?.name || lead?.concelho || "";
   const locationLabel = lead?.location || raw?.locationLabel || [city, district].filter(Boolean).join(", ") || "N/A";
   const estado = normalizeProviderEstado(lead);
   const persistedScore = toScore(lead?.score ?? raw?.score ?? 0);
@@ -76,6 +101,7 @@ function mapProviderLeadToOpportunity(lead) {
     link: lead?.url || null,
     url: lead?.url || null,
     cidade: city || "N/A",
+    freguesia: freguesia || null,
     distrito: district,
     concelho: municipality,
     morada: locationLabel,
@@ -136,11 +162,12 @@ export class RadarRepository {
     }
 
     try {
-      const providerLeadsQuery = applyEmpresaScope(supabase
-        .from("provider_leads")
-        .select("*"), empresaId);
+      const providerLeadsQuery = applyEmpresaScope(
+        supabase.from("provider_leads").select("*"),
+        empresaId
+      );
 
-      const { data: providerLeads, error: providerError } = await providerLeadsQuery;
+      const { data: providerLeads, error: providerError } = await fetchAllProviderLeads(providerLeadsQuery);
 
       if (providerError) {
         console.log("Erro Provider:", providerError?.message || providerError);

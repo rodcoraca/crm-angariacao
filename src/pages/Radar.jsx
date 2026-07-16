@@ -22,6 +22,9 @@ import { canExecuteSync } from "../providers/services/providers/providerSyncServ
 export default function Radar() {
   const tableRef = useRef(null);
   const detailRef = useRef(null);
+  const opportunityRowRefs = useRef(new Map());
+  const lastOpenedOpportunityIdRef = useRef(null);
+  const lastOpenedOpportunityRowRef = useRef(null);
   const theme = useTheme();
   const { user } = useAuthContext();
   const {
@@ -46,11 +49,49 @@ export default function Radar() {
   const [filtroData, setFiltroData] = useState("todos");
   const [tablePage, setTablePage] = useState(1);
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(5);
+  const [syncStatus, setSyncStatus] = useState("");
   const TABLE_PAGE_SIZE = 20;
   const TIMELINE_PAGE_SIZE = 5;
   const styles = useMemo(() => createRadarStyles(theme), [theme]);
   const nowrapButtonStyle = useMemo(() => ({ whiteSpace: "nowrap", minWidth: "120px" }), []);
   const nowrapBadgeStyle = useMemo(() => ({ whiteSpace: "nowrap" }), []);
+
+  const waitForRenderCommit = useCallback(async () => {
+    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+      return;
+    }
+
+    await new Promise((resolve) => {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(resolve);
+      });
+    });
+  }, []);
+
+  const openOpportunityDetail = useCallback((opportunity) => {
+    const opportunityId = String(opportunity?.id || "").trim();
+    if (!opportunityId) {
+      openDetail(opportunity || null);
+      return;
+    }
+
+    lastOpenedOpportunityIdRef.current = opportunityId;
+    lastOpenedOpportunityRowRef.current = opportunityRowRefs.current.get(opportunityId) || null;
+    openDetail(opportunity || null);
+  }, [openDetail]);
+
+  const restoreSelectedOpportunityRow = useCallback(async () => {
+    const opportunityId = String(lastOpenedOpportunityIdRef.current || "").trim();
+    if (!opportunityId) return;
+
+    await waitForRenderCommit();
+
+    const selector = `[data-opportunity-id="${opportunityId}"]`;
+    const targetRow = document.querySelector(selector) || lastOpenedOpportunityRowRef.current;
+    if (targetRow && typeof targetRow.scrollIntoView === "function") {
+      targetRow.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [waitForRenderCommit]);
 
   useEffect(() => {
     if (selectedOpportunity && detailRef.current) {
@@ -64,10 +105,17 @@ export default function Radar() {
 
   const closeDetail = useCallback(() => {
     originalCloseDetail();
-    if (tableRef.current) {
-      tableRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [originalCloseDetail]);
+    void restoreSelectedOpportunityRow();
+  }, [originalCloseDetail, restoreSelectedOpportunityRow]);
+
+  useEffect(() => {
+    setFiltroConcelho("todos");
+    setFiltroCidade("");
+  }, [filtroDistrito]);
+
+  useEffect(() => {
+    setFiltroCidade("");
+  }, [filtroConcelho]);
 
   const handleManualSync = useCallback(async () => {
     const canSync = await canExecuteSync("imovirtual");
@@ -76,15 +124,20 @@ export default function Radar() {
       return;
     }
 
-    notifyInfo("A sincronizar oportunidades...");
+    setSyncStatus("Atualizando oportunidades...");
+    notifyInfo("Atualizando oportunidades...");
+
     try {
       await runImovirtualSync();
       await reload();
+      await waitForRenderCommit();
+      setSyncStatus("");
       notifySuccess("Oportunidades atualizadas.");
     } catch (error) {
+      setSyncStatus("");
       notifyError("Falha ao sincronizar: " + (error.message || "Erro desconhecido"));
     }
-  }, [reload]);
+  }, [reload, waitForRenderCommit]);
 
   const handleImportOpportunity = useCallback(async (opportunity) => {
     const result = await importSelectedToLeads({ opportunity, user });
@@ -133,18 +186,28 @@ export default function Radar() {
 
   const filterOptions = useMemo(() => {
     const opportunities = snapshot?.opportunities || [];
-    const cidades = Array.from(new Set(opportunities.map((item) => String(item?.cidade || "").trim()).filter(Boolean))).sort();
+    const distritoBase = filtroDistrito !== "todos"
+      ? opportunities.filter((item) => String(item?.distrito || "").trim() === filtroDistrito)
+      : opportunities;
+
+    const concelhoBase = filtroConcelho !== "todos"
+      ? distritoBase.filter((item) => String(item?.concelho || "").trim() === filtroConcelho)
+      : distritoBase;
+
+    const freguesiaBase = concelhoBase;
+
+    const freguesias = Array.from(new Set(freguesiaBase.map((item) => String(item?.freguesia || item?.cidade || "").trim()).filter(Boolean))).sort();
     const tipos = Array.from(new Set(opportunities.map((item) => String(item?.tipo || "").trim()).filter(Boolean))).sort();
     const estados = Array.from(new Set(opportunities.map((item) => String(item?.estado || "").trim()).filter(Boolean))).sort();
     const origens = Array.from(new Set(opportunities.map((item) => String(item?.source || item?.origem || "").trim()).filter(Boolean))).sort();
     const distritos = Array.from(new Set(opportunities.map((item) => String(item?.distrito || "").trim()).filter(Boolean))).sort();
-    const concelhos = Array.from(new Set(opportunities.map((item) => String(item?.concelho || "").trim()).filter(Boolean))).sort();
-    return { cidades, tipos, estados, origens, distritos, concelhos };
-  }, [snapshot]);
+    const concelhos = Array.from(new Set(distritoBase.map((item) => String(item?.concelho || "").trim()).filter(Boolean))).sort();
+    return { freguesias, tipos, estados, origens, distritos, concelhos };
+  }, [snapshot, filtroDistrito, filtroConcelho]);
 
   const filteredOpportunities = useMemo(() => {
     const oportunidades = snapshot?.opportunities || [];
-    const cidadeLower = filtroCidade.trim().toLowerCase();
+    const freguesiaLower = filtroCidade.trim().toLowerCase();
 
     // Data filtering logic
     const agora = new Date();
@@ -165,14 +228,14 @@ export default function Radar() {
     };
 
     const filtered = oportunidades.filter((item) => {
-      const cidade = String(item?.cidade || "").toLowerCase();
+      const freguesia = String(item?.freguesia || item?.cidade || "").toLowerCase();
       const tipo = String(item?.tipo || "");
       const estado = String(item?.estado || "");
       const origem = String(item?.source || item?.origem || "");
       const distrito = String(item?.distrito || "");
       const concelho = String(item?.concelho || "");
 
-      if (cidadeLower && !cidade.includes(cidadeLower)) return false;
+      if (freguesiaLower && !freguesia.includes(freguesiaLower)) return false;
       if (filtroTipo !== "todos" && tipo !== filtroTipo) return false;
       if (filtroEstado !== "todos" && estado !== filtroEstado) return false;
       if (filtroOrigem !== "todos" && origem !== filtroOrigem) return false;
@@ -229,7 +292,7 @@ export default function Radar() {
       render: (row) => (
             <button
               type="button"
-          onClick={() => openDetail(row.rawOpportunity || null)}
+          onClick={() => openOpportunityDetail(row.rawOpportunity || null)}
           style={styles.linkButton}
         >
               {row.rawOpportunity?.titulo || row.imovel}
@@ -281,7 +344,7 @@ export default function Radar() {
         const isIgnored = isIgnoredOpportunity(row.rawOpportunity || row);
               return (
           <div style={styles.rowActions}>
-            <Button size="sm" variant="ghost" style={nowrapButtonStyle} onClick={() => openDetail(row.rawOpportunity || null)}>
+            <Button size="sm" variant="ghost" style={nowrapButtonStyle} onClick={() => openOpportunityDetail(row.rawOpportunity || null)}>
               Abrir detalhe
             </Button>
             <Button
@@ -305,7 +368,7 @@ export default function Radar() {
     isImovirtualOpportunity,
     nowrapBadgeStyle,
     nowrapButtonStyle,
-    openDetail,
+    openOpportunityDetail,
     styles.linkButton,
     styles.rowActions
   ]);
@@ -435,18 +498,33 @@ export default function Radar() {
             marginBottom: '10px'
           }}>
             <label style={styles.filterField}>
-              Cidade
-              <input
-                value={filtroCidade}
-                onChange={(event) => setFiltroCidade(event.target.value)}
-                style={styles.filterControl}
-                list="radar-cidades"
-              />
-              <datalist id="radar-cidades">
-                {filterOptions.cidades.map((cidade) => (
-                  <option key={cidade} value={cidade} />
+              Distrito
+              <select value={filtroDistrito} onChange={(event) => setFiltroDistrito(event.target.value)} style={styles.filterControl}>
+                <option value="">Todos</option>
+                {filterOptions.distritos.map((distrito) => (
+                  <option key={distrito} value={distrito}>{distrito}</option>
                 ))}
-              </datalist>
+              </select>
+            </label>
+
+            <label style={styles.filterField}>
+              Concelho
+              <select value={filtroConcelho} onChange={(event) => setFiltroConcelho(event.target.value)} style={styles.filterControl}>
+                <option value="todos">Todos</option>
+                {filterOptions.concelhos.map((concelho) => (
+                  <option key={concelho} value={concelho}>{concelho}</option>
+                ))}
+              </select>
+            </label>
+
+            <label style={styles.filterField}>
+              Freguesia
+              <select value={filtroCidade} onChange={(event) => setFiltroCidade(event.target.value)} style={styles.filterControl}>
+                <option value="">Todos</option>
+                {filterOptions.freguesias.map((freguesia) => (
+                  <option key={freguesia} value={freguesia}>{freguesia}</option>
+                ))}
+              </select>
             </label>
 
             <label style={styles.filterField}>
@@ -480,26 +558,6 @@ export default function Radar() {
             </label>
 
             <label style={styles.filterField}>
-              Distrito
-              <select value={filtroDistrito} onChange={(event) => setFiltroDistrito(event.target.value)} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                {filterOptions.distritos.map((distrito) => (
-                  <option key={distrito} value={distrito}>{distrito}</option>
-                ))}
-              </select>
-            </label>
-
-            <label style={styles.filterField}>
-              Concelho
-              <select value={filtroConcelho} onChange={(event) => setFiltroConcelho(event.target.value)} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                {filterOptions.concelhos.map((concelho) => (
-                  <option key={concelho} value={concelho}>{concelho}</option>
-                ))}
-              </select>
-            </label>
-
-            <label style={styles.filterField}>
               Particulares
               <select value={filtroParticulares} onChange={(e) => setFiltroParticulares(e.target.value)} style={styles.filterControl}>
                 <option value="todos">Todos</option>
@@ -528,12 +586,12 @@ export default function Radar() {
               variant="ghost"
               style={nowrapButtonStyle}
               onClick={() => {
+                setFiltroDistrito("todos");
+                setFiltroConcelho("todos");
                 setFiltroCidade("");
                 setFiltroTipo("todos");
                 setFiltroEstado("todos");
                 setFiltroOrigem("todos");
-                setFiltroDistrito("todos");
-                setFiltroConcelho("todos");
                 setFiltroParticulares("todos");
                 setFiltroData("todos");
               }}
@@ -549,12 +607,12 @@ export default function Radar() {
         <Card style={styles.tableContainer}>
           <div style={styles.tableHeader}>
             <div style={styles.actionRow}>
-              <Button variant="secondary" style={nowrapButtonStyle} onClick={handleManualSync} disabled={loading}>
+              <Button variant="secondary" style={nowrapButtonStyle} onClick={handleManualSync} disabled={loading || Boolean(syncStatus)}>
                 🔄 Atualizar Oportunidades
               </Button>
-              <Button variant="ghost" style={nowrapButtonStyle} onClick={() => selectedOpportunity && openDetail(selectedOpportunity)} disabled={!selectedOpportunity}>Abrir detalhe</Button>
+              <Button variant="ghost" style={nowrapButtonStyle} onClick={() => selectedOpportunity && openOpportunityDetail(selectedOpportunity)} disabled={!selectedOpportunity}>Abrir detalhe</Button>
             </div>
-            {loading ? <Loading label="A carregar Radar..." /> : null}
+            {syncStatus ? <Loading label={syncStatus} /> : loading ? <Loading label="A carregar Radar..." /> : null}
           </div>
 
           {error ? (
@@ -567,6 +625,21 @@ export default function Radar() {
             columns={colunasTabela}
             rows={paginatedTableRows}
             emptyMessage="Sem oportunidades disponíveis"
+            rowProps={(row, _index, computedKey) => {
+              const opportunityId = String(row?.rawOpportunity?.id || row?.id || computedKey || "").trim();
+              return {
+                "data-opportunity-id": opportunityId || undefined,
+                ref: (element) => {
+                  if (!opportunityId) return;
+
+                  if (element) {
+                    opportunityRowRefs.current.set(opportunityId, element);
+                  } else {
+                    opportunityRowRefs.current.delete(opportunityId);
+                  }
+                }
+              };
+            }}
           />
           {tableRows.length > 0 ? (
             <div style={{

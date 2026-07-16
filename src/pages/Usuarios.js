@@ -3,6 +3,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { usePermissions } from '../modules/auth/hooks';
 import { PERMISSION_MODULES } from '../modules/auth/services/permissionCatalog';
 import {
+  enviarRedefinicaoPasswordUtilizador,
   guardarUsuarioComAuditoria,
   listarAuditoriaPorUtilizador,
   listarPreferenciasPorUtilizador,
@@ -103,6 +104,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
   const [preferenciasUsuario, setPreferenciasUsuario] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
   const [isResendingInvite, setIsResendingInvite] = useState(false);
+  const [isSendingPasswordReset, setIsSendingPasswordReset] = useState(false);
   const [isRepairingAssociation, setIsRepairingAssociation] = useState(false);
 
   // Arquitetura SaaS (futuro): quando houver persistencia multi-tenant,
@@ -430,7 +432,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
     setIsResendingInvite(true);
 
     try {
-      const { error } = await reenviarConviteAtivacaoUtilizador({
+      const { error, action } = await reenviarConviteAtivacaoUtilizador({
         usuarioId: usuarioSelecionadoMeta.id,
         currentUser,
       });
@@ -448,6 +450,30 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
       }
     } finally {
       setIsResendingInvite(false);
+    }
+  }
+
+  async function enviarRedefinicaoPassword() {
+    if (!usuarioSelecionadoMeta?.id) return;
+
+    setErro('');
+    setIsSendingPasswordReset(true);
+
+    try {
+      const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const { error } = await enviarRedefinicaoPasswordUtilizador({
+        usuarioId: usuarioSelecionadoMeta.id,
+        currentUser,
+        redirectTo,
+      });
+
+      if (error) {
+        setErro(error.message || 'Falha ao enviar redefinição de password.');
+        return;
+      }
+
+    } finally {
+      setIsSendingPasswordReset(false);
     }
   }
 
@@ -571,6 +597,9 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
       }),
     [form, perfilOrganizacional, usuarioSelecionadoMeta, modoEdicao, sessoesUsuario, auditoriaUsuario, atividadeResumo, preferenciasUsuario]
   );
+
+  const hasPasswordInput = String(form.password || '').trim().length > 0;
+  const isPasswordInvalid = hasPasswordInput && String(form.password || '').length < 8;
 
   const etapasVisiveis = useMemo(() => {
     if (!usuarioSelecionadoMeta && etapaAtiva === 'lista') {
@@ -1017,7 +1046,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
             <h3 style={styles.subtitle}>{modoEdicao ? 'Editar utilizador' : 'Criar utilizador'}</h3>
             {etapaAtiva === 'ficha' ? (
               <div style={styles.formActions}>
-                <button style={styles.actionButton} onClick={guardarUsuario}>Atualizar utilizador</button>
+                <button style={styles.actionButton} onClick={guardarUsuario} disabled={isPasswordInvalid}>Atualizar utilizador</button>
                 <button style={styles.actionButtonSecondary} onClick={resetForm}>Cancelar</button>
               </div>
             ) : modoEdicao ? <button style={styles.linkButton} onClick={resetForm}>Cancelar</button> : null}
@@ -1031,6 +1060,8 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
                 onChange={atualizarCampo}
                 onResendInvite={etapaAtiva === 'ficha' && modoEdicao ? reenviarConvite : null}
                 resendInviteLoading={isResendingInvite}
+                onSendPasswordReset={etapaAtiva === 'ficha' && modoEdicao ? enviarRedefinicaoPassword : null}
+                sendPasswordResetLoading={isSendingPasswordReset}
                 onRepairAssociation={etapaAtiva === 'ficha' && modoEdicao ? repararAssociacaoAuth : null}
                 repairAssociationLoading={isRepairingAssociation}
                 styles={styles}
@@ -1056,11 +1087,11 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
 
           {etapaAtiva === 'ficha' ? (
             <div style={styles.formActionsFooter}>
-              <button style={styles.actionButton} onClick={guardarUsuario}>Atualizar utilizador</button>
+              <button style={styles.actionButton} onClick={guardarUsuario} disabled={isPasswordInvalid}>Atualizar utilizador</button>
               <button style={styles.actionButtonSecondary} onClick={resetForm}>Cancelar</button>
             </div>
           ) : (
-            <button style={styles.button} onClick={guardarUsuario}>{modoEdicao ? 'Atualizar utilizador' : 'Guardar utilizador'}</button>
+            <button style={styles.button} onClick={guardarUsuario} disabled={isPasswordInvalid}>{modoEdicao ? 'Atualizar utilizador' : 'Guardar utilizador'}</button>
           )}
         </div>
       ) : null}
