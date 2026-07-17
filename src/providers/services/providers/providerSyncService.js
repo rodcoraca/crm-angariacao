@@ -39,35 +39,3 @@ export async function canExecuteSync(providerCode) {
 
   return status?.canSync ?? false;
 }
-
-export async function registerExecution(
-  providerCode,
-  syncRunning = false,
-  intervalMinutes = 240
-) {
-  const now = new Date();
-
-  const nextExecution = new Date(
-    now.getTime() +
-      intervalMinutes * 60 * 1000
-  );
-
-  const { error } = await supabase
-    .from("provider_registry")
-    .update({
-      sync_running: syncRunning,
-      last_execution: now.toISOString(),
-      next_execution:
-        nextExecution.toISOString()
-    })
-    .eq("provider_code", providerCode);
-
-  if (error) {
-    console.error(
-      "[providerSyncService] Erro ao atualizar:",
-      error
-    );
-  }
-
-  return !error;
-}

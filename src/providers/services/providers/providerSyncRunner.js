@@ -1,4 +1,3 @@
-import { registerExecution } from "./providerSyncService";
 import { supabase } from "../../../supabase";
 import { resolveEmpresaId, warnMissingEmpresaId } from "../../../utils/empresaScope";
 
@@ -9,10 +8,18 @@ import { resolveEmpresaId, warnMissingEmpresaId } from "../../../utils/empresaSc
  * ATUALIZAÇÃO: Delega a execução para Supabase Edge Function
  */
 export async function runImovirtualSync() {
-  await registerExecution("imovirtual", true);
+  console.log("[SYNC]", {
+    phase: "runImovirtualSync_start",
+    timestamp: new Date().toISOString()
+  });
 
   try {
     const empresaId = await resolveEmpresaId();
+    console.log("[SYNC]", {
+      phase: "runImovirtualSync_empresa",
+      empresaId: empresaId || null,
+      timestamp: new Date().toISOString()
+    });
     if (!empresaId) {
       warnMissingEmpresaId();
       throw new Error("Operacao sem empresa_id");
@@ -33,12 +40,17 @@ export async function runImovirtualSync() {
       throw new Error(data?.message || "Provider Sync indisponível.");
     }
 
-    // c) Sucesso
-    await registerExecution("imovirtual", false, 240);
+    console.log("[SYNC]", {
+      phase: "runImovirtualSync_success",
+      timestamp: new Date().toISOString()
+    });
     return data;
   } catch (error) {
-    // d) Tratamento de erro
-    await registerExecution("imovirtual", false, 0);
+    console.log("[SYNC]", {
+      phase: "runImovirtualSync_error",
+      error: error?.message || "Erro desconhecido",
+      timestamp: new Date().toISOString()
+    });
     const fallbackResult = {
       success: false,
       fallback: true,

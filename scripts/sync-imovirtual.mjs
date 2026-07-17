@@ -1,6 +1,5 @@
 import ImovirtualProvider from "../src/providers/ImovirtualProvider.js";
 import { ProviderSyncExecutor } from "../src/providers/node/ProviderSyncExecutor.js";
-import { registerExecution } from "../src/providers/services/providers/providerSyncService.js";
 import { collectImovirtualPaginatedListings } from "../src/shared/provider-engine/index.js";
 
 const MAX_PAGES = 20;
@@ -8,9 +7,6 @@ const MAX_PAGES = 20;
 async function runSync() {
   console.log("Iniciando sincronização Node para Imovirtual...");
   const syncStartedAtMs = Date.now();
-  
-  // 1. Atualizar provider_registry (início)
-  await registerExecution("imovirtual", true);
   
   const provider = new ImovirtualProvider({ enableLogs: true });
   const executor = new ProviderSyncExecutor();
@@ -45,13 +41,8 @@ async function runSync() {
     });
 
     console.log("Sincronização concluída:", result);
-    
-    // 3. Atualizar provider_registry (sucesso - próximo run em 240 min)
-    await registerExecution("imovirtual", false, 240);
   } catch (error) {
     console.error("Erro na sincronização:", error);
-    // Atualizar provider_registry (falha - libera bloqueio)
-    await registerExecution("imovirtual", false, 0);
     process.exit(1);
   }
 }
