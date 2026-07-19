@@ -2,7 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
-//import LandingPage from './pages/LandingPage';
+import LandingPage from './pages/LandingPage';
 import IntegrationCallback from './pages/IntegrationCallback';
 import { ThemeProvider } from './theme/ThemeContext';
 
@@ -32,7 +32,7 @@ root.render(
   )
 );
 
-const isLandingRoute =
+/*const isLandingRoute =
   window.location.pathname === '/landing';
 
   root.render(
@@ -47,4 +47,4 @@ const isLandingRoute =
       <App />
     </ThemeProvider>
   )
-);
+);*/
