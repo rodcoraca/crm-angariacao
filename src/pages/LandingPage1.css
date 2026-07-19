@@ -419,42 +419,22 @@
 }
 
 .lp-demo-form-wrap {
-  max-width: 980px;
-  margin: auto;
-  border-radius: 22px;
+  border-radius: 18px;
   border: 1px solid rgba(14, 77, 100, 0.15);
-  background: linear-gradient(180deg, rgba(255,255,255,0.98), rgba(246,251,253,0.95));
-  padding: 42px;
-  box-shadow: 0 18px 36px rgba(14,77,100,0.11);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 251, 253, 0.95));
+  padding: clamp(18px, 3vw, 28px);
+  box-shadow: 0 14px 30px rgba(14, 77, 100, 0.11);
 }
 
 .lp-demo-form {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-}
-
-.lp-demo-row-1 {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 24px;
-}
-
-.lp-demo-row-2 {
-  grid-column: 1 / -1;
-  display: grid;
-  grid-template-columns: 1fr 1fr 260px;
-  gap: 24px;
+  gap: 12px;
 }
 
 .lp-demo-actions {
-  grid-column: 1 / -1;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
+  justify-content: flex-start;
+  margin-top: 8px;
 }
 
 .lp-dashboard-preview {
@@ -867,7 +847,8 @@
   padding: 18px 24px 24px;
 }
 
-.lp-modal-grid {
+.lp-modal-grid,
+.lp-demo-form {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 24px;
@@ -885,9 +866,6 @@
 }
 
 .lp-field-input {
-  height: 56px;
-  border-radius: 14px;
-  font-size: 16px;
   transition: border-color 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -898,16 +876,9 @@
 
 .lp-form-error-text {
   margin: 12px 0 0;
-  grid-column: 1 / -1;
   color: var(--os-status-warning-text);
   font-weight: 600;
   font-size: 0.9rem;
-}
-
-.lp-field-error {
-  color: var(--os-status-warning-text);
-  font-size: 0.84rem;
-  font-weight: 600;
 }
 
 .lp-modal-actions {
@@ -1092,39 +1063,3 @@
   }
 }
 
-
-
-/* ===== OSFlow Landing UX Improvements ===== */
-
-.lp-demo-actions::before {
-  content: "Demonstração gratuita • Sem compromisso";
-  color: var(--lp-muted);
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.lp-demo-actions .lp-btn {
-  min-width: 320px;
-}
-
-.lp-demo-actions .lp-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.62;
-}
-
-@media (max-width:760px) {
-  .lp-demo-form,
-  .lp-demo-row-1,
-  .lp-demo-row-2 {
-    grid-template-columns: 1fr;
-  }
-
-  .lp-demo-form-wrap {
-    padding: 28px;
-  }
-
-  .lp-demo-actions .lp-btn {
-    width: 100%;
-    min-width: unset;
-  }
-}

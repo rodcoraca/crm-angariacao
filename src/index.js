@@ -31,3 +31,20 @@ root.render(
     <LandingPage />
   )
 );
+
+const isLandingRoute =
+  window.location.pathname === '/landing';
+
+  root.render(
+  isIntegrationCallbackRoute ? (
+    <ThemeProvider>
+      <IntegrationCallback />
+    </ThemeProvider>
+  ) : isLandingRoute ? (
+    <LandingPage />
+  ) : (
+    <ThemeProvider>
+      <App />
+    </ThemeProvider>
+  )
+);

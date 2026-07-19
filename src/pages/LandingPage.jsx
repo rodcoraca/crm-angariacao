@@ -1,66 +1,101 @@
 import { useEffect, useMemo, useState } from "react";
 import logo from "../assets/logo.png";
+import heroImage from "../assets/landing/osflow-hero-real.png";
+import crmShot from "../assets/landing/osflow-shot-crm.png";
+import imoveisShot from "../assets/landing/osflow-shot-imoveis.png";
+import documentosShot from "../assets/landing/osflow-shot-utilizadores.png";
+import ecosystemImage from "../assets/landing/osflow-ecosystem.png";
 import "./LandingPage.css";
 
-const platformHighlights = [
-  "CRM Comercial",
-  "Cockpit Executivo",
-  "Gestão de Imóveis",
-  "Gestão Documental",
-  "Segurança e Auditoria",
-  "Produtividade Operacional",
+const heroBadgeItems = [
+  "CRM",
+  "Leads",
+  "Imóveis",
+  "Documentos",
   "Inteligência Comercial",
 ];
 
-const featureCards = [
-  "CRM Comercial",
-  "Cockpit Executivo",
-  "Gestão de Imóveis",
-  "Gestão Documental",
-  "Segurança e Auditoria",
+const heroChecks = [
+  "Operação centralizada",
+  "Mais produtividade",
+  "Mais controlo",
+  "Mais negócio",
 ];
 
-const benefits = [
-  "Menos tarefas repetitivas",
-  "Mais organização",
-  "Maior produtividade",
-  "Mais controlo",
+const painPoints = [
+  "Informação dispersa",
+  "Demasiadas ferramentas",
+  "Processos manuais",
+  "Falta de controlo",
+];
+
+const solutionPoints = [
+  "Tudo centralizado",
+  "Equipa alinhada",
+  "Mais produtividade",
   "Mais vendas",
 ];
 
-const technologies = ["React", "Supabase", "Cloud", "Segurança", "Responsividade"];
-const dashboardPreviewImage = "";
-const valueCards = [
+const moduleCards = [
   {
     id: "crm-comercial",
     title: "CRM Comercial",
-    description: "Acompanhe cada oportunidade com histórico, contexto e ações comerciais centralizadas.",
+    description: "Nunca perca uma oportunidade.",
     icon: "crm",
   },
   {
     id: "cockpit-executivo",
     title: "Cockpit Executivo",
-    description: "Visualize indicadores, prioridades e desempenho operacional com leitura imediata.",
+    description: "Saiba exatamente o que está a acontecer.",
     icon: "dashboard",
   },
   {
     id: "gestao-imoveis",
     title: "Gestão de Imóveis",
-    description: "Organize carteira, estado dos imóveis e dados críticos para uma operação eficiente.",
+    description: "Toda a carteira centralizada.",
     icon: "building",
   },
   {
-    id: "gestao-documental",
-    title: "Gestão Documental",
-    description: "Centralize documentos e checklist operacional com rastreabilidade e controlo.",
+    id: "gestao-utilizadores",
+    title: "Gestão de Utilizadores",
+    description: "Dados organizados e rastreáveis.",
     icon: "crm",
   },
-  {
-    id: "seguranca-auditoria",
-    title: "Segurança e Auditoria",
-    description: "Reforce permissões, proteção operacional e histórico de ações para total confiança.",
+  /*{
+    id: "seguranca",
+    title: "Segurança",
+    description: "Controlo e confiança.",
     icon: "spark",
+  },*/
+];
+
+const productShots = [
+  {
+    id: "crm-shot",
+    title: "CRM Comercial",
+    subtitle: "Pipeline, tarefas e execução comercial num único fluxo.",
+    image: crmShot,
   },
+  {
+    id: "imoveis-shot",
+    title: "Gestão de Imóveis",
+    subtitle: "Carteira, estado e detalhe operacional com contexto total.",
+    image: imoveisShot,
+  },
+  {
+    id: "documentos-shot",
+    title: "Gestão Ulizadores",
+    subtitle: "Checklist e rastreabilidade documental orientada à operação.",
+    image: documentosShot,
+  },
+];
+
+const impactCards = [
+  "Mais produtividade",
+  "Mais organização",
+  "Mais controlo",
+  "Mais vendas",
+  "Mais eficiência operacional",
 ];
 
 const keywords =
@@ -68,11 +103,10 @@ const keywords =
 
 const initialContactForm = {
   nome: "",
-  apelido: "",
+  empresa: "",
   telefone: "",
   email: "",
-  tipoCliente: "",
-  descricao: "",
+  numeroConsultores: "",
   origem: "website",
 };
 
@@ -120,34 +154,6 @@ function SectionTitle({ eyebrow, title, subtitle, className = "" }) {
   );
 }
 
-function DashboardPreview() {
-  return (
-    <div className="lp-dashboard-preview">
-      {dashboardPreviewImage ? (
-        <img src={dashboardPreviewImage} alt="Dashboard Executivo OSFlow" className="lp-dashboard-image" />
-      ) : (
-        <div className="lp-dashboard-placeholder">
-          <div>
-            <svg
-              width="42"
-              height="42"
-              viewBox="0 0 24 24"
-              fill="none"
-              aria-hidden="true"
-              className="lp-dashboard-icon"
-            >
-              <rect x="3" y="4" width="18" height="12" rx="2" stroke="currentColor" strokeWidth="1.8" />
-              <path d="M8 20H16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-              <path d="M12 16V20" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-            </svg>
-            <p className="lp-dashboard-caption">Screenshot da Plataforma</p>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function ValueCardIcon({ icon }) {
   const iconStyle = { width: "22px", height: "22px", color: "var(--os-color-primary)" };
 
@@ -186,9 +192,10 @@ function ValueCardIcon({ icon }) {
 }
 
 export default function LandingPage() {
-  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [contactForm, setContactForm] = useState(initialContactForm);
   const [submitAttempted, setSubmitAttempted] = useState(false);
+  const [touchedFields, setTouchedFields] = useState({});
+  const [isSubmittingContact, setIsSubmittingContact] = useState(false);
 
   function smoothScrollTo(id) {
     const section = document.getElementById(id);
@@ -224,64 +231,84 @@ export default function LandingPage() {
     upsertLink("canonical", "https://osflow.pt");
   }, []);
 
-  useEffect(() => {
-    if (!isContactModalOpen) return undefined;
+  const validationState = useMemo(() => {
+    const phoneRegex = /^(?:\+351)?\s?9\d{8}$/;
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    const normalizedPhone = contactForm.telefone.replace(/\s/g, "");
+    const numeroConsultores = contactForm.numeroConsultores.trim();
+    const numeroConsultoresValido =
+      /^\d+$/.test(numeroConsultores) && Number(numeroConsultores) >= 1 && Number(numeroConsultores) <= 9999;
 
-    const originalOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    function handleEscape(event) {
-      if (event.key === "Escape") {
-        setIsContactModalOpen(false);
-      }
-    }
-
-    window.addEventListener("keydown", handleEscape);
-
-    return () => {
-      document.body.style.overflow = originalOverflow;
-      window.removeEventListener("keydown", handleEscape);
-    };
-  }, [isContactModalOpen]);
-
-  const requiredErrors = useMemo(() => {
     return {
-      nome: !contactForm.nome.trim(),
-      apelido: !contactForm.apelido.trim(),
-      telefone: !contactForm.telefone.trim(),
-      email: !contactForm.email.trim(),
-      tipoCliente: !contactForm.tipoCliente.trim(),
+      nome: contactForm.nome.trim() ? "" : "Introduza o seu nome.",
+      empresa: contactForm.empresa.trim() ? "" : "Introduza o nome da empresa.",
+      telefone: phoneRegex.test(normalizedPhone) ? "" : "Introduza um número de telefone válido.",
+      email: emailRegex.test(contactForm.email.trim()) ? "" : "Introduza um email válido.",
+      numeroConsultores: numeroConsultoresValido ? "" : "Introduza um número válido.",
     };
   }, [contactForm]);
 
-  const hasRequiredErrors = Object.values(requiredErrors).some(Boolean);
+  const hasValidationErrors = Object.values(validationState).some(Boolean);
+  const hasVisibleValidationErrors = Object.entries(validationState).some(
+    ([field, message]) => Boolean(message && (submitAttempted || touchedFields[field]))
+  );
 
-  function updateContactField(field, value) {
-    setContactForm((current) => ({ ...current, [field]: value }));
+  function formatPhoneNumber(value) {
+    const hasCountryCode = /^\s*\+351/.test(value);
+    let digits = value.replace(/\D/g, "");
+
+    if (digits.startsWith("351")) {
+      digits = digits.slice(3);
+    }
+
+    digits = digits.slice(0, 9);
+
+    if (!digits) return hasCountryCode ? "+351 " : "";
+
+    const phoneGroups = [digits.slice(0, 3), digits.slice(3, 6), digits.slice(6, 9)].filter(Boolean);
+    return `+351 ${phoneGroups.join(" ")}`.trim();
   }
 
-  function closeContactModal() {
-    setIsContactModalOpen(false);
-    setSubmitAttempted(false);
+  function updateContactField(field, value) {
+    const nextValue = field === "telefone" ? formatPhoneNumber(value) : value;
+    setTouchedFields((current) => ({ ...current, [field]: true }));
+    setContactForm((current) => ({ ...current, [field]: nextValue }));
+  }
+
+  function updateConsultoresField(value) {
+    setTouchedFields((current) => ({ ...current, numeroConsultores: true }));
+    setContactForm((current) => ({ ...current, numeroConsultores: value.replace(/\D/g, "").slice(0, 4) }));
+  }
+
+  function getFieldError(field) {
+    if (!submitAttempted && !touchedFields[field]) return "";
+    return validationState[field];
   }
 
   function handleContactSubmit(event) {
     event.preventDefault();
     setSubmitAttempted(true);
 
-    if (hasRequiredErrors) return;
+    if (hasValidationErrors) return;
+
+    setIsSubmittingContact(true);
 
     // Interface pronta para integração futura de envio.
-    setIsContactModalOpen(false);
+    window.setTimeout(() => {
+      setContactForm(initialContactForm);
+      setTouchedFields({});
+      setSubmitAttempted(false);
+      setIsSubmittingContact(false);
+    }, 350);
   }
 
   const baseInputStyle = {
     width: "100%",
-    borderRadius: "10px",
+    borderRadius: "14px",
     border: "1px solid rgba(14, 77, 100, 0.2)",
     background: "var(--os-color-surface)",
     padding: "11px 12px",
-    fontSize: "0.95rem",
+    fontSize: "16px",
     color: "var(--os-color-text)",
   };
 
@@ -307,29 +334,28 @@ export default function LandingPage() {
             aria-label="Voltar ao topo"
           >
             <img src={logo} alt="OSFlow" className="lp-nav-brand-logo" />
-            <span>OSFlow</span>
           </a>
 
           <nav aria-label="Menu principal" className="lp-nav-links">
             <a
-              href="#funcionalidades"
+              href="#modulos"
               onClick={(event) => {
                 event.preventDefault();
-                smoothScrollTo("funcionalidades");
+                smoothScrollTo("modulos");
               }}
               className="lp-nav-link"
             >
-              Funcionalidades
+              Módulos
             </a>
             <a
-              href="#como-funciona"
+              href="#demonstracao"
               onClick={(event) => {
                 event.preventDefault();
-                smoothScrollTo("como-funciona");
+                smoothScrollTo("demonstracao");
               }}
               className="lp-nav-link"
             >
-              Como funciona
+              Demonstração
             </a>
             <a
               href="#contacto"
@@ -350,21 +376,23 @@ export default function LandingPage() {
 
       <header className="lp-hero" id="top">
         <div className="lp-container lp-hero-inner">
-          <h1 className="lp-hero-title">A Plataforma Operacional Inteligente para Imobiliárias.</h1>
+          <span className="lp-hero-badge">{heroBadgeItems.join(" • ")}</span>
+          <h1 className="lp-hero-title">Menos tempo a gerir.<br />Mais tempo a vender.</h1>
           <p className="lp-description lp-hero-subtitle">
-            Centralize CRM, gestão de imóveis, documentos, produtividade e inteligência comercial numa única plataforma moderna.
+            Centralize Leads, CRM, Imóveis, Documentos e Equipas numa única plataforma criada para imobiliárias modernas.
           </p>
-          <p className="lp-slogan">
-            <span>Menos tempo a gerir.</span>
-            <span>Mais tempo a vender.</span>
-          </p>
+          <ul className="lp-hero-checks" aria-label="Vantagens operacionais da OSFlow">
+            {heroChecks.map((item) => (
+              <li key={item}>✓ {item}</li>
+            ))}
+          </ul>
 
           <div className="lp-actions">
             <button
               className="lp-btn lp-btn-primary"
               type="button"
               onClick={() => {
-                setIsContactModalOpen(true);
+                smoothScrollTo("demonstracao");
               }}
             >
               Solicitar Demonstração
@@ -373,43 +401,75 @@ export default function LandingPage() {
               Entrar na Plataforma
             </a>
           </div>
+
+          <div className="lp-hero-image-wrap">
+            <img src={heroImage} alt="Vista geral da plataforma OSFlow" className="lp-hero-image" />
+          </div>
         </div>
       </header>
 
-      <section className="lp-section lp-preview-section" aria-label="Pré-visualização da plataforma OSFlow">
-        <div className="lp-container">
-          <SectionTitle
-            eyebrow="Preview"
-            title="Veja a OSFlow em ação"
-            subtitle="Uma plataforma desenvolvida para simplificar toda a operação comercial imobiliária."
-          />
-          <DashboardPreview />
-        </div>
-      </section>
-
       <main>
         <section className="lp-section" id="como-funciona">
-          <div className="lp-container">
+          <div className="lp-container lp-dual-problem-solution">
             <SectionTitle
-              className="lp-about-title"
-              title="O que é a OSFlow"
-              subtitle="Uma solução unificada para equipas comerciais imobiliárias operarem com clareza, velocidade e controlo em toda a operação."
+              title="A gestão imobiliária não deveria ser complicada."
+              subtitle="A OSFlow foi desenhada para eliminar fricção operacional e criar previsibilidade comercial."
             />
 
-            <div className="lp-pill-grid">
-              {platformHighlights.map((item) => (
-                <span key={item} className="lp-pill">
-                  {item}
-                </span>
+            <div className="lp-problem-grid">
+              <article className="lp-card lp-problem-card">
+                <h3>Antes</h3>
+                <ul>
+                  {painPoints.map((item) => (
+                    <li key={item}>❌ {item}</li>
+                  ))}
+                </ul>
+              </article>
+
+              <article className="lp-card lp-solution-card">
+                <h3>Com OSFlow</h3>
+                <ul>
+                  {solutionPoints.map((item) => (
+                    <li key={item}>✅ {item}</li>
+                  ))}
+                </ul>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section className="lp-section lp-preview-section" aria-label="Pré-visualização da plataforma OSFlow">
+          <div className="lp-container">
+            <SectionTitle
+              eyebrow="Preview"
+              title="Veja a OSFlow em ação."
+              subtitle="Screens reais da plataforma para mostrar fluxo, maturidade e consistência operacional."
+            />
+
+            <div className="lp-screens-grid">
+              {productShots.map((shot, index) => (
+                <article key={shot.id} className="lp-screen-card" style={{ "--stagger": `${index * 70}ms` }}>
+                  <img src={shot.image} alt={shot.title} className="lp-screen-image" />
+                  <div className="lp-screen-content">
+                    <h3>{shot.title}</h3>
+                    <p>{shot.subtitle}</p>
+                  </div>
+                </article>
               ))}
             </div>
           </div>
         </section>
 
-        <section className="lp-section" aria-label="Principais capacidades da OSFlow">
+        <section className="lp-section lp-section-soft" id="modulos">
           <div className="lp-container">
+            <SectionTitle
+              eyebrow="Módulos"
+              title="Capacidades essenciais para escalar com controlo"
+              subtitle="Cada módulo resolve um bloco crítico da operação comercial imobiliária."
+            />
+
             <div className="lp-value-grid">
-              {valueCards.map((card, index) => {
+              {moduleCards.map((card, index) => {
                 return (
                   <article key={card.id} className="lp-value-card" style={{ "--stagger": `${index * 70}ms` }}>
                     <div className="lp-value-icon-wrap">
@@ -424,30 +484,32 @@ export default function LandingPage() {
           </div>
         </section>
 
-        <section className="lp-section lp-section-soft" id="funcionalidades">
+        <section className="lp-section" aria-label="Ecossistema da plataforma OSFlow">
           <div className="lp-container">
             <SectionTitle
-              eyebrow="Módulos"
-              title="Funcionalidades"
-              subtitle="Tudo o que a operação comercial precisa, centralizado numa experiência rápida, segura e consistente."
+              eyebrow="Ecossistema"
+              title="Uma Plataforma. Soluções Ilimitadas."
+              subtitle="A operação comercial, documental e analítica ligada num sistema único de decisão."
             />
 
-            <article className="lp-card" style={{ marginBottom: "14px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "8px" }}>
-                <h3 style={{ margin: 0 }}>NOVO · OSFlow Radar</h3>
-                <span className="lp-status-pill lp-status-desenvolvimento">Beta</span>
-              </div>
-              <p style={{ marginBottom: "12px" }}>Encontre oportunidades antes da concorrência.</p>
-              <button className="lp-btn lp-btn-ghost" type="button" disabled>
-                Brevemente disponível
-              </button>
-            </article>
+            <div className="lp-ecosystem-card">
+              <img src={ecosystemImage} alt="Ecossistema de módulos integrados da OSFlow" className="lp-ecosystem-image" />
+            </div>
+          </div>
+        </section>
 
-            <div className="lp-card-grid">
-              {featureCards.map((feature) => (
-                <article key={feature} className="lp-card">
-                  <h3>{feature}</h3>
-                  <p>Projetado para reduzir atrito operacional e manter a equipa focada em conversão.</p>
+        <section className="lp-section lp-section-soft">
+          <div className="lp-container">
+            <SectionTitle
+              eyebrow="Impacto"
+              title="Resultados operacionais visíveis em toda a equipa"
+              subtitle="Benefícios estruturados para acelerar execução e aumentar conversão."
+            />
+
+            <div className="lp-impact-grid" aria-label="Impacto da plataforma OSFlow">
+              {impactCards.map((item) => (
+                <article key={item} className="lp-impact-card">
+                  <h3>{item}</h3>
                 </article>
               ))}
             </div>
@@ -457,46 +519,158 @@ export default function LandingPage() {
         <section className="lp-section">
           <div className="lp-container">
             <SectionTitle
-              eyebrow="Impacto"
-              title="Benefícios"
-              subtitle="Ganhos concretos de eficiência, previsibilidade e resultados comerciais."
+              eyebrow="Confiança"
+              title="Desenvolvido para a realidade do mercado imobiliário português."
+              subtitle="Criado por profissionais de imobiliário e tecnologia."
             />
-
-            <ul className="lp-benefits" aria-label="Benefícios da plataforma OSFlow">
-              {benefits.map((benefit) => (
-                <li key={benefit}>{benefit}</li>
-              ))}
-            </ul>
           </div>
         </section>
 
-        <section className="lp-section lp-section-soft">
+        <section className="lp-section lp-section-soft" id="demonstracao">
           <div className="lp-container">
             <SectionTitle
-              eyebrow="Base Técnica"
-              title="Tecnologias"
-              subtitle="Arquitetura moderna para garantir desempenho, segurança e escalabilidade contínua."
+              eyebrow="Demonstração"
+              title="Peça uma demonstração personalizada"
+              subtitle="Partilhe os seus dados para prepararmos uma sessão orientada ao seu contexto comercial."
             />
 
-            <div className="lp-tech-list" role="list">
-              {technologies.map((tech) => (
-                <span role="listitem" key={tech} className="lp-tech-item">
-                  {tech}
-                </span>
-              ))}
+            <div className="lp-demo-form-wrap">
+              <form onSubmit={handleContactSubmit} className="lp-demo-form" noValidate>
+                <input type="hidden" name="origem" value={contactForm.origem} />
+
+                <div className="lp-demo-row-1">
+                  <label className="lp-field-label">
+                    Nome
+                    <input
+                      type="text"
+                      name="nome"
+                      required
+                      aria-required="true"
+                      aria-invalid={getFieldError("nome") ? "true" : "false"}
+                      value={contactForm.nome}
+                      onChange={(event) => updateContactField("nome", event.target.value)}
+                      placeholder="Nome Apelido"
+                      className="lp-field-input"
+                      style={{
+                        ...baseInputStyle,
+                        ...(getFieldError("nome") ? errorInputStyle : {}),
+                      }}
+                    />
+                    {getFieldError("nome") ? <span className="lp-field-error">{getFieldError("nome")}</span> : null}
+                  </label>
+
+                  <label className="lp-field-label">
+                    Empresa
+                    <input
+                      type="text"
+                      name="empresa"
+                      required
+                      aria-required="true"
+                      aria-invalid={getFieldError("empresa") ? "true" : "false"}
+                      value={contactForm.empresa}
+                      onChange={(event) => updateContactField("empresa", event.target.value)}
+                      placeholder="Nome da Empresa"
+                      className="lp-field-input"
+                      style={{
+                        ...baseInputStyle,
+                        ...(getFieldError("empresa") ? errorInputStyle : {}),
+                      }}
+                    />
+                    {getFieldError("empresa") ? <span className="lp-field-error">{getFieldError("empresa")}</span> : null}
+                  </label>
+                </div>
+
+                <div className="lp-demo-row-2">
+                  <label className="lp-field-label">
+                    Telefone
+                    <input
+                      type="tel"
+                      name="telefone"
+                      required
+                      aria-required="true"
+                      aria-invalid={getFieldError("telefone") ? "true" : "false"}
+                      value={contactForm.telefone}
+                      onChange={(event) => updateContactField("telefone", event.target.value)}
+                      placeholder="+351 912 345 678"
+                      className="lp-field-input"
+                      style={{
+                        ...baseInputStyle,
+                        ...(getFieldError("telefone") ? errorInputStyle : {}),
+                      }}
+                    />
+                    {getFieldError("telefone") ? <span className="lp-field-error">{getFieldError("telefone")}</span> : null}
+                  </label>
+
+                  <label className="lp-field-label">
+                    Email
+                    <input
+                      type="email"
+                      name="email"
+                      required
+                      aria-required="true"
+                      aria-invalid={getFieldError("email") ? "true" : "false"}
+                      value={contactForm.email}
+                      onChange={(event) => updateContactField("email", event.target.value)}
+                      placeholder="geral@empresa.pt"
+                      className="lp-field-input"
+                      style={{
+                        ...baseInputStyle,
+                        ...(getFieldError("email") ? errorInputStyle : {}),
+                      }}
+                    />
+                    {getFieldError("email") ? <span className="lp-field-error">{getFieldError("email")}</span> : null}
+                  </label>
+
+                  <label className="lp-field-label">
+                    Nº Consultores
+                    <input
+                      type="number"
+                      name="numeroConsultores"
+                      required
+                      aria-required="true"
+                      min="1"
+                      max="9999"
+                      step="1"
+                      inputMode="numeric"
+                      aria-invalid={getFieldError("numeroConsultores") ? "true" : "false"}
+                      value={contactForm.numeroConsultores}
+                      onChange={(event) => updateConsultoresField(event.target.value)}
+                      placeholder="15"
+                      className="lp-field-input"
+                      style={{
+                        ...baseInputStyle,
+                        ...(getFieldError("numeroConsultores") ? errorInputStyle : {}),
+                      }}
+                    />
+                    {getFieldError("numeroConsultores") ? <span className="lp-field-error">{getFieldError("numeroConsultores")}</span> : null}
+                  </label>
+                </div>
+
+                {hasVisibleValidationErrors ? (
+                  <p id="lp-form-errors" className="lp-form-error-text">
+                    Preencha os campos obrigatórios assinalados para continuar.
+                  </p>
+                ) : null}
+
+                <div className="lp-demo-actions">
+                  <button type="submit" className="lp-btn lp-btn-primary" disabled={hasVisibleValidationErrors || isSubmittingContact}>
+                    {isSubmittingContact ? "Enviar..." : "Solicitar Demonstração"}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
         </section>
 
         <section className="lp-section lp-cta-wrap">
           <div className="lp-container lp-cta">
-            <h2>Tudo o que a sua imobiliária precisa.</h2>
-            <p style={{ margin: "0 0 18px", lineHeight: 1.6 }}>Menos ferramentas.<br />Mais controlo.<br />Mais produtividade.</p>
+            <h2>Transforme a gestão da sua imobiliária.</h2>
+            <p style={{ margin: "0 0 18px", lineHeight: 1.6 }}>Menos ferramentas.<br />Mais controlo.<br />Mais negócio.</p>
             <button
               className="lp-btn lp-btn-primary"
               type="button"
               onClick={() => {
-                setIsContactModalOpen(true);
+                smoothScrollTo("demonstracao");
               }}
             >
               Solicitar Demonstração
@@ -509,7 +683,6 @@ export default function LandingPage() {
         <div className="lp-container lp-footer-inner">
           <div className="lp-brand lp-brand-footer">
             <img src={logo} alt="OSFlow" />
-            <span>OSFlow</span>
           </div>
 
           <div className="lp-footer-legal">
@@ -523,165 +696,12 @@ export default function LandingPage() {
             <a href="/termos">Termos de Utilização</a>
             <a href={APP_URL}>Entrar no CRM</a>
             <a href="https://www.linkedin.com/company/osflow" target="_blank" rel="noreferrer">
-              LinkedIn (placeholder)
+              LinkedIn
             </a>
-            <a href="mailto:comercial@osflow.pt">Email (placeholder)</a>
+            <a href="mailto:comercial@osflow.pt">comercial@osflow.pt</a>
           </nav>
         </div>
       </footer>
-
-      {isContactModalOpen ? (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="contact-modal-title"
-          className="lp-modal-overlay"
-          onClick={(event) => {
-            if (event.target === event.currentTarget) {
-              closeContactModal();
-            }
-          }}
-        >
-          <div className="lp-modal-panel">
-            <div className="lp-modal-header">
-              <h3 id="contact-modal-title">Falar com a equipa</h3>
-              <p>
-                Partilhe os seus dados para prepararmos um contacto comercial adequado ao seu contexto.
-              </p>
-            </div>
-
-            <form onSubmit={handleContactSubmit} className="lp-modal-form" noValidate>
-              <input type="hidden" name="origem" value={contactForm.origem} />
-
-              <div className="lp-modal-grid">
-                <label className="lp-field-label">
-                  Nome
-                  <input
-                    type="text"
-                    name="nome"
-                    required
-                    aria-required="true"
-                    aria-invalid={submitAttempted && requiredErrors.nome ? "true" : "false"}
-                    value={contactForm.nome}
-                    onChange={(event) => updateContactField("nome", event.target.value)}
-                    className="lp-field-input"
-                    style={{
-                      ...baseInputStyle,
-                      ...(submitAttempted && requiredErrors.nome ? errorInputStyle : {}),
-                    }}
-                  />
-                </label>
-
-                <label className="lp-field-label">
-                  Apelido
-                  <input
-                    type="text"
-                    name="apelido"
-                    required
-                    aria-required="true"
-                    aria-invalid={submitAttempted && requiredErrors.apelido ? "true" : "false"}
-                    value={contactForm.apelido}
-                    onChange={(event) => updateContactField("apelido", event.target.value)}
-                    className="lp-field-input"
-                    style={{
-                      ...baseInputStyle,
-                      ...(submitAttempted && requiredErrors.apelido ? errorInputStyle : {}),
-                    }}
-                  />
-                </label>
-
-                <label className="lp-field-label">
-                  Telefone
-                  <input
-                    type="tel"
-                    name="telefone"
-                    required
-                    aria-required="true"
-                    aria-invalid={submitAttempted && requiredErrors.telefone ? "true" : "false"}
-                    value={contactForm.telefone}
-                    onChange={(event) => updateContactField("telefone", event.target.value)}
-                    className="lp-field-input"
-                    style={{
-                      ...baseInputStyle,
-                      ...(submitAttempted && requiredErrors.telefone ? errorInputStyle : {}),
-                    }}
-                  />
-                </label>
-
-                <label className="lp-field-label">
-                  Email
-                  <input
-                    type="email"
-                    name="email"
-                    required
-                    aria-required="true"
-                    aria-invalid={submitAttempted && requiredErrors.email ? "true" : "false"}
-                    value={contactForm.email}
-                    onChange={(event) => updateContactField("email", event.target.value)}
-                    className="lp-field-input"
-                    style={{
-                      ...baseInputStyle,
-                      ...(submitAttempted && requiredErrors.email ? errorInputStyle : {}),
-                    }}
-                  />
-                </label>
-              </div>
-
-              <label className="lp-field-label lp-field-block">
-                Tipo de Cliente
-                <select
-                  name="tipoCliente"
-                  required
-                  aria-required="true"
-                  aria-invalid={submitAttempted && requiredErrors.tipoCliente ? "true" : "false"}
-                  value={contactForm.tipoCliente}
-                  onChange={(event) => updateContactField("tipoCliente", event.target.value)}
-                  className="lp-field-input"
-                  style={{
-                    ...baseInputStyle,
-                    ...(submitAttempted && requiredErrors.tipoCliente ? errorInputStyle : {}),
-                  }}
-                >
-                  <option value="">Selecione uma opção</option>
-                  <option value="imobiliaria">Imobiliária</option>
-                  <option value="consultor-independente">Consultor Independente</option>
-                </select>
-              </label>
-
-              <label className="lp-field-label lp-field-block">
-                Descrição
-                <textarea
-                  name="descricao"
-                  rows={5}
-                  value={contactForm.descricao}
-                  onChange={(event) => updateContactField("descricao", event.target.value)}
-                  className="lp-field-input"
-                  style={{ ...baseInputStyle, resize: "vertical", lineHeight: 1.55 }}
-                />
-              </label>
-
-              {submitAttempted && hasRequiredErrors ? (
-                <p id="lp-form-errors" className="lp-form-error-text">
-                  Preencha os campos obrigatórios assinalados para continuar.
-                </p>
-              ) : null}
-
-              <div className="lp-modal-actions">
-                <button
-                  type="button"
-                  onClick={closeContactModal}
-                  className="lp-modal-btn lp-modal-btn-ghost"
-                >
-                  Cancelar
-                </button>
-                <button type="submit" className="lp-modal-btn lp-modal-btn-primary">
-                  Enviar
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
