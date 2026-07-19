@@ -1,8 +1,0 @@
-deployment:
-  tasks:
-    - cd /home/osflowpt/repos/osflow-app
-    - npm install
-    - npm run build
-    - export DEPLOYPATH=/home/osflowpt/public_html/
-    - /bin/rm -rf $DEPLOYPATH/*
-    - /bin/cp -R build/* $DEPLOYPATH
