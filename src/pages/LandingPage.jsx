@@ -5,6 +5,7 @@ import crmShot from "../assets/landing/osflow-shot-crm.png";
 import imoveisShot from "../assets/landing/osflow-shot-imoveis.png";
 import documentosShot from "../assets/landing/osflow-shot-utilizadores.png";
 import ecosystemImage from "../assets/landing/osflow-ecosystem.png";
+import { supabase } from "../supabase";
 import "./LandingPage.css";
 
 const heroBadgeItems = [
@@ -196,6 +197,7 @@ export default function LandingPage() {
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [touchedFields, setTouchedFields] = useState({});
   const [isSubmittingContact, setIsSubmittingContact] = useState(false);
+  const [toast, setToast] = useState(null);
 
   function smoothScrollTo(id) {
     const section = document.getElementById(id);
@@ -285,21 +287,61 @@ export default function LandingPage() {
     return validationState[field];
   }
 
-  function handleContactSubmit(event) {
+  useEffect(() => {
+    if (!toast) return undefined;
+
+    const timeout = window.setTimeout(() => {
+      setToast(null);
+    }, 4200);
+
+    return () => window.clearTimeout(timeout);
+  }, [toast]);
+
+  async function handleContactSubmit(event) {
     event.preventDefault();
     setSubmitAttempted(true);
 
     if (hasValidationErrors) return;
 
     setIsSubmittingContact(true);
+    setToast(null);
 
-    // Interface pronta para integração futura de envio.
-    window.setTimeout(() => {
+    const payload = {
+      nome: contactForm.nome.trim(),
+      empresa: contactForm.empresa.trim(),
+      telefone: contactForm.telefone.trim(),
+      email: contactForm.email.trim().toLowerCase(),
+      numero_consultores: Number(contactForm.numeroConsultores),
+    };
+
+    try {
+      const { data, error } = await supabase.functions.invoke("request-demo", {
+        body: payload,
+      });
+
+      if (error) {
+        throw new Error(error.message || "Não foi possível enviar o pedido de demonstração.");
+      }
+
+      if (!data?.success) {
+        throw new Error(data?.message || "Não foi possível enviar o pedido de demonstração.");
+      }
+
       setContactForm(initialContactForm);
       setTouchedFields({});
       setSubmitAttempted(false);
+      setToast({
+        variant: "success",
+        message: "Pedido enviado com sucesso. Entraremos em contacto brevemente.",
+      });
+    } catch (error) {
+      setToast({
+        variant: "error",
+        message: error?.message || "Ocorreu um erro ao enviar o pedido. Tente novamente.",
+      });
+    } finally {
       setIsSubmittingContact(false);
-    }, 350);
+    }
   }
 
   const baseInputStyle = {
@@ -321,6 +363,11 @@ export default function LandingPage() {
     <div className="lp-root">
       <div className="lp-bg lp-bg-top" aria-hidden="true" />
       <div className="lp-bg lp-bg-grid" aria-hidden="true" />
+      {toast ? (
+        <div className={`lp-toast lp-toast-${toast.variant}`} role="status" aria-live="polite">
+          {toast.message}
+        </div>
+      ) : null}
 
       <header className="lp-nav-wrap">
         <div className="lp-container lp-nav-inner">
