@@ -10,20 +10,25 @@ const root = ReactDOM.createRoot(document.getElementById('root'));
 
 const hostname = window.location.hostname;
 
+const isLocal =
+  hostname === "localhost" ||
+  hostname === "127.0.0.1";
+
 const isAppDomain =
-  hostname === 'app.osflow.pt' ||
-  hostname === 'localhost' ||
-  hostname === '127.0.0.1';
+  hostname === "app.osflow.pt";
+
+const forceLanding =
+  window.location.search.includes("landing");
 
 const isIntegrationCallbackRoute =
-  window.location.pathname === '/integrations/callback';
+  window.location.pathname === "/integrations/callback";
 
 root.render(
   isIntegrationCallbackRoute ? (
     <ThemeProvider>
       <IntegrationCallback />
     </ThemeProvider>
-  ) : isAppDomain ? (
+  ) : isAppDomain || (isLocal && !forceLanding) ? (
     <ThemeProvider>
       <App />
     </ThemeProvider>
