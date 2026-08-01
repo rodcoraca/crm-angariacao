@@ -195,14 +195,15 @@ export class RadarRepository {
   async getSummary() {
     const empresaId = await resolveEmpresaId();
     if (!empresaId) {
-      return { monitorizadas: 0, novas: 0, importadas: 0 };
+      return null;
     }
 
     const base = supabase
       .from("provider_leads")
       .select("*", { count: "exact", head: true })
       .eq("empresa_id", empresaId)
-      .eq("provider_active", true);
+      .eq("provider_active", true)
+      .neq("estado", "ignorado");
 
     const [
       { count: monitorizadas, error: errMon },
@@ -226,6 +227,7 @@ export class RadarRepository {
 
     if (errMon || errNovas || errImportadas) {
       console.warn("[Radar] getSummary error:", errMon || errNovas || errImportadas);
+      return null;
     }
 
     return {

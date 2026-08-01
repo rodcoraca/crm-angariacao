@@ -140,7 +140,7 @@ export class RadarService {
     return data || [];
   }
 
-  createSnapshotFromOpportunities(opportunities = [], providerRegistry = null) {
+  createSnapshotFromOpportunities(opportunities = [], providerRegistry = null, summary = null) {
     const ordered = this.sortByScore(opportunities);
     this.sessionOpportunities = [...ordered];
 
@@ -149,6 +149,17 @@ export class RadarService {
       providerRegistry
     });
 
+    if (summary) {
+      // Replace JS-computed KPI values with authoritative DB counts
+      const kpis = (snapshot.kpis || []).map((kpi) => {
+        if (kpi.id === "kpi-monitorizadas") return { ...kpi, valor: String(summary.monitorizadas) };
+        if (kpi.id === "kpi-novas") return { ...kpi, valor: String(summary.novas) };
+        if (kpi.id === "kpi-importadas") return { ...kpi, valor: String(summary.importadas) };
+        return kpi;
+      });
+      return { ...snapshot, opportunities: ordered, kpis };
+    }
+
     return {
       ...snapshot,
       opportunities: ordered
@@ -156,10 +167,13 @@ export class RadarService {
   }
 
   async getSnapshot() {
-    const loaded = await this.loadOpportunities();
+    const [summary, loaded] = await Promise.all([
+      this.repository.getSummary(),
+      this.loadOpportunities()
+    ]);
     const classified = this.classifyOpportunities(loaded);
     const providerRegistry = await this.loadProviderRegistryState();
-    return this.createSnapshotFromOpportunities(classified, providerRegistry);
+    return this.createSnapshotFromOpportunities(classified, providerRegistry, summary);
   }
 
   async updateOpportunityState(opportunityId, nextState) {
