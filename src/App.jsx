@@ -36,6 +36,9 @@ import { registrarAcessoNegado, registrarLogout, registrarNavegacao } from "./mo
 import FeedbackHost from "./components/ui/FeedbackHost";
 import { notifyError, notifyInfo } from "./components/ui/feedbackBus";
 
+/*Pauground Test*/
+//import WorkspacePlayground from "./pages/WorkspacePlayground";
+
 const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
 
 function detectPasswordRecoveryHash() {
@@ -51,6 +54,7 @@ export default function App() {
   const [authReady, setAuthReady] = useState(false);
   const [authzReady, setAuthzReady] = useState(false);
   const [view, setView] = useState("home");
+  //const [view, setView] = useState("workspace_playground");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [leadSelecionadoId, setLeadSelecionadoId] = useState(null);
   const [viewAnteriorFicha, setViewAnteriorFicha] = useState("fluxo");
@@ -64,7 +68,13 @@ export default function App() {
   const latestPerfilRef = useRef(null);
   const sessionInitializedRef = useRef(false);
   const sessionInitializedUserRef = useRef(null);
-  const sessionInitializationInFlightRef = useRef(null);
+  
+  const hydrationInFlightRef = useRef(null);
+  const sessionRegistrationInFlightRef = useRef(null);
+  const activityTrackingStartedRef = useRef(false);
+  const bootstrapInFlightRef = useRef(false);
+
+
 
   useEffect(() => {
     latestUserRef.current = user;
@@ -78,9 +88,17 @@ export default function App() {
     console.error(`[${origem}]`, error);
   }
 
-  function logAuthDiagnostics(tag, payload = {}) {
-    console.log(`[AuthDiagnostics][${tag}]`, payload);
-  }
+
+
+  
+
+  const serializePermissions = useCallback((permissoes) => {
+    try {
+      return JSON.stringify(permissoes || {});
+    } catch (_error) {
+      return "{}";
+    }
+  }, []);
 
   const withTimeout = useCallback((promise, timeoutMs, code) => {
     return Promise.race([
@@ -91,14 +109,6 @@ export default function App() {
         }, timeoutMs);
       })
     ]);
-  }, []);
-
-  const serializePermissions = useCallback((permissoes) => {
-    try {
-      return JSON.stringify(permissoes || {});
-    } catch (_error) {
-      return "{}";
-    }
   }, []);
 
   const isSameUserSession = useCallback((a, b) => {
@@ -160,10 +170,12 @@ export default function App() {
 
   const reconcilePendingActivationFromSession = useCallback(async (authSession, origem) => {
     const authUser = authSession?.user || null;
+    
     if (!authUser?.id) return;
 
     try {
       const { data: profile, error } = await loadAuthorizationProfileByAuthUserId(authUser);
+
       if (error || !profile) {
         if (error) {
           reportAuthError(error, `App.${origem}.loadAuthorizationProfileByAuthUserId`);
@@ -183,13 +195,6 @@ export default function App() {
   const hydrateSessionFromAuth = useCallback(async (authSession, { notifyOnExpired = false } = {}) => {
     const authUser = authSession?.user || null;
 
-    logAuthDiagnostics("SESSION", {
-      source: "hydrateSessionFromAuth.start",
-      hasAuthUser: Boolean(authUser?.id),
-      authUserId: authUser?.id || null,
-      notifyOnExpired
-    });
-
     if (!authUser?.id) {
       setUser(null);
       setPerfil(null);
@@ -200,19 +205,8 @@ export default function App() {
     setAuthzReady(false);
 
     try {
-      const { data: perfilAtual, error } = await withTimeout(
-        loadAuthorizationProfileByAuthUserId(authUser),
-        8000,
-        "authz_init_timeout"
-      );
-
-      logAuthDiagnostics("PROFILE", {
-        source: "hydrateSessionFromAuth.profileLoaded",
-        hasProfile: Boolean(perfilAtual?.id),
-        profileId: perfilAtual?.id || null,
-        empresaId: perfilAtual?.empresa_id || null,
-        hasError: Boolean(error)
-      });
+      const { data: perfilAtual, error } =
+        await loadAuthorizationProfileByAuthUserId(authUser);
 
       if (error) {
         reportAuthError(error, "App.hydrateSessionFromAuth.loadAuthorizationProfileByAuthUserId");
@@ -260,30 +254,33 @@ export default function App() {
         setUser(nextUser);
       }
 
-      const sessionUserId = perfilResolvido.id || authUser.id;
+      const sessionUserId = authUser.id;
       const sessionEmpresaId = perfilResolvido.empresa_id || null;
 
       if (
         sessionInitializedRef.current
         && sessionInitializedUserRef.current
-        && String(sessionInitializedUserRef.current) === String(sessionUserId)
+        && String(sessionInitializedUserRef.current) === String(authUser.id)
       ) {
         await updateSessionActivity({
           userId: sessionUserId,
           empresaId: sessionEmpresaId,
         });
 
-        startSessionActivityTracking({
-          userId: sessionUserId,
-        });
-
+        if (!activityTrackingStartedRef.current) {
+          activityTrackingStartedRef.current = true;
+          startSessionActivityTracking({
+            userId: sessionUserId,
+          });
+        }
         return { ok: true, reused: true };
       }
 
-      if (!sessionInitializationInFlightRef.current) {
-        sessionInitializationInFlightRef.current = (async () => {
-          // Evita dupla criacao de sessao quando bootstrap/getSession e onAuthStateChange
-          // disparam quase ao mesmo tempo no mesmo login.
+      if (!sessionRegistrationInFlightRef.current) {
+        sessionRegistrationInFlightRef.current = (async () => {
+          // Evita dupla criação de sessão quando bootstrap/getSession e
+          // onAuthStateChange disparam quase ao mesmo tempo.
+
           const activityResult = await updateSessionActivity({
             userId: sessionUserId,
             empresaId: sessionEmpresaId,
@@ -293,24 +290,31 @@ export default function App() {
             await registerUserSession({
               userId: sessionUserId,
               empresaId: sessionEmpresaId,
-              userAgent: typeof navigator !== "undefined" ? navigator.userAgent : null,
+              userAgent:
+                typeof navigator !== "undefined"
+                  ? navigator.userAgent
+                  : null,
             });
           }
 
           sessionInitializedRef.current = true;
-          sessionInitializedUserRef.current = sessionUserId;
+          sessionInitializedUserRef.current = authUser.id;
 
-          startSessionActivityTracking({
-            userId: sessionUserId,
-          });
+          if (!activityTrackingStartedRef.current) {
+            activityTrackingStartedRef.current = true;
+
+            startSessionActivityTracking({
+              userId: sessionUserId,
+            });
+          }
 
           return { ok: true };
         })().finally(() => {
-          sessionInitializationInFlightRef.current = null;
+          sessionRegistrationInFlightRef.current = null;
         });
       }
 
-      await sessionInitializationInFlightRef.current;
+      await sessionRegistrationInFlightRef.current;
 
       return { ok: true };
     } catch (error) {
@@ -335,10 +339,6 @@ export default function App() {
       setPerfil((prev) => (prev ? (isSameProfile(prev, fallbackPerfil) ? prev : fallbackPerfil) : fallbackPerfil));
       return { ok: true, warning: "authz_timeout" };
     } finally {
-      logAuthDiagnostics("AUTHZ_READY", {
-        source: "hydrateSessionFromAuth.finally",
-        nextValue: true
-      });
       setAuthzReady(true);
     }
   }, [isSameProfile, isSameUserSession, montarUsuarioSessao, withTimeout]);
@@ -347,6 +347,7 @@ export default function App() {
     let isMounted = true;
 
     async function bootstrapAuthSession() {
+      bootstrapInFlightRef.current = true;
       try {
         if (isPasswordRecoveryMode) {
           const { data } = await supabase.auth.getSession();
@@ -362,14 +363,6 @@ export default function App() {
         const { data, error } = await supabase.auth.getSession();
         if (!isMounted) return;
 
-        logAuthDiagnostics("SESSION", {
-          source: "bootstrapAuthSession.getSession",
-          hasSession: Boolean(data?.session),
-          hasSessionUser: Boolean(data?.session?.user?.id),
-          sessionUserId: data?.session?.user?.id || null,
-          hasError: Boolean(error)
-        });
-
         if (error) {
           reportAuthError(error, "App.bootstrapAuthSession.getSession");
           notifyError("Erro de comunicação ao validar a sessão.");
@@ -378,42 +371,44 @@ export default function App() {
         }
 
         if (data?.session?.user) {
+
+          console.log("[BOOTSTRAP] sessão encontrada");
+
           const restoredEmpresaId = restoreEmpresaIdFromStorage();
           const bootstrapProfile = restoredEmpresaId ? { empresa_id: restoredEmpresaId } : null;
           const nextUser = montarUsuarioSessao(data.session.user, bootstrapProfile, data.session?.expires_at || null);
           setUser((prev) => (isSameUserSession(prev, nextUser) ? prev : nextUser));
-          await hydrateSessionFromAuth(data.session, { notifyOnExpired: true });
+          if (!hydrationInFlightRef.current) {
+              hydrationInFlightRef.current = hydrateSessionFromAuth(data.session, {
+              notifyOnExpired: true
+            });
+          }
+
+          try {
+              await hydrationInFlightRef.current;
+          } finally {
+              hydrationInFlightRef.current = null;
+          }
         } else {
           setAuthzReady(true);
         }
       } catch (error) {
         if (!isMounted) return;
+
         reportAuthError(error, "App.bootstrapAuthSession");
         notifyError("Erro interno ao recuperar a sessão.");
         setAuthzReady(true);
       } finally {
+        bootstrapInFlightRef.current = false;
         if (isMounted) {
-          logAuthDiagnostics("AUTH_READY", {
-            source: "bootstrapAuthSession.finally",
-            nextValue: true
-          });
           setAuthReady(true);
         }
       }
     }
 
     bootstrapAuthSession();
-
     const { data: listener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (!isMounted) return;
-
-      logAuthDiagnostics("SESSION", {
-        source: "onAuthStateChange",
-        event,
-        hasSession: Boolean(session),
-        hasSessionUser: Boolean(session?.user?.id),
-        sessionUserId: session?.user?.id || null
-      });
 
       if (event === "PASSWORD_RECOVERY") {
         void reconcilePendingActivationFromSession(session, "onAuthStateChange.PASSWORD_RECOVERY");
@@ -427,7 +422,11 @@ export default function App() {
       if (event === "SIGNED_OUT") {
         sessionInitializedRef.current = false;
         sessionInitializedUserRef.current = null;
-        sessionInitializationInFlightRef.current = null;
+
+        activityTrackingStartedRef.current = false;
+        sessionRegistrationInFlightRef.current = null;
+        hydrationInFlightRef.current = null;
+
         setUser(null);
         setPerfil(null);
         setAuthzReady(true);
@@ -442,11 +441,15 @@ export default function App() {
       }
 
       if (!session?.user) {
-        sessionInitializedRef.current = false;
-        sessionInitializedUserRef.current = null;
-        sessionInitializationInFlightRef.current = null;
-        setAuthzReady(true);
-        return;
+          sessionInitializedRef.current = false;
+          sessionInitializedUserRef.current = null;
+
+          activityTrackingStartedRef.current = false;
+          sessionRegistrationInFlightRef.current = null;
+          hydrationInFlightRef.current = null;
+
+          setAuthzReady(true);
+          return;
       }
 
       if (isPasswordRecoveryMode) {
@@ -459,12 +462,48 @@ export default function App() {
         return;
       }
 
+      if (event === "SIGNED_IN" && bootstrapInFlightRef.current) {
+        return;
+      }
+
+      if (
+        event === "SIGNED_IN" &&
+        sessionInitializedRef.current &&
+        sessionInitializedUserRef.current === session.user.id
+      ) {
+        return;
+      }
+
       const restoredEmpresaId = restoreEmpresaIdFromStorage();
-      const bootstrapProfile = restoredEmpresaId ? { empresa_id: restoredEmpresaId } : null;
-      const nextUser = montarUsuarioSessao(session.user, bootstrapProfile, session?.expires_at || null);
-      setUser((prev) => (isSameUserSession(prev, nextUser) ? prev : nextUser));
-      await hydrateSessionFromAuth(session, { notifyOnExpired: event !== "SIGNED_IN" });
-    });
+      const bootstrapProfile = restoredEmpresaId
+        ? { empresa_id: restoredEmpresaId }
+        : null;
+
+      const nextUser = montarUsuarioSessao(
+        session.user,
+        bootstrapProfile,
+        session?.expires_at || null
+      );
+
+      setUser((prev) =>
+        isSameUserSession(prev, nextUser) ? prev : nextUser
+      );
+
+      if (!hydrationInFlightRef.current) {
+    hydrationInFlightRef.current =
+        hydrateSessionFromAuth(session, {
+            notifyOnExpired: event !== "SIGNED_IN"
+        });
+      }
+
+      try {
+          await hydrationInFlightRef.current;
+      } finally {
+          hydrationInFlightRef.current = null;
+      }
+
+            
+  });
 
     return () => {
       isMounted = false;
@@ -519,11 +558,18 @@ export default function App() {
         window.localStorage.removeItem(ACTIVE_SESSION_TENANT_KEY);
       }
 
+      sessionInitializedRef.current = false;
+      sessionInitializedUserRef.current = null;
+
+      activityTrackingStartedRef.current = false;
+      sessionRegistrationInFlightRef.current = null;
+      hydrationInFlightRef.current = null;
+
       setUser(null);
       setPerfil(null);
       setAuthzReady(true);
     }
-  }
+}
 
   function abrirFichaLead(id) {
     setLeadSelecionadoId(id);
@@ -707,20 +753,16 @@ export default function App() {
     }
 
     setAuthzReady(false);
-    logAuthDiagnostics("AUTHZ_READY", {
-      source: "handleLogin.beforeGetSession",
-      nextValue: false
-    });
 
     try {
       const { data, error } = await supabase.auth.getSession();
-      logAuthDiagnostics("SESSION", {
-        source: "handleLogin.getSession",
-        hasSession: Boolean(data?.session),
-        hasSessionUser: Boolean(data?.session?.user?.id),
-        sessionUserId: data?.session?.user?.id || null,
-        hasError: Boolean(error)
+
+      console.log("[BOOTSTRAP] getSession", {
+        hasSession: !!data?.session,
+        userId: data?.session?.user?.id ?? null,
+        error
       });
+
       if (error) {
         reportAuthError(error, "App.handleLogin.getSession");
         notifyError("Erro de comunicação ao inicializar sessão autenticada.");
@@ -732,39 +774,20 @@ export default function App() {
         return;
       }
 
-      await hydrateSessionFromAuth(data.session, { notifyOnExpired: false });
+      if (!hydrationInFlightRef.current) {
+        hydrationInFlightRef.current = hydrateSessionFromAuth(data.session, { notifyOnExpired: false });
+      }
+      try {
+        await hydrationInFlightRef.current;
+      } finally {
+        hydrationInFlightRef.current = null;
+      }
+
     } finally {
-      logAuthDiagnostics("AUTH_READY", {
-        source: "handleLogin.finally",
-        nextValue: true
-      });
       setAuthReady(true);
     }
   }
 
-  useEffect(() => {
-    logAuthDiagnostics("AUTH_READY", {
-      source: "state_change",
-      value: authReady
-    });
-  }, [authReady]);
-
-  useEffect(() => {
-    logAuthDiagnostics("AUTHZ_READY", {
-      source: "state_change",
-      value: authzReady
-    });
-  }, [authzReady]);
-
-  useEffect(() => {
-    logAuthDiagnostics("PROFILE", {
-      source: "state_change",
-      hasProfile: Boolean(perfil?.id),
-      profileId: perfil?.id || null,
-      empresaId: perfil?.empresa_id || null,
-      permissionCount: Object.keys(perfil?.permissoes || {}).length
-    });
-  }, [perfil]);
 
   if (!authReady || !user) {
     return (
@@ -804,6 +827,8 @@ export default function App() {
     estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
     usuarios: canAccessView("usuarios") ? <Usuarios currentUser={user} selectionRequest={userSelectionRequest} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
     logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={user} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
+  
+    //workspace_playground: <WorkspacePlayground />,
   };
 
   const authenticatedFooter = (

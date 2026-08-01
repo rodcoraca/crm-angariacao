@@ -8,7 +8,6 @@ import { registrarLogin } from "../modules/audit/services";
 import {
   createAuthUserFromAdminFlow,
   loadAuthorizationProfileByAuthUserId,
-  loadUserProfileByLoginEmail,
   reconcilePendingActivation,
   requestPasswordReset,
   resolveLoginEmail,
@@ -102,7 +101,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
     );
   }
 
-  function mapSignInErrorMessage(error, { knownUser = false } = {}) {
+  function mapSignInErrorMessage(error) {
     const code = String(error?.code || "").toLowerCase();
     const message = normalizeErrorText(error);
 
@@ -126,7 +125,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
       message.includes("invalid login credentials") ||
       message.includes("invalid credentials")
     ) {
-      return knownUser ? "Password incorreta." : "Email inexistente.";
+      return "Credenciais inválidas. Verifique o email e a password.";
     }
 
     if (code.includes("email_not_confirmed") || message.includes("email not confirmed")) {
@@ -171,32 +170,9 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
       const resolved = await resolveLoginEmail(valor);
       if (resolved?.error) {
         reportError(resolved.error, "Login.resolveLoginEmail");
-        notifyError(isCommunicationError(resolved.error)
-          ? "Erro de comunicação ao validar o utilizador."
-          : "Erro interno ao validar o utilizador.");
-        return;
       }
 
       const emailAutenticacao = resolved?.email || valor;
-
-      const { data: perfilByEmail, error: perfilByEmailError } = await loadUserProfileByLoginEmail(emailAutenticacao);
-      if (perfilByEmailError) {
-        reportError(perfilByEmailError, "Login.loadUserProfileByLoginEmail");
-        notifyError(isCommunicationError(perfilByEmailError)
-          ? "Erro de comunicação ao carregar o perfil do utilizador."
-          : "Erro interno ao carregar o perfil do utilizador.");
-        return;
-      }
-
-      if (!perfilByEmail) {
-        notifyError("Email inexistente.");
-        return;
-      }
-
-      if (resolveAccountStatus(perfilByEmail) === "disabled") {
-        notifyError("Utilizador inativo. Contacte um administrador.");
-        return;
-      }
 
       const { data, error } = await signInWithPassword({
         email: emailAutenticacao,
@@ -208,7 +184,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
       if (error || !authUser) {
         if (error) reportError(error, "Login.signInWithPassword");
-        notifyError(mapSignInErrorMessage(error, { knownUser: Boolean(perfilByEmail) }));
+        notifyError(mapSignInErrorMessage(error));
         return;
       }
 
@@ -411,26 +387,9 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
       const resolved = await resolveLoginEmail(valor);
       if (resolved?.error) {
         reportError(resolved.error, "Login.requestPasswordReset.resolveLoginEmail");
-        notifyError(isCommunicationError(resolved.error)
-          ? "Erro de comunicação ao validar o utilizador para recuperação de password."
-          : "Erro interno ao validar o utilizador para recuperação de password.");
-        return;
       }
 
       const emailRecuperacao = resolved?.email || valor;
-      const { data: perfilByEmail, error: perfilByEmailError } = await loadUserProfileByLoginEmail(emailRecuperacao);
-      if (perfilByEmailError) {
-        reportError(perfilByEmailError, "Login.requestPasswordReset.loadUserProfileByLoginEmail");
-        notifyError(isCommunicationError(perfilByEmailError)
-          ? "Erro de comunicação ao validar email para recuperação."
-          : "Erro interno ao validar email para recuperação.");
-        return;
-      }
-
-      if (!perfilByEmail) {
-        notifyError("Email inexistente.");
-        return;
-      }
 
       const { error } = await requestPasswordReset(emailRecuperacao, getPasswordRecoveryRedirectUrl());
       if (error) {

@@ -55,16 +55,14 @@ export async function resolveLoginEmail(identifier) {
   }
 
   const { data, error } = await supabase
-    .from(USERS_TABLE)
-    .select("email")
-    .ilike("username", normalized)
-    .maybeSingle();
+    .rpc("resolve_login_email", { p_login: normalized });
 
   if (error) {
     return { email: normalized, source: "fallback", error };
   }
 
-  return { email: data?.email || normalized, source: data?.email ? "username_lookup" : "fallback" };
+  const foundEmail = data ? String(data).toLowerCase() : null;
+  return { email: foundEmail || normalized, source: foundEmail ? "username_lookup" : "fallback" };
 }
 
 export async function signInWithPassword({ email, password }) {
@@ -75,23 +73,42 @@ export async function signOutAuthSession() {
   return supabase.auth.signOut();
 }
 
-//export async function loadUserProfileByAuthUserId(authUserId) {
 export async function loadUserProfileByAuthUserId(authUserId) {
-  console.log(
-    "loadUserProfileByAuthUserId",
-    authUserId
-  );
-
   const { data, error } = await supabase
     .from(USERS_TABLE)
     .select(USER_PROFILE_SELECT)
     .eq("auth_user_id", authUserId)
     .maybeSingle();
-  
-    console.log("PROFILE RESULT", data);
-    console.log("PROFILE ERROR", error);
+
   return { data, error };
 }
+
+/*export async function loadUserProfileByAuthUserId(authUserId) {
+  const {
+    data: { session }
+  } = await supabase.auth.getSession();
+
+  console.log("ACCESS TOKEN", !!session?.access_token);
+
+  const response = await fetch(
+    "https://vtymfigjtczgeyavdujl.supabase.co/rest/v1/usuarios?select=id",
+    {
+      method: "GET",
+      headers: {
+        apikey: "sb_publishable_Padg7Bs8OhyGxH0J_JW7sg_R4h5nkLo",
+        Authorization: `Bearer ${session.access_token}`
+      }
+    }
+  );
+
+  console.log("STATUS", response.status);
+
+  const text = await response.text();
+
+  console.log("BODY", text);
+
+  return { data: null, error: null };
+}*/
 
 async function rebindUserProfileAuthUserId(profileId, authUserId) {
   if (!profileId || !authUserId) {

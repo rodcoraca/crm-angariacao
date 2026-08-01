@@ -117,18 +117,6 @@ function isRelationMissing(error) {
     || message.includes("relation \"user_preferences\" does not exist");
 }
 
-function isFunctionMissing(error) {
-  if (!error) return false;
-
-  const code = String(error.code || "").toUpperCase();
-  const message = String(error.message || "").toLowerCase();
-
-  return code === "PGRST202"
-    || code === "42883"
-    || message.includes("could not find the function public.listar_utilizadores_inconsistentes")
-    || message.includes("function public.listar_utilizadores_inconsistentes");
-}
-
 export async function listarUsuarios({ currentUser } = {}) {
   const empresaId = resolveEmpresaIdFromContext(currentUser);
   if (!hasEmpresaId(empresaId)) {
@@ -752,30 +740,4 @@ export async function listarPreferenciasPorUtilizador({ perfilId }) {
   }
 
   return result;
-}
-
-export async function listarUtilizadoresInconsistentes({ currentUser = null } = {}) {
-  const empresaId = resolveEmpresaIdFromContext(currentUser);
-  if (!hasEmpresaId(empresaId)) {
-    warnMissingEmpresaId();
-    return { data: [], error: null };
-  }
-
-  const result = await supabase.rpc("listar_utilizadores_inconsistentes");
-
-  if (isFunctionMissing(result.error)) {
-    return {
-      data: [],
-      error: {
-        code: "diagnostic_function_missing",
-        message: "Diagnostico indisponivel: migração DB-023 não aplicada."
-      }
-    };
-  }
-
-  if (result.error) {
-    return { data: [], error: result.error };
-  }
-
-  return { data: result.data || [], error: null };
 }

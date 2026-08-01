@@ -1,25 +1,118 @@
-# OSFLOW CURRENT STATE
+# OSFLOW — CURRENT STATE
 
-Última atualização: Julho 2026
-
-## Estado Geral
-
-Fase atual:
-Pré-Beta avançado / Estabilização final.
-
-Objetivo atual:
-Correção de regressões, melhorias operacionais e preparação para utilização comercial.
+**Versão:** RC1.3.4
+**Última atualização:** Julho de 2026
 
 ---
 
-# PRINCÍPIOS OBRRIGATÓRIOS
+# VISÃO GERAL
 
-* Não realizar refactors extensos sem necessidade.
-* Diagnóstico → Impacto → Implementação mínima.
-* Não alterar layouts sem solicitação explícita.
-* Todos os módulos devem respeitar empresa_id.
-* Todo módulo deve possuir autenticação, autorização e auditoria.
-* Gestão de permissões permanece exclusivamente no módulo Utilizadores.
+## Estado do Projeto
+
+Fase atual:
+
+**Pré-Beta — Estabilização Final**
+
+O OSFlow encontra-se funcionalmente completo para a versão Beta.
+
+O foco atual deixou de ser o desenvolvimento de novas funcionalidades estruturais e passou a ser:
+
+- eliminação de regressões;
+- melhoria da experiência do utilizador;
+- estabilização da infraestrutura;
+- homologação funcional;
+- preparação comercial.
+
+---
+
+# PRINCÍPIOS ARQUITETURAIS
+
+Todos os desenvolvimentos devem respeitar obrigatoriamente os seguintes princípios:
+
+- Diagnóstico antes da implementação.
+- Avaliação de impacto antes de qualquer alteração.
+- Implementação mínima necessária.
+- Evitar refactors desnecessários.
+- Não alterar layouts sem solicitação explícita.
+- Preservar compatibilidade futura com SaaS.
+- Todos os módulos respeitam isolamento por empresa (`empresa_id`).
+- Toda ação crítica deve possuir autenticação, autorização e auditoria.
+- Gestão de permissões permanece exclusivamente no módulo Utilizadores.
+
+---
+
+# ESTADO DA INFRAESTRUTURA
+
+## Autenticação
+
+Status:
+
+**Estável**
+
+Implementado:
+
+- bootstrap determinístico;
+- hidratação idempotente;
+- recuperação automática de sessão;
+- persistência após refresh (F5);
+- proteção contra reconstruções duplicadas;
+- separação consistente entre `auth.users` e `usuarios`;
+- guards contra race conditions.
+
+Resultado:
+
+- Login estável.
+- Logout estável.
+- Refresh estável.
+- Navegação estável.
+
+---
+
+## Autorização (RBAC)
+
+Status:
+
+Estável.
+
+Características:
+
+- permissões carregadas após hidratação;
+- separação entre autenticação e autorização;
+- permissões controladas exclusivamente pelo módulo Utilizadores.
+
+---
+
+## Auditoria
+
+Status:
+
+Operacional.
+
+Atualmente registado:
+
+- login;
+- logout;
+- entrada em páginas;
+- saída de páginas.
+
+Planeado:
+
+Auditoria transacional completa.
+
+---
+
+## Sessões
+
+Status:
+
+Estável.
+
+Implementado:
+
+- recuperação automática;
+- rebind de sessão;
+- encerramento correto;
+- atualização de atividade.
 
 ---
 
@@ -27,72 +120,69 @@ Correção de regressões, melhorias operacionais e preparação para utilizaç�
 
 ## Cockpit
 
-Status: Finalizado.
+Status:
+
+Finalizado.
 
 Pendências:
 
-* Bug intermitente onde o menu deixa de responder aleatoriamente.
-
-Prioridade:
-Média.
+Nenhuma regressão crítica.
 
 ---
 
 ## Radar
 
-Status: Finalizado.
+Status:
 
-Provider em produção:
+Finalizado.
 
-* Imovirtual operacional.
+Provider operacional:
+
+- Imovirtual.
+
+Correções recentes:
+
+- estabilização após autenticação;
+- correção do timer;
+- sincronização validada;
+- funcionamento confirmado após refresh.
 
 Melhorias futuras:
 
-### Filtro de Importação Inteligente
-
-Objetivo:
-Permitir que cada utilizador defina filtros antes da sincronização.
+### Filtro Inteligente
 
 Filtros previstos:
 
-* Distritos pretendidos
-* Apenas particulares
-* Excluir particulares
-* Tipologias futuras
-* Outros critérios futuros
+- distrito;
+- particulares;
+- exclusão de particulares;
+- tipologias;
+- critérios personalizados.
 
-Funcionamento:
+Objetivos:
 
-O sistema deverá consultar apenas oportunidades relevantes para o utilizador, reduzindo:
-
-* tempo de sincronização;
-* carga no provider;
-* processamento interno;
-* ruído comercial.
-
-Necessário:
-Criar preferências persistidas por utilizador com possibilidade de alteração manual.
-
-Prioridade:
-Alta.
+- reduzir carga do provider;
+- diminuir tempo de sincronização;
+- melhorar qualidade das oportunidades.
 
 ---
 
 ## Fluxo
 
-Status: Finalizado.
+Status:
 
-Bug crítico:
+Funcional.
+
+Pendência crítica:
 
 ### Copiloto Comercial
 
 Problema:
-O fluxo não avança corretamente e retorna para a primeira etapa.
 
-Classificação:
-Regressão.
+Fluxo regressa para a primeira etapa.
 
 Prioridade:
+
 Alta.
 
 ---
@@ -100,99 +190,100 @@ Alta.
 ## Leads
 
 Status:
-Aprovado para esta versão.
 
-Pendências:
-Nenhuma crítica.
+Homologado.
 
 ---
 
 ## Mensagens
 
 Status:
-Aprovado para esta versão.
+
+Homologado.
 
 ---
 
 ## Empresas
 
 Status:
-Aprovado para esta versão.
+
+Homologado.
 
 ---
 
 ## Documentos
 
 Status:
-Aprovado para esta versão.
+
+Homologado.
 
 ---
 
 ## Utilizadores
 
 Status:
-Aprovado para esta versão.
+
+Homologado.
 
 Melhorias futuras:
 
 ### Auditoria Expandida
 
-Atualmente gravado:
+Registar:
 
-* login
-* logout
-* entradas de páginas
-* saídas de páginas
-
-Objetivo:
-
-Capturar todas as ações do sistema:
-
-* criar
-* editar
-* eliminar
-* importar
-* exportar
-* alterar permissões
-* alterar configurações
-* sincronizações
-* alterações administrativas
-* alterações de estado
-* qualquer ação crítica.
-
-Necessário:
-
-Implementar sistema de auditoria transacional completo.
-
-Prioridade:
-Alta.
+- criar;
+- editar;
+- eliminar;
+- importar;
+- exportar;
+- sincronizações;
+- alterações administrativas;
+- alterações de permissões;
+- alterações de configurações;
+- alterações de estado.
 
 ---
 
 # PROVIDERS
 
 Estado:
+
 Imovirtual operacional.
 
-Arquitetura atual:
-provider_registry como fonte única de verdade.
+Arquitetura:
 
-Objetivos futuros:
+`provider_registry` é a única fonte de verdade.
 
-* novas integrações;
-* filtros inteligentes;
-* monitorização;
-* histórico de sincronizações.
+Roadmap:
+
+- novos providers;
+- filtros inteligentes;
+- histórico de sincronizações;
+- monitorização operacional;
+- métricas de desempenho.
 
 ---
 
 # SAAS
 
 Estado:
-Ainda não iniciado.
 
-Decisão:
-Finalizar estabilização dos módulos antes de iniciar arquitetura SaaS definitiva.
+Infraestrutura preparada.
+
+Ainda não iniciado comercialmente.
+
+Decisão arquitetural:
+
+A Beta será concluída antes da implementação das funcionalidades comerciais SaaS.
+
+Planeado:
+
+- multi-tenant definitivo;
+- billing;
+- provisioning automático;
+- gestão de subscrições;
+- customer portal;
+- onboarding automático.
 
 ---
 
@@ -200,12 +291,66 @@ Finalizar estabilização dos módulos antes de iniciar arquitetura SaaS definit
 
 Situação:
 
-Muito próximo.
+Muito próxima da conclusão.
 
-Objetivo imediato:
+Objetivos imediatos:
 
-1. Corrigir regressões.
-2. Melhorar experiência operacional.
-3. Estabilizar auditoria.
-4. Validar sincronizações.
-5. Preparar demonstrações comerciais.
+1. Corrigir regressão do Copiloto Comercial.
+2. Expandir auditoria.
+3. Melhorar UX.
+4. Validar módulos.
+5. Preparar demonstrações.
+6. Publicar Beta.
+
+---
+
+# DÍVIDA TÉCNICA
+
+Baixa prioridade.
+
+Itens:
+
+- documentação da infraestrutura;
+- AUTH_DEBUG apenas para desenvolvimento;
+- auditoria transacional;
+- monitorização avançada;
+- compatibilidade React StrictMode;
+- melhorias cosméticas.
+
+---
+
+# DECISÕES ARQUITETURAIS
+
+As seguintes decisões encontram-se encerradas e não deverão ser reabertas sem necessidade justificada:
+
+- Não realizar refactors extensos durante a estabilização da Beta.
+- Priorizar estabilidade sobre novas funcionalidades.
+- Preservar compatibilidade SaaS em todas as implementações.
+- Todo desenvolvimento deve respeitar `empresa_id`.
+- Gestão de permissões permanece centralizada em Utilizadores.
+- `provider_registry` permanece como fonte única de verdade para sincronizações.
+- A infraestrutura de autenticação implementada na RC1.3.4 passa a ser a baseline oficial do projeto.
+
+---
+
+# PRÓXIMOS PASSOS
+
+Curto prazo:
+
+- concluir homologação funcional;
+- eliminar regressões remanescentes;
+- finalizar auditoria;
+- preparar demonstrações comerciais.
+
+Médio prazo:
+
+- publicação da Beta;
+- validação com utilizadores reais;
+- recolha de feedback operacional.
+
+Longo prazo:
+
+- evolução para SaaS;
+- expansão dos providers;
+- novas funcionalidades inteligentes;
+- automação comercial.

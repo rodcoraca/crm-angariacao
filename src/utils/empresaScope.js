@@ -48,7 +48,7 @@ export function buildMissingEmpresaError() {
 }
 
 export function warnMissingEmpresaId() {
-  console.warn("Operação sem empresa_id");
+  console.trace("Operação sem empresa_id");
 }
 
 export function hasEmpresaId(empresaId) {

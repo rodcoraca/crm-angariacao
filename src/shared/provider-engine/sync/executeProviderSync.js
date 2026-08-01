@@ -47,14 +47,16 @@ function isListingWithinWindow(listing, referenceDate) {
   return ageMs <= (maxWindowDays * DAY_IN_MS);
 }
 
-async function updateExistingListing({ supabaseClient, scopedEmpresaId, providerName, externalId, listing }) {
+async function updateExistingListing({ supabaseClient, scopedEmpresaId, providerName, externalId, listing, syncStartedAt }) {
   const nowIso = new Date().toISOString();
   const updatePayload = {
     price: listing.price ?? null,
     short_description: listing.shortDescription || null,
     owner_name: listing.ownerName || null,
     updated_at: nowIso,
-    imported_at: nowIso
+    imported_at: nowIso,
+    provider_active: true,
+    last_seen_at: syncStartedAt
   };
 
   const baseUpdateQuery = supabaseClient
@@ -78,7 +80,9 @@ async function updateExistingListing({ supabaseClient, scopedEmpresaId, provider
     price: updatePayload.price,
     short_description: updatePayload.short_description,
     owner_name: updatePayload.owner_name,
-    updated_at: updatePayload.updated_at
+    updated_at: updatePayload.updated_at,
+    provider_active: true,
+    last_seen_at: updatePayload.last_seen_at
   };
 
   const { error: fallbackError } = await supabaseClient
@@ -102,6 +106,7 @@ export async function executeProviderSync({
   syncStartedAtMs = Date.now()
 }) {
   const startedAtMs = Number.isFinite(syncStartedAtMs) ? syncStartedAtMs : Date.now();
+  const syncStartedAtIso = new Date(startedAtMs).toISOString();
   const referenceDate = toDateOrNull(fetchedAt) || new Date();
   const receivedListings = Array.isArray(listings) ? listings : [];
   const eligibleListings = receivedListings.filter((listing) => isListingWithinWindow(listing, referenceDate));
@@ -166,7 +171,8 @@ export async function executeProviderSync({
         scopedEmpresaId,
         providerName,
         externalId,
-        listing
+        listing,
+        syncStartedAt: syncStartedAtIso
       });
 
       if (updateError) {
@@ -200,6 +206,8 @@ export async function executeProviderSync({
       source: listing.source || null,
       status: "new",
       detected_at: toIsoOrNull(fetchedAt) || (detectedAtFallbackNow ? new Date().toISOString() : null),
+      provider_active: true,
+      last_seen_at: syncStartedAtIso,
       raw_data: listing
     };
 

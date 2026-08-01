@@ -18,6 +18,8 @@ import {
 import { createRadarStyles } from "./radarStyles";
 import { runImovirtualSync } from "../providers/services/providers/providerSyncRunner";
 import { canExecuteSync } from "../providers/services/providers/providerSyncService";
+import RadarSyncWorkspace from "../components/radar/RadarSyncWorkspace";
+import { getProviderSyncStatus } from "../providers/services/providers/providerSyncService";
 
 export default function Radar() {
   const tableRef = useRef(null);
@@ -50,6 +52,21 @@ export default function Radar() {
   const [tablePage, setTablePage] = useState(1);
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(5);
   const [syncStatus, setSyncStatus] = useState("");
+
+  const [syncWorkspaceOpen, setSyncWorkspaceOpen] = useState(false);
+
+  const [syncWorkspaceData, setSyncWorkspaceData] = useState({
+    status: "idle",
+    provider: "Imovirtual",
+    summary: null,
+    executionSeconds: null,
+    categories: [],
+    errors: []
+  });
+
+  const [providerSyncStatus, setProviderSyncStatus] = useState(null);
+  const [remainingMs, setRemainingMs] = useState(0);
+
   const TABLE_PAGE_SIZE = 20;
   const TIMELINE_PAGE_SIZE = 5;
   const styles = useMemo(() => createRadarStyles(theme), [theme]);
@@ -57,9 +74,9 @@ export default function Radar() {
   const nowrapBadgeStyle = useMemo(() => ({ whiteSpace: "nowrap" }), []);
 
   const waitForRenderCommit = useCallback(async () => {
-    if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
-      return;
-    }
+  if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
+    return;
+  }
 
     await new Promise((resolve) => {
       window.requestAnimationFrame(() => {
@@ -68,8 +85,73 @@ export default function Radar() {
     });
   }, []);
 
+  const loadProviderSyncStatus = useCallback(async () => {
+    try {
+      const status = await getProviderSyncStatus("imovirtual");
+      setProviderSyncStatus(status);
+    } catch (error) {
+      console.error("[Radar] Erro ao obter estado da sincronização:", error);
+      setProviderSyncStatus(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      void loadProviderSyncStatus();
+    }
+  }, [loading, loadProviderSyncStatus]);
+
+  useEffect(() => {
+    if (!providerSyncStatus?.next_execution) {
+      setRemainingMs(0);
+      return;
+    }
+
+    let timer;
+
+    const updateRemaining = () => {
+    const diff =
+        new Date(providerSyncStatus.next_execution).getTime() - Date.now();
+
+      if (diff <= 0) {
+        setRemainingMs(0);
+
+        clearInterval(timer);
+
+        void loadProviderSyncStatus();
+
+        return;
+      }
+
+      setRemainingMs(diff);
+    };
+
+    updateRemaining();
+
+    timer = setInterval(updateRemaining, 1000);
+
+    return () => clearInterval(timer);
+  }, [providerSyncStatus]);
+
+  const formatRemainingTime = useCallback((ms) => {
+    if (ms <= 0) {
+      return "Disponível agora";
+    }
+
+    const totalMinutes = Math.ceil(ms / 60000);
+
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    if (hours === 0) {
+      return `Disponível em ${minutes} min`;
+    }
+
+    return `Disponível em ${hours}h ${minutes}min`;
+  }, []);
+
   const openOpportunityDetail = useCallback((opportunity) => {
-    const opportunityId = String(opportunity?.id || "").trim();
+  const opportunityId = String(opportunity?.id || "").trim();
     if (!opportunityId) {
       openDetail(opportunity || null);
       return;
@@ -124,11 +206,37 @@ export default function Radar() {
       return;
     }
 
+    setSyncWorkspaceOpen(true);
+
+    setSyncWorkspaceData({
+      status: "running",
+      provider: "Imovirtual",
+      summary: {},
+      executionSeconds: null,
+      categories: [],
+      errors: []
+    });
+
     setSyncStatus("Atualizando oportunidades...");
     notifyInfo("Atualizando oportunidades...");
 
     try {
-      await runImovirtualSync();
+      const result = await runImovirtualSync();
+
+      setSyncWorkspaceData({
+        status: "success",
+        provider: result?.provider || "Imovirtual",
+        summary: {
+          novas: result?.created || 0,
+          atualizadas: result?.updated || 0,
+          expiradas: result?.expired || 0,
+          ignoradas: result?.skipped || 0
+        },
+        executionSeconds: result?.executionSeconds || null,
+        categories: result?.categories || [],
+        errors: result?.errors || []
+      });
+
       await reload();
       await waitForRenderCommit();
       setSyncStatus("");
@@ -607,12 +715,34 @@ export default function Radar() {
         <Card style={styles.tableContainer}>
           <div style={styles.tableHeader}>
             <div style={styles.actionRow}>
-              <Button variant="secondary" style={nowrapButtonStyle} onClick={handleManualSync} disabled={loading || Boolean(syncStatus)}>
-                🔄 Atualizar Oportunidades
+              <Button
+                variant="secondary"
+                style={nowrapButtonStyle}
+                onClick={handleManualSync}
+                disabled={!providerSyncStatus?.canSync}
+              >
+                {providerSyncStatus?.sync_running
+                  ? "⏳ Atualizando oportunidades..."
+                  : providerSyncStatus?.canSync
+                    ? "🔄 Atualizar Oportunidades"
+                    : "⏱️ Aguarde a próxima sincronização"}
               </Button>
-              <Button variant="ghost" style={nowrapButtonStyle} onClick={() => selectedOpportunity && openOpportunityDetail(selectedOpportunity)} disabled={!selectedOpportunity}>Abrir detalhe</Button>
-            </div>
-            {syncStatus ? <Loading label={syncStatus} /> : loading ? <Loading label="A carregar Radar..." /> : null}
+
+              {providerSyncStatus && !providerSyncStatus.canSync && (
+                <p
+                  style={{
+                    marginLeft: 12,
+                    marginTop: 8,
+                    color: "#6b7280",
+                    fontSize: "0.9rem"
+                  }}
+                >
+                  ⏱️ {formatRemainingTime(remainingMs)}
+                </p>
+              )}
+              </div>
+
+              {syncStatus ? <Loading label={syncStatus} /> : loading ? <Loading label="A carregar Radar..." /> : null}
           </div>
 
           {error ? (
@@ -770,7 +900,13 @@ export default function Radar() {
         </section>
       ) : null}
 
+      <RadarSyncWorkspace
+        open={syncWorkspaceOpen}
+        onClose={() => setSyncWorkspaceOpen(false)}
+        status={syncWorkspaceData.status}
+        provider={syncWorkspaceData.provider}
+        summary={syncWorkspaceData.summary || {}}
+      />
     </div>
   );
 }
-

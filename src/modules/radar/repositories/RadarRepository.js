@@ -191,5 +191,90 @@ export class RadarRepository {
     }
 
   }
+
+  async getSummary() {
+    const empresaId = await resolveEmpresaId();
+    if (!empresaId) {
+      return { monitorizadas: 0, novas: 0, importadas: 0 };
+    }
+
+    const base = supabase
+      .from("provider_leads")
+      .select("*", { count: "exact", head: true })
+      .eq("empresa_id", empresaId)
+      .eq("provider_active", true);
+
+    const [
+      { count: monitorizadas, error: errMon },
+      { count: novas, error: errNovas },
+      { count: importadas, error: errImportadas }
+    ] = await Promise.all([
+      base,
+      supabase
+        .from("provider_leads")
+        .select("*", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .eq("provider_active", true)
+        .eq("estado", "novo"),
+      supabase
+        .from("provider_leads")
+        .select("*", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .eq("provider_active", true)
+        .eq("estado", "importado")
+    ]);
+
+    if (errMon || errNovas || errImportadas) {
+      console.warn("[Radar] getSummary error:", errMon || errNovas || errImportadas);
+    }
+
+    return {
+      monitorizadas: monitorizadas ?? 0,
+      novas: novas ?? 0,
+      importadas: importadas ?? 0
+    };
+  }
+
+  async getPage({ page = 1, pageSize = 20, filters = {} } = {}) {
+    const empresaId = await resolveEmpresaId();
+    if (!empresaId) {
+      return { data: [], page, pageSize, total: 0 };
+    }
+
+    const from = (page - 1) * pageSize;
+    const to = from + pageSize - 1;
+
+    let query = supabase
+      .from("provider_leads")
+      .select("*", { count: "exact" })
+      .eq("empresa_id", empresaId)
+      .eq("provider_active", true);
+
+    if (filters.district != null) query = query.eq("district", filters.district);
+    if (filters.provider != null) query = query.eq("provider", filters.provider);
+    if (filters.is_private_owner != null) query = query.eq("is_private_owner", filters.is_private_owner);
+    if (filters.imported != null) query = query.eq("imported", filters.imported);
+
+    // Reproduces Radar.jsx sort: created_at_first > published_at > created_at, all DESC
+    query = query
+      .order("created_at_first", { ascending: false, nullsFirst: false })
+      .order("published_at", { ascending: false, nullsFirst: false })
+      .order("created_at", { ascending: false, nullsFirst: false })
+      .range(from, to);
+
+    const { data, count, error } = await query;
+
+    if (error) {
+      console.warn("[Radar] getPage error:", error);
+      return { data: [], page, pageSize, total: 0 };
+    }
+
+    return {
+      data: data ?? [],
+      page,
+      pageSize,
+      total: count ?? 0
+    };
+  }
 }
 

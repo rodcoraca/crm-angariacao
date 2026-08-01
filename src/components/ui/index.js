@@ -18,6 +18,7 @@ export { default as Inline } from "./primitives/Inline";
 export { default as PageLayout } from "./primitives/PageLayout";
 export { default as Section } from "./primitives/Section";
 export { default as Stack } from "./primitives/Stack";
+export { default as Workspace } from "./Workspace";
 
 // Backward-compatible aliases.
 export { default as Loading } from "./Loading";

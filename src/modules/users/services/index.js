@@ -5,7 +5,6 @@ export {
 	enviarRedefinicaoPasswordUtilizador,
 	repararAssociacaoAuthUtilizador,
 	listarPreferenciasPorUtilizador,
-	listarUtilizadoresInconsistentes,
 	registrarAcaoNegadaUtilizadores,
 	listarSessoesPorUtilizador,
 	listarAuditoriaPorUtilizador,

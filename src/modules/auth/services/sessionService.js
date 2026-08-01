@@ -75,7 +75,7 @@ async function terminatePreviousSessions({ userId, empresaId, reason = "new_logi
   if (!userId) return { ok: false, reason: "missing_user" };
 
   const payload = {
-    status: "closed",
+    status: "terminated",
     logout_at: nowIso(),
     updated_at: nowIso(),
     metadata: {
@@ -272,6 +272,10 @@ export async function updateSessionActivity(context = {}) {
     .eq("id", sessionId)
     .eq("status", "active");
 
+  if (!error && context.userId) {
+    storeSessionContext({ sessionId, userId: context.userId });
+  }
+
   return { ok: !error, error };
 }
 
@@ -282,7 +286,7 @@ export async function finalizeUserSession(context = {}) {
     const { error } = await supabase
       .from(USER_SESSIONS_TABLE)
       .update({
-        status: "closed",
+        status: "logged_out",
         logout_at: nowIso(),
         updated_at: nowIso()
       })
@@ -301,7 +305,7 @@ export async function finalizeUserSession(context = {}) {
   let query = supabase
     .from(USER_SESSIONS_TABLE)
     .update({
-      status: "closed",
+      status: "logged_out",
       logout_at: nowIso(),
       updated_at: nowIso()
     })

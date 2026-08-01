@@ -1,5 +1,5 @@
 import { supabase } from "../../../supabase";
-import { applyEmpresaScope } from "../../../utils/empresaScope.js";
+import { applyEmpresaScope, resolveEmpresaIdFromContext } from "../../../utils/empresaScope";
 
 export function fetchLeadsByTipo(tipo, empresaId = null) {
   return applyEmpresaScope(supabase
@@ -65,10 +65,14 @@ export function insertLead(payload) {
     .insert([payload]);
 }
 
-export function fetchAgentesAtivos() {
-  return supabase
-    .from("agentes")
-    .select("id,nome,email,ativo")
-    .eq("ativo", true)
-    .order("nome", { ascending: true });
+export function fetchAgentesAtivos(currentUser) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+
+  return applyEmpresaScope(
+    supabase
+      .from("usuarios")
+      .select("id,nome,email,ativo")
+      .eq("ativo", true),
+    empresaId
+  ).order("nome", { ascending: true });
 }

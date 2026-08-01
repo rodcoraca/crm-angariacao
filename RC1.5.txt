@@ -1,0 +1,8 @@
+RC1.5
+
+Ler a solicitação.
+Comparar com a RC1.5.
+Fazer diagnóstico.
+Fazer análise de impacto.
+Identificar a fase da RC afetada.
+Só então elaborar o prompt ou iniciar a implementação.

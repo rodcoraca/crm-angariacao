@@ -402,6 +402,29 @@ Deno.serve(async (request: Request) => {
         timestamp: new Date().toISOString()
       });
 
+      const syncStartedAtIso = new Date(syncStartedAtMs).toISOString();
+      const { error: expireError } = await supabaseAdmin
+        .from("provider_leads")
+        .update({ provider_active: false })
+        .eq("empresa_id", empresaId)
+        .eq("provider", provider)
+        .eq("provider_active", true)
+        .or(`last_seen_at.is.null,last_seen_at.lt.${syncStartedAtIso}`);
+
+      if (expireError) {
+        console.error("[SYNC] expire_failed", {
+          provider,
+          error: expireError.message,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log("[SYNC] expire_applied", {
+          provider,
+          cutoff: syncStartedAtIso,
+          timestamp: new Date().toISOString()
+        });
+      }
+
       syncSucceeded = true;
 
       return jsonResponse(200, {
