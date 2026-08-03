@@ -44,6 +44,8 @@ export default function Radar() {
   const opportunityRowRefs = useRef(new Map());
   const lastOpenedOpportunityIdRef = useRef(null);
   const lastOpenedOpportunityRowRef = useRef(null);
+  const paginatingRef = useRef(false);
+  const highlightTimeoutRef = useRef(null);
   const theme = useTheme();
   const { user } = useAuthContext();
   const {
@@ -69,6 +71,7 @@ export default function Radar() {
   const [filtroData, setFiltroData] = useState("todos");
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(5);
   const [syncStatus, setSyncStatus] = useState("");
+  const [selectedOpportunityId, setSelectedOpportunityId] = useState(null);
 
   const [syncWorkspaceOpen, setSyncWorkspaceOpen] = useState(false);
 
@@ -167,7 +170,13 @@ export default function Radar() {
   }, []);
 
   const openOpportunityDetail = useCallback((opportunity) => {
-  const opportunityId = String(opportunity?.id || "").trim();
+    const opportunityId = String(opportunity?.id || "").trim();
+
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+      highlightTimeoutRef.current = null;
+    }
+
     if (!opportunityId) {
       openDetail(opportunity || null);
       return;
@@ -175,6 +184,7 @@ export default function Radar() {
 
     lastOpenedOpportunityIdRef.current = opportunityId;
     lastOpenedOpportunityRowRef.current = opportunityRowRefs.current.get(opportunityId) || null;
+    setSelectedOpportunityId(opportunityId);
     openDetail(opportunity || null);
   }, [openDetail]);
 
@@ -200,10 +210,31 @@ export default function Radar() {
     }
   }, [selectedOpportunity]);
 
+  useEffect(() => {
+    if (!loading && paginatingRef.current) {
+      paginatingRef.current = false;
+      tableRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    return () => {
+      if (highlightTimeoutRef.current) {
+        clearTimeout(highlightTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const closeDetail = useCallback(() => {
     originalCloseDetail();
     void restoreSelectedOpportunityRow();
+    if (highlightTimeoutRef.current) {
+      clearTimeout(highlightTimeoutRef.current);
+    }
+    highlightTimeoutRef.current = setTimeout(() => {
+      setSelectedOpportunityId(null);
+      highlightTimeoutRef.current = null;
+    }, 2500);
   }, [originalCloseDetail, restoreSelectedOpportunityRow]);
 
   const handleManualSync = useCallback(async () => {
@@ -636,8 +667,13 @@ export default function Radar() {
             emptyMessage="Sem oportunidades disponíveis"
             rowProps={(row, _index, computedKey) => {
               const opportunityId = String(row?.rawOpportunity?.id || row?.id || computedKey || "").trim();
+              const isSelected = Boolean(opportunityId && opportunityId === selectedOpportunityId);
               return {
                 "data-opportunity-id": opportunityId || undefined,
+                style: {
+                  background: isSelected ? "rgba(13,44,77,0.08)" : undefined,
+                  transition: "background-color 250ms ease"
+                },
                 ref: (element) => {
                   if (!opportunityId) return;
 
@@ -666,7 +702,7 @@ export default function Radar() {
                 <Button
                   variant="ghost"
                   style={nowrapButtonStyle}
-                  onClick={() => { const next = Math.max(1, page - 1); console.log("[Radar UI] Anterior | page actual:", page, "| page seguinte:", next); setPage(next); reload({ page: next, pageSize }); }}
+                  onClick={() => { paginatingRef.current = true; const next = Math.max(1, page - 1); console.log("[Radar UI] Anterior | page actual:", page, "| page seguinte:", next); setPage(next); reload({ page: next, pageSize }); }}
                   disabled={page === 1}
                 >
                   Anterior
@@ -674,7 +710,7 @@ export default function Radar() {
                 <Button
                   variant="ghost"
                   style={nowrapButtonStyle}
-                  onClick={() => { const next = page + 1; console.log("[Radar UI] Seguinte | page actual:", page, "| page seguinte:", next); setPage(next); reload({ page: next, pageSize }); }}
+                  onClick={() => { paginatingRef.current = true; const next = page + 1; console.log("[Radar UI] Seguinte | page actual:", page, "| page seguinte:", next); setPage(next); reload({ page: next, pageSize }); }}
                   disabled={page >= (snapshot?.pagination?.totalPages ?? 1)}
                 >
                   Seguinte
