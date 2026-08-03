@@ -1,16 +1,21 @@
 import { supabase } from "../../../supabase";
 import { resolveEmpresaId, warnMissingEmpresaId } from "../../../utils/empresaScope";
+import { providerSyncEngine, SyncState } from "../../../shared/provider-engine/sync/ProviderSyncEngine";
+
+const PROVIDER = "imovirtual";
 
 /**
  * Runner intermediário para sincronização manual do Imovirtual.
- * Não altera a arquitetura ou os serviços existentes.
- * 
- * ATUALIZAÇÃO: Delega a execução para Supabase Edge Function
+ * Toda a comunicação de progresso é emitida através do PSE (ADR-003).
  */
 export async function runImovirtualSync() {
+  const startedAt = new Date().toISOString();
+
+  providerSyncEngine.emit(SyncState.PREPARING, PROVIDER, { startedAt });
+
   console.log("[SYNC]", {
     phase: "runImovirtualSync_start",
-    timestamp: new Date().toISOString()
+    timestamp: startedAt
   });
 
   try {
@@ -22,30 +27,76 @@ export async function runImovirtualSync() {
     });
     if (!empresaId) {
       warnMissingEmpresaId();
+      providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: "Operacao sem empresa_id"
+      });
       throw new Error("Operacao sem empresa_id");
     }
 
+    providerSyncEngine.emit(SyncState.CONNECTING, PROVIDER, { startedAt });
+
+    providerSyncEngine.emit(SyncState.FETCHING, PROVIDER, { startedAt });
     const { data, error } = await supabase.functions.invoke("provider-sync", {
       body: {
-        provider: "imovirtual",
+        provider: PROVIDER,
         empresaId
       }
     });
 
     if (error) {
+      providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: error.message
+      });
       throw new Error(error.message || "Provider Sync indisponível.");
     }
 
     if (!data?.success) {
+      providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: data?.message
+      });
       throw new Error(data?.message || "Provider Sync indisponível.");
     }
+
+    const stats = {
+      startedAt,
+      processed:   data.discovered || 0,
+      total:       data.discovered || 0,
+      imported:    data.created    || 0,
+      updated:     0,
+      ignored:     data.skipped    || 0,
+      errors:      (data.errors    || []).length,
+      elapsedTime: data.executionSeconds || 0
+    };
+
+    providerSyncEngine.emit(SyncState.PROCESSING, PROVIDER, stats);
+    providerSyncEngine.emit(SyncState.FINALIZING, PROVIDER, { ...stats, result: data });
 
     console.log("[SYNC]", {
       phase: "runImovirtualSync_success",
       timestamp: new Date().toISOString()
     });
+
+    providerSyncEngine.emit(SyncState.COMPLETED, PROVIDER, {
+      ...stats,
+      finishedAt: new Date().toISOString(),
+      result: data
+    });
     return data;
   } catch (error) {
+    if (providerSyncEngine.state !== SyncState.FAILED) {
+      providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: error?.message || "Erro desconhecido"
+      });
+    }
+
     console.log("[SYNC]", {
       phase: "runImovirtualSync_error",
       error: error?.message || "Erro desconhecido",

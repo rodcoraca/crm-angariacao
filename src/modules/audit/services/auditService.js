@@ -248,6 +248,10 @@ export async function auditMutation(
       await registrarExclusao(context);
     }
 
+    if (eventType === "lead.transfer") {
+      await writeAudit("lead.transfer", "success", context);
+    }
+
     return result;
   } catch (error) {
     await writeAudit(

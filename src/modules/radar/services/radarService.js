@@ -166,14 +166,29 @@ export class RadarService {
     };
   }
 
-  async getSnapshot() {
-    const [summary, loaded] = await Promise.all([
-      this.repository.getSummary(),
-      this.loadOpportunities()
+  async getSnapshot({ page = 1, pageSize = 20, filters = {}, sort = null } = {}) {
+    console.log("[Radar Service] getSnapshot recebeu | page:", page, "| pageSize:", pageSize);
+    const [summary, pageResult, filterOptions] = await Promise.all([
+      this.repository.getSummary(filters),
+      this.repository.getPage({ page, pageSize, filters, sort }),
+      this.repository.getFilterOptions(filters)
     ]);
-    const classified = this.classifyOpportunities(loaded);
+    const classified = this.classifyOpportunities(pageResult.data || []);
     const providerRegistry = await this.loadProviderRegistryState();
-    return this.createSnapshotFromOpportunities(classified, providerRegistry, summary);
+    const snapshot = this.createSnapshotFromOpportunities(classified, providerRegistry, summary);
+    const total = pageResult.total ?? 0;
+    return {
+      ...snapshot,
+      rows: classified,
+      summary,
+      filterOptions,
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: pageSize > 0 ? Math.ceil(total / pageSize) : 1
+      }
+    };
   }
 
   async updateOpportunityState(opportunityId, nextState) {
@@ -316,8 +331,9 @@ export function clearRadarDataProvider() {
   radarService.setProvider(buildConfiguredRadarProvider());
 }
 
-export async function fetchRadarSnapshot() {
-  return radarService.getSnapshot();
+export async function fetchRadarSnapshot({ page = 1, pageSize = 20, filters = {}, sort = null } = {}) {
+  console.log("[Radar API] fetchRadarSnapshot recebeu | page:", page, "| pageSize:", pageSize);
+  return radarService.getSnapshot({ page, pageSize, filters, sort });
 }
 
 export function getRadarService() {

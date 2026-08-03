@@ -5,6 +5,7 @@ import {
   executeProviderSync,
   warnMissingEmpresaId
 } from "../../../src/shared/provider-engine/index.js";
+import { ProviderJobService } from "../_shared/ProviderJobService.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -294,6 +295,8 @@ Deno.serve(async (request: Request) => {
     }
     lockAcquired = true;
 
+    const jobId = await ProviderJobService.createJob(supabaseAdmin, { provider, empresaId });
+
     try {
       const aggregatedResult = {
         provider,
@@ -363,6 +366,17 @@ Deno.serve(async (request: Request) => {
           skipped: categoryResult.skipped
         });
 
+        if (jobId) {
+          await ProviderJobService.updateJob(supabaseAdmin, jobId, {
+            processed: aggregatedResult.discovered,
+            total:     aggregatedResult.discovered,
+            imported:  aggregatedResult.created,
+            updated:   0,
+            ignored:   aggregatedResult.skipped,
+            errors:    aggregatedResult.errors.length
+          });
+        }
+
         console.log(`[${categoryLabel}] Resumo`, {
           analisados: categoryResult.discovered,
           novos: categoryResult.created,
@@ -427,10 +441,15 @@ Deno.serve(async (request: Request) => {
 
       syncSucceeded = true;
 
+      if (jobId) {
+        await ProviderJobService.completeJob(supabaseAdmin, jobId, result as Record<string, unknown>);
+      }
+
       return jsonResponse(200, {
         success: true,
         message: "Provider Sync executado com sucesso.",
         ...result,
+        job_id: jobId ?? null,
         executedAt: new Date().toISOString()
       });
     } catch (error) {
@@ -440,6 +459,9 @@ Deno.serve(async (request: Request) => {
         error: syncErrorMessage,
         timestamp: new Date().toISOString()
       });
+      if (jobId) {
+        await ProviderJobService.failJob(supabaseAdmin, jobId, syncErrorMessage);
+      }
       return fallbackResponse(syncErrorMessage);
     } finally {
       if (lockAcquired) {

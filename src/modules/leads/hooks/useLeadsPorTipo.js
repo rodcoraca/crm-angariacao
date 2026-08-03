@@ -4,6 +4,7 @@ import {
   carregarLeadsPorTipo,
   salvarObservacaoLead
 } from "../services/leadsService";
+import { canManageLead, canTransferLead } from "../services/leadPermissionService";
 import {
   carregarAgentesParaLeads,
   resolverNomeAgente
@@ -39,12 +40,14 @@ export function useLeadsPorTipo({ tipo, user, onAbrirLead }) {
   }
 
   async function alterarTipo(id, novoTipo) {
-    const leadAnterior = leads.find((lead) => lead.id === id) || null;
-    const { error } = await alterarTipoLead(id, novoTipo, user, leadAnterior);
+    const { error } = await alterarTipoLead(id, novoTipo, user);
 
-    if (!error) {
-      setRefreshKey((value) => value + 1);
+    if (error) {
+      return { error };
     }
+
+    setRefreshKey((value) => value + 1);
+    return { error: null };
   }
 
   async function salvarObservacao(id, texto) {
@@ -80,6 +83,8 @@ export function useLeadsPorTipo({ tipo, user, onAbrirLead }) {
     atualizarObsLocal,
     alterarTipo,
     salvarObservacao,
-    nomeAgente
+    nomeAgente,
+    canManageLead: (lead) => canManageLead(user, lead),
+    canTransferLead: (lead) => canTransferLead(user, lead)
   };
 }

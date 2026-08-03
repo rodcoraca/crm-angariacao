@@ -6,9 +6,12 @@ export {
   salvarFichaLead,
   salvarLeadFluxo,
   salvarObservacaoLead,
+  transferirLead,
   validarEntradaTelefone,
   verificarLeadExistente
 } from "./leadsService";
+
+export { canManageLead, canTransferLead } from "./leadPermissionService";
 
 export {
   carregarAgentesParaFicha,

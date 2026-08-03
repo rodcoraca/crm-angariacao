@@ -191,6 +191,12 @@ export function normalizePermissions(permissoes) {
 
   Object.keys(entrada).forEach((key) => {
     if (Object.prototype.hasOwnProperty.call(normalizadas, key)) return;
+
+    if (key === "__perfil") {
+      normalizadas[key] = entrada[key];
+      return;
+    }
+
     normalizadas[key] = Boolean(entrada[key]);
   });
 

@@ -3,6 +3,10 @@ import { resolveEmpresaIdFromContext } from "../../../utils/empresaScope.js";
 import { fetchAgentesAtivos, fetchLeadAgenteIds } from "../repositories/leadsRepository";
 import { pertenceAoMesmoContrato, resolverContratoIdentidade } from "../utils/identityContract";
 
+function isUuid(valor) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(valor || ""));
+}
+
 export function obterNomeUtilizadorAtual(user) {
   return user?.user_metadata?.nome ||
     user?.user_metadata?.name ||
@@ -14,7 +18,7 @@ export function obterNomeUtilizadorAtual(user) {
 function mapAgentes(data = []) {
   return data.map((agente) => ({
     id: agente.id,
-    nome: agente.nome || agente.email || agente.id,
+    nome: agente.nome || agente.email || "Utilizador não encontrado",
     email: agente.email || ""
   }));
 }
@@ -24,7 +28,7 @@ function buildAgentesFallback(ids = [], user) {
 
   return ids.map((id) => ({
     id,
-    nome: contrato.idsRelacionados.includes(id) ? obterNomeUtilizadorAtual(user) : "Agente validado",
+    nome: contrato.idsRelacionados.includes(id) ? obterNomeUtilizadorAtual(user) : "Utilizador não encontrado",
     email: contrato.idsRelacionados.includes(id) ? user?.email || "" : id
   }));
 }
@@ -62,10 +66,18 @@ export async function carregarAgentesParaFicha(agenteAtualId, user) {
 }
 
 export function resolverNomeAgente(agentes, agenteId, user) {
-  const agente = (agentes || []).find((item) => item.id === agenteId);
+  if (!agenteId) return "Sem agente atribuído";
 
-  if (agente) return formatarNomeApresentacao(agente.nome);
-  if (pertenceAoMesmoContrato(agenteId, user)) return formatarNomeApresentacao(obterNomeUtilizadorAtual(user));
+  const agente = (agentes || []).find(
+    (item) => String(item.id) === String(agenteId)
+  );
 
-  return agenteId || "Sem agente";
+  if (agente && !isUuid(agente.nome)) return formatarNomeApresentacao(agente.nome);
+
+  if (pertenceAoMesmoContrato(agenteId, user)) {
+    const nomeAtual = obterNomeUtilizadorAtual(user);
+    return isUuid(nomeAtual) ? "Utilizador não encontrado" : formatarNomeApresentacao(nomeAtual);
+  }
+
+  return "Utilizador não encontrado";
 }

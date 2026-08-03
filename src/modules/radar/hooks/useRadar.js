@@ -11,14 +11,17 @@ export function useRadar() {
   const [error, setError] = useState(null);
   const [selectedOpportunity, setSelectedOpportunity] = useState(null);
   const [importingId, setImportingId] = useState(null);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(20);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async ({ page: _page, pageSize: _pageSize, filters: _filters, sort: _sort } = {}) => {
+    console.log("[Radar Hook] reload recebeu | page:", _page, "| pageSize:", _pageSize);
     setLoading(true);
     setError(null);
 
     try {
       clearRadarDataProvider();
-      const data = await fetchRadarSnapshot();
+      const data = await fetchRadarSnapshot({ page: _page, pageSize: _pageSize, filters: _filters, sort: _sort });
       setSnapshot(data);
     } catch (err) {
       setError(err);
@@ -86,6 +89,9 @@ export function useRadar() {
     openDetail,
     closeDetail,
     importSelectedToLeads,
-    updateOpportunityState
+    updateOpportunityState,
+    page,
+    pageSize,
+    setPage
   };
 }

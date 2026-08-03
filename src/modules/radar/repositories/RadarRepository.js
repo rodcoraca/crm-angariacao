@@ -134,6 +134,54 @@ function mapProviderLeadToOpportunity(lead) {
     }
   };
 }
+
+// Single filter application point — used by both getPage() and getSummary()
+function applyRadarFilters(query, filters = {}) {
+  const city = filters.city != null ? String(filters.city).trim() : "";
+  if (city !== "") query = query.ilike("city", `%${city}%`);
+
+  if (filters.district != null && filters.district !== "todos" && String(filters.district).trim() !== "")
+    query = query.eq("district", filters.district);
+
+  if (filters.provider != null && filters.provider !== "todos" && String(filters.provider).trim() !== "")
+    query = query.eq("provider", filters.provider);
+
+  if (filters.is_private_owner === true) query = query.eq("is_private_owner", true);
+  else if (filters.is_private_owner === false) query = query.eq("is_private_owner", false);
+
+  // Date uses created_at_first — the reference date in mapProviderLeadToOpportunity
+  // Falls back to detected_at when created_at_first IS NULL
+  if (filters.date_after != null) {
+    query = query.or(
+      `created_at_first.gte.${filters.date_after},and(created_at_first.is.null,detected_at.gte.${filters.date_after})`
+    );
+  }
+  if (filters.date_before != null) {
+    query = query.or(
+      `created_at_first.lte.${filters.date_before},and(created_at_first.is.null,detected_at.lte.${filters.date_before})`
+    );
+  }
+
+  // Estado → physical column mapping (normalizeProviderEstado logic):
+  //   imported=true       → "importado"
+  //   status='ignored'    → "ignorado"
+  //   else                → "novo"
+  if (filters.estado === "importado") {
+    query = query.eq("imported", true);
+  } else if (filters.estado === "novo") {
+    query = query
+      .or("imported.is.null,imported.eq.false")
+      .or("status.is.null,status.neq.ignored");
+  } else if (filters.estado === "ignorado") {
+    query = query.eq("status", "ignored");
+  } else {
+    // Default: exclude ignored, show novo + importado
+    query = query.or("status.is.null,status.neq.ignored");
+  }
+
+  return query;
+}
+
 export class RadarRepository {
   constructor(provider = null) {
     this.provider = provider;
@@ -192,37 +240,28 @@ export class RadarRepository {
 
   }
 
-  async getSummary() {
+  async getSummary(filters = {}) {
     const empresaId = await resolveEmpresaId();
-    if (!empresaId) {
-      return null;
-    }
+    if (!empresaId) return null;
 
-    const base = supabase
-      .from("provider_leads")
-      .select("*", { count: "exact", head: true })
-      .eq("empresa_id", empresaId)
-      .eq("provider_active", true)
-      .neq("estado", "ignorado");
+    // KPIs always show full breakdown — remove estado so scope is not pre-narrowed
+    const { estado: _removed, ...scopeFilters } = filters;
+
+    const mkBase = () =>
+      supabase
+        .from("provider_leads")
+        .select("*", { count: "exact", head: true })
+        .eq("empresa_id", empresaId)
+        .eq("provider_active", true);
 
     const [
       { count: monitorizadas, error: errMon },
       { count: novas, error: errNovas },
       { count: importadas, error: errImportadas }
     ] = await Promise.all([
-      base,
-      supabase
-        .from("provider_leads")
-        .select("*", { count: "exact", head: true })
-        .eq("empresa_id", empresaId)
-        .eq("provider_active", true)
-        .eq("estado", "novo"),
-      supabase
-        .from("provider_leads")
-        .select("*", { count: "exact", head: true })
-        .eq("empresa_id", empresaId)
-        .eq("provider_active", true)
-        .eq("estado", "importado")
+      applyRadarFilters(mkBase(), scopeFilters),
+      applyRadarFilters(mkBase(), { ...scopeFilters, estado: "novo" }),
+      applyRadarFilters(mkBase(), { ...scopeFilters, estado: "importado" })
     ]);
 
     if (errMon || errNovas || errImportadas) {
@@ -237,14 +276,13 @@ export class RadarRepository {
     };
   }
 
-  async getPage({ page = 1, pageSize = 20, filters = {} } = {}) {
+  async getPage({ page = 1, pageSize = 20, filters = {}, sort = null } = {}) {
     const empresaId = await resolveEmpresaId();
-    if (!empresaId) {
-      return { data: [], page, pageSize, total: 0 };
-    }
+    if (!empresaId) return { data: [], page, pageSize, total: 0 };
 
     const from = (page - 1) * pageSize;
     const to = from + pageSize - 1;
+    console.log("[Radar Repository] getPage recebeu | page:", page, "| pageSize:", pageSize, "| from:", from, "| to:", to);
 
     let query = supabase
       .from("provider_leads")
@@ -252,10 +290,7 @@ export class RadarRepository {
       .eq("empresa_id", empresaId)
       .eq("provider_active", true);
 
-    if (filters.district != null) query = query.eq("district", filters.district);
-    if (filters.provider != null) query = query.eq("provider", filters.provider);
-    if (filters.is_private_owner != null) query = query.eq("is_private_owner", filters.is_private_owner);
-    if (filters.imported != null) query = query.eq("imported", filters.imported);
+    query = applyRadarFilters(query, filters);
 
     // Reproduces Radar.jsx sort: created_at_first > published_at > created_at, all DESC
     query = query
@@ -267,15 +302,42 @@ export class RadarRepository {
     const { data, count, error } = await query;
 
     if (error) {
-      console.warn("[Radar] getPage error:", error);
+      console.warn("[Radar Repository] getPage error:", error);
       return { data: [], page, pageSize, total: 0 };
     }
 
+    console.log("[Radar Repository] getPage resultado | total:", count, "| rows devolvidas:", (data ?? []).length);
     return {
-      data: data ?? [],
+      data: (data ?? []).map(mapProviderLeadToOpportunity),
       page,
       pageSize,
       total: count ?? 0
+    };
+  }
+
+  async getFilterOptions(filters = {}) {
+    const empresaId = await resolveEmpresaId();
+    if (!empresaId) return { districts: [], cities: [], providers: [] };
+
+    const { data, error } = await supabase.rpc("radar_get_filter_options", {
+      p_empresa_id:  empresaId,
+      p_district:    (filters.district && filters.district !== "todos")  ? filters.district  : null,
+      p_provider:    (filters.provider && filters.provider !== "todos")  ? filters.provider  : null,
+      p_estado:      (filters.estado   && filters.estado   !== "todos")  ? filters.estado    : null,
+      p_is_private:  filters.is_private_owner ?? null,
+      p_date_after:  filters.date_after  ?? null,
+      p_date_before: filters.date_before ?? null
+    });
+
+    if (error) {
+      console.warn("[Radar] getFilterOptions error:", error);
+      return { districts: [], cities: [], providers: [] };
+    }
+
+    return {
+      districts: data?.districts || [],
+      cities:    data?.cities    || [],
+      providers: data?.providers || []
     };
   }
 }

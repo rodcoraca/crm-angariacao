@@ -21,3 +21,13 @@ export {
 export { collectImovirtualPaginatedListings } from "./imovirtual/collectPaginatedListings.js";
 
 export { executeProviderSync } from "./sync/executeProviderSync.js";
+
+export {
+  SyncState,
+  SyncProgressEvent
+} from "./sync/SyncProgressEvent.js";
+
+export {
+  ProviderSyncEngine,
+  providerSyncEngine
+} from "./sync/ProviderSyncEngine.js";

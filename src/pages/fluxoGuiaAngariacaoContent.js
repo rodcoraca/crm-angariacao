@@ -611,7 +611,10 @@ export function criarEstadoInicialCopiloto() {
   return {
     fase: "prompt",
     stepIndex: 0,
-    estadoConversa: ""
+    estadoConversa: "",
+    ultimoEstado: "",
+    historico: [],
+    concluido: false
   };
 }
 
@@ -678,13 +681,30 @@ export function processarRespostaCopiloto({ stepIndex, estadoKey, ultimoEstado }
   };
 }
 
-export function avancarCopiloto(nextStepIndex) {
+// Avança para a próxima etapa preservando historico e ultimoEstado.
+export function avancarCopiloto(currentState, nextStepIndex) {
   return {
-    ...criarEstadoInicialCopiloto(),
-    stepIndex: obterIndiceSeguro(nextStepIndex)
+    ...currentState,
+    fase: "prompt",
+    stepIndex: obterIndiceSeguro(nextStepIndex),
+    estadoConversa: "",
+    concluido: false
   };
 }
 
-export function voltarUmPassoCopiloto(stepIndex) {
-  return avancarCopiloto(Math.max(0, stepIndex - 1));
+// Chamado pelo botão "Continuar" na vista Strategy — nunca avança automaticamente.
+export function continuarCopiloto(currentState, nextStepIndex, shouldFinalize) {
+  if (currentState.concluido) return currentState;
+  if (shouldFinalize) return { ...currentState, concluido: true };
+  return avancarCopiloto(currentState, nextStepIndex);
+}
+
+export function voltarUmPassoCopiloto(currentState) {
+  return {
+    ...currentState,
+    fase: "prompt",
+    stepIndex: Math.max(0, currentState.stepIndex - 1),
+    estadoConversa: "",
+    concluido: false
+  };
 }

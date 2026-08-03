@@ -19,7 +19,24 @@ import { createRadarStyles } from "./radarStyles";
 import { runImovirtualSync } from "../providers/services/providers/providerSyncRunner";
 import { canExecuteSync } from "../providers/services/providers/providerSyncService";
 import RadarSyncWorkspace from "../components/radar/RadarSyncWorkspace";
+import SyncProgressModal from "../components/radar/SyncProgressModal";
 import { getProviderSyncStatus } from "../providers/services/providers/providerSyncService";
+
+function buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData }) {
+  const f = {};
+  if (filtroCidade && String(filtroCidade).trim()) f.city = String(filtroCidade).trim();
+  if (filtroDistrito && filtroDistrito !== "todos") f.district = filtroDistrito;
+  if (filtroOrigem && filtroOrigem !== "todos") f.provider = filtroOrigem;
+  if (filtroEstado && filtroEstado !== "todos") f.estado = filtroEstado;
+  if (filtroParticulares === "particulares") f.is_private_owner = true;
+  else if (filtroParticulares === "nao_particulares") f.is_private_owner = false;
+  const agora = new Date();
+  if (filtroData === "24h") f.date_after = new Date(agora - 24 * 60 * 60 * 1000).toISOString();
+  else if (filtroData === "7d") f.date_after = new Date(agora - 7 * 24 * 60 * 60 * 1000).toISOString();
+  else if (filtroData === "15d") f.date_after = new Date(agora - 15 * 24 * 60 * 60 * 1000).toISOString();
+  else if (filtroData === "30d_plus") f.date_before = new Date(agora - 30 * 24 * 60 * 60 * 1000).toISOString();
+  return f;
+}
 
 export default function Radar() {
   const tableRef = useRef(null);
@@ -39,17 +56,17 @@ export default function Radar() {
     openDetail,
     closeDetail: originalCloseDetail,
     importSelectedToLeads,
-    updateOpportunityState
+    updateOpportunityState,
+    page,
+    pageSize,
+    setPage
   } = useRadar();
   const [filtroCidade, setFiltroCidade] = useState("");
-  const [filtroTipo, setFiltroTipo] = useState("todos");
   const [filtroEstado, setFiltroEstado] = useState("todos");
   const [filtroOrigem, setFiltroOrigem] = useState("todos");
   const [filtroDistrito, setFiltroDistrito] = useState("todos");
-  const [filtroConcelho, setFiltroConcelho] = useState("todos");
   const [filtroParticulares, setFiltroParticulares] = useState("todos");
   const [filtroData, setFiltroData] = useState("todos");
-  const [tablePage, setTablePage] = useState(1);
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(5);
   const [syncStatus, setSyncStatus] = useState("");
 
@@ -67,7 +84,6 @@ export default function Radar() {
   const [providerSyncStatus, setProviderSyncStatus] = useState(null);
   const [remainingMs, setRemainingMs] = useState(0);
 
-  const TABLE_PAGE_SIZE = 20;
   const TIMELINE_PAGE_SIZE = 5;
   const styles = useMemo(() => createRadarStyles(theme), [theme]);
   const nowrapButtonStyle = useMemo(() => ({ whiteSpace: "nowrap", minWidth: "120px" }), []);
@@ -190,15 +206,6 @@ export default function Radar() {
     void restoreSelectedOpportunityRow();
   }, [originalCloseDetail, restoreSelectedOpportunityRow]);
 
-  useEffect(() => {
-    setFiltroConcelho("todos");
-    setFiltroCidade("");
-  }, [filtroDistrito]);
-
-  useEffect(() => {
-    setFiltroCidade("");
-  }, [filtroConcelho]);
-
   const handleManualSync = useCallback(async () => {
     const canSync = await canExecuteSync("imovirtual");
     if (!canSync) {
@@ -293,88 +300,16 @@ export default function Radar() {
   );
 
   const filterOptions = useMemo(() => {
-    const opportunities = snapshot?.opportunities || [];
-    const distritoBase = filtroDistrito !== "todos"
-      ? opportunities.filter((item) => String(item?.distrito || "").trim() === filtroDistrito)
-      : opportunities;
-
-    const concelhoBase = filtroConcelho !== "todos"
-      ? distritoBase.filter((item) => String(item?.concelho || "").trim() === filtroConcelho)
-      : distritoBase;
-
-    const freguesiaBase = concelhoBase;
-
-    const freguesias = Array.from(new Set(freguesiaBase.map((item) => String(item?.freguesia || item?.cidade || "").trim()).filter(Boolean))).sort();
-    const tipos = Array.from(new Set(opportunities.map((item) => String(item?.tipo || "").trim()).filter(Boolean))).sort();
-    const estados = Array.from(new Set(opportunities.map((item) => String(item?.estado || "").trim()).filter(Boolean))).sort();
-    const origens = Array.from(new Set(opportunities.map((item) => String(item?.source || item?.origem || "").trim()).filter(Boolean))).sort();
-    const distritos = Array.from(new Set(opportunities.map((item) => String(item?.distrito || "").trim()).filter(Boolean))).sort();
-    const concelhos = Array.from(new Set(distritoBase.map((item) => String(item?.concelho || "").trim()).filter(Boolean))).sort();
-    return { freguesias, tipos, estados, origens, distritos, concelhos };
-  }, [snapshot, filtroDistrito, filtroConcelho]);
-
-  const filteredOpportunities = useMemo(() => {
-    const oportunidades = snapshot?.opportunities || [];
-    const freguesiaLower = filtroCidade.trim().toLowerCase();
-
-    // Data filtering logic
-    const agora = new Date();
-    const filtrarData = (item) => {
-      if (filtroData === "todos") return true;
-
-      const dataRaw = item.published_at || item.detected_at;
-      if (!dataRaw) return false;
-      const data = new Date(dataRaw);
-      if (isNaN(data.getTime())) return false;
-      const diffMs = agora - data;
-      const diffDias = diffMs / (1000 * 60 * 60 * 24);
-      if (filtroData === "24h") return diffMs <= (24 * 60 * 60 * 1000);
-      if (filtroData === "7d") return diffDias <= 7;
-      if (filtroData === "15d") return diffDias <= 15;
-      if (filtroData === "30d_plus") return diffDias > 30;
-      return true;
+    const fo = snapshot?.filterOptions || {};
+    return {
+      distritos: fo.districts || [],
+      origens: fo.providers || []
     };
-
-    const filtered = oportunidades.filter((item) => {
-      const freguesia = String(item?.freguesia || item?.cidade || "").toLowerCase();
-      const tipo = String(item?.tipo || "");
-      const estado = String(item?.estado || "");
-      const origem = String(item?.source || item?.origem || "");
-      const distrito = String(item?.distrito || "");
-      const concelho = String(item?.concelho || "");
-
-      if (freguesiaLower && !freguesia.includes(freguesiaLower)) return false;
-      if (filtroTipo !== "todos" && tipo !== filtroTipo) return false;
-      if (filtroEstado !== "todos" && estado !== filtroEstado) return false;
-      if (filtroOrigem !== "todos" && origem !== filtroOrigem) return false;
-      if (filtroDistrito !== "todos" && distrito !== filtroDistrito) return false;
-      if (filtroConcelho !== "todos" && concelho !== filtroConcelho) return false;
-      if (filtroParticulares !== "todos") {
-          const isPrivate = !!item.is_private;
-          if (filtroParticulares === "particulares" && !isPrivate) return false;
-          if (filtroParticulares === "nao_particulares" && isPrivate) return false;
-      }
-      if (filtroData !== "todos" && !filtrarData(item)) return false;
-
-      return true;
-    });
-
-    return filtered;
-  }, [
-    snapshot,
-    filtroCidade,
-    filtroTipo,
-    filtroEstado,
-    filtroOrigem,
-    filtroDistrito,
-    filtroConcelho,
-    filtroParticulares,
-    filtroData
-  ]);
+  }, [snapshot]);
 
   const tabela = useMemo(() => {
-    return mapRadarTableViewModel(filteredOpportunities);
-  }, [filteredOpportunities]);
+    return mapRadarTableViewModel(snapshot?.rows || []);
+  }, [snapshot]);
 
   const isImovirtualOpportunity = useCallback(
     (opportunity) => String(opportunity?.source || opportunity?.origem || "").toLowerCase() === "imovirtual",
@@ -482,35 +417,18 @@ export default function Radar() {
   ]);
 
   const tableRows = useMemo(() => {
-    const rows = tabela.map((row, index) => ({
+    const source = snapshot?.rows || [];
+    const mapped = mapRadarTableViewModel(source);
+    return mapped.map((row, index) => ({
       ...row,
       id: row.id || `radar-row-${index}`,
       rawOpportunity:
-        (filteredOpportunities || []).find((item) => String(item?.id) === String(row?.id)) ||
-        filteredOpportunities?.[index] ||
+        source.find((item) => String(item?.id) === String(row?.id)) ||
+        source[index] ||
         null
     }));
-
-    const getRowTimestamp = (row) => {
-      const raw = row?.rawOpportunity || {};
-      const sourceDate = raw?.created_at_first || raw?.publicado_em || raw?.detected_at || null;
-      const parsed = sourceDate ? new Date(sourceDate) : null;
-      const timestamp = parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : 0;
-      return timestamp;
-    };
-
-    return [...rows].sort((a, b) => getRowTimestamp(b) - getRowTimestamp(a));
-  }, [filteredOpportunities, tabela]);
-
-  const totalTablePages = useMemo(() => {
-    return Math.max(1, Math.ceil(tableRows.length / TABLE_PAGE_SIZE));
-  }, [tableRows.length, TABLE_PAGE_SIZE]);
-
-  const paginatedTableRows = useMemo(() => {
-    const start = (tablePage - 1) * TABLE_PAGE_SIZE;
-    const end = start + TABLE_PAGE_SIZE;
-    return tableRows.slice(start, end);
-  }, [tablePage, tableRows, TABLE_PAGE_SIZE]);
+    // SQL ORDER BY handles row ordering — no JS sort applied
+  }, [snapshot]);
 
   const radarRecentTimeline = useMemo(() => {
     const getDiscoveryTimestamp = (row) => {
@@ -539,25 +457,6 @@ export default function Radar() {
   }, [radarRecentTimeline, timelineVisibleCount]);
 
   const hasMoreTimeline = timelineVisibleCount < radarRecentTimeline.length;
-
-  useEffect(() => {
-    setTablePage(1);
-  }, [
-    filtroCidade,
-    filtroTipo,
-    filtroEstado,
-    filtroOrigem,
-    filtroDistrito,
-    filtroConcelho,
-    filtroParticulares,
-    filtroData
-  ]);
-
-  useEffect(() => {
-    if (tablePage > totalTablePages) {
-      setTablePage(totalTablePages);
-    }
-  }, [tablePage, totalTablePages]);
 
   useEffect(() => {
     setTimelineVisibleCount(TIMELINE_PAGE_SIZE);
@@ -607,8 +506,8 @@ export default function Radar() {
           }}>
             <label style={styles.filterField}>
               Distrito
-              <select value={filtroDistrito} onChange={(event) => setFiltroDistrito(event.target.value)} style={styles.filterControl}>
-                <option value="">Todos</option>
+              <select value={filtroDistrito} onChange={(event) => { const v = event.target.value; setFiltroDistrito(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito: v, filtroParticulares, filtroData }) }); }} style={styles.filterControl}>
+                <option value="todos">Todos</option>
                 {filterOptions.distritos.map((distrito) => (
                   <option key={distrito} value={distrito}>{distrito}</option>
                 ))}
@@ -616,48 +515,28 @@ export default function Radar() {
             </label>
 
             <label style={styles.filterField}>
-              Concelho
-              <select value={filtroConcelho} onChange={(event) => setFiltroConcelho(event.target.value)} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                {filterOptions.concelhos.map((concelho) => (
-                  <option key={concelho} value={concelho}>{concelho}</option>
-                ))}
-              </select>
-            </label>
-
-            <label style={styles.filterField}>
-              Freguesia
-              <select value={filtroCidade} onChange={(event) => setFiltroCidade(event.target.value)} style={styles.filterControl}>
-                <option value="">Todos</option>
-                {filterOptions.freguesias.map((freguesia) => (
-                  <option key={freguesia} value={freguesia}>{freguesia}</option>
-                ))}
-              </select>
-            </label>
-
-            <label style={styles.filterField}>
-              Tipo
-              <select value={filtroTipo} onChange={(event) => setFiltroTipo(event.target.value)} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                {filterOptions.tipos.map((tipo) => (
-                  <option key={tipo} value={tipo}>{tipo}</option>
-                ))}
-              </select>
+              Cidade
+              <input
+                type="text"
+                value={filtroCidade}
+                placeholder="Pesquisar cidade..."
+                style={styles.filterControl}
+                onChange={(event) => { const v = event.target.value; setFiltroCidade(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade: v, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData }) }); }}
+              />
             </label>
 
             <label style={styles.filterField}>
               Estado
-              <select value={filtroEstado} onChange={(event) => setFiltroEstado(event.target.value)} style={styles.filterControl}>
+              <select value={filtroEstado} onChange={(event) => { const v = event.target.value; setFiltroEstado(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado: v, filtroOrigem, filtroDistrito, filtroParticulares, filtroData }) }); }} style={styles.filterControl}>
                 <option value="todos">Todos</option>
-                {filterOptions.estados.map((estado) => (
-                  <option key={estado} value={estado}>{estado}</option>
-                ))}
+                <option value="novo">Novo</option>
+                <option value="importado">Importado</option>
               </select>
             </label>
 
             <label style={styles.filterField}>
               Origem
-              <select value={filtroOrigem} onChange={(event) => setFiltroOrigem(event.target.value)} style={styles.filterControl}>
+              <select value={filtroOrigem} onChange={(event) => { const v = event.target.value; setFiltroOrigem(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem: v, filtroDistrito, filtroParticulares, filtroData }) }); }} style={styles.filterControl}>
                 <option value="todos">Todos</option>
                 {filterOptions.origens.map((origem) => (
                   <option key={origem} value={origem}>{origem}</option>
@@ -667,7 +546,7 @@ export default function Radar() {
 
             <label style={styles.filterField}>
               Particulares
-              <select value={filtroParticulares} onChange={(e) => setFiltroParticulares(e.target.value)} style={styles.filterControl}>
+              <select value={filtroParticulares} onChange={(e) => { const v = e.target.value; setFiltroParticulares(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares: v, filtroData }) }); }} style={styles.filterControl}>
                 <option value="todos">Todos</option>
                 <option value="particulares">Particulares</option>
                 <option value="nao_particulares">Não particulares</option>
@@ -676,7 +555,7 @@ export default function Radar() {
 
             <label style={styles.filterField}>
               Data
-              <select value={filtroData} onChange={(e) => setFiltroData(e.target.value)} style={styles.filterControl}>
+              <select value={filtroData} onChange={(e) => { const v = e.target.value; setFiltroData(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData: v }) }); }} style={styles.filterControl}>
                 <option value="todos">Tudo</option>
                 <option value="24h">Últimas 24h</option>
                 <option value="7d">Últimos 7d</option>
@@ -688,20 +567,20 @@ export default function Radar() {
 
           <div style={styles.filterFooter}>
             <span style={styles.filterInfo}>
-              {filteredOpportunities.length} oportunidade(s) após filtros
+              {snapshot?.pagination?.total ?? tableRows.length} oportunidade(s)
             </span>
             <Button
               variant="ghost"
               style={nowrapButtonStyle}
               onClick={() => {
                 setFiltroDistrito("todos");
-                setFiltroConcelho("todos");
                 setFiltroCidade("");
-                setFiltroTipo("todos");
                 setFiltroEstado("todos");
                 setFiltroOrigem("todos");
                 setFiltroParticulares("todos");
                 setFiltroData("todos");
+                setPage(1);
+                reload({ page: 1, pageSize, filters: {} });
               }}
             >
               Limpar filtros
@@ -753,7 +632,7 @@ export default function Radar() {
 
           <Table
             columns={colunasTabela}
-            rows={paginatedTableRows}
+            rows={tableRows}
             emptyMessage="Sem oportunidades disponíveis"
             rowProps={(row, _index, computedKey) => {
               const opportunityId = String(row?.rawOpportunity?.id || row?.id || computedKey || "").trim();
@@ -781,22 +660,22 @@ export default function Radar() {
               flexWrap: "wrap"
             }}>
               <span style={styles.filterInfo}>
-                Página {tablePage} de {totalTablePages} ({tableRows.length} registos)
+                Página {snapshot?.pagination?.page ?? page} de {snapshot?.pagination?.totalPages ?? 1} ({snapshot?.pagination?.total ?? tableRows.length} registos)
               </span>
               <div style={{ display: "flex", gap: "8px" }}>
                 <Button
                   variant="ghost"
                   style={nowrapButtonStyle}
-                  onClick={() => setTablePage((prev) => Math.max(1, prev - 1))}
-                  disabled={tablePage === 1}
+                  onClick={() => { const next = Math.max(1, page - 1); console.log("[Radar UI] Anterior | page actual:", page, "| page seguinte:", next); setPage(next); reload({ page: next, pageSize }); }}
+                  disabled={page === 1}
                 >
                   Anterior
                 </Button>
                 <Button
                   variant="ghost"
                   style={nowrapButtonStyle}
-                  onClick={() => setTablePage((prev) => Math.min(totalTablePages, prev + 1))}
-                  disabled={tablePage >= totalTablePages}
+                  onClick={() => { const next = page + 1; console.log("[Radar UI] Seguinte | page actual:", page, "| page seguinte:", next); setPage(next); reload({ page: next, pageSize }); }}
+                  disabled={page >= (snapshot?.pagination?.totalPages ?? 1)}
                 >
                   Seguinte
                 </Button>
@@ -907,6 +786,7 @@ export default function Radar() {
         provider={syncWorkspaceData.provider}
         summary={syncWorkspaceData.summary || {}}
       />
+      <SyncProgressModal />
     </div>
   );
 }

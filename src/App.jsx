@@ -35,6 +35,7 @@ import { TenantProvider } from "./modules/tenant";
 import { registrarAcessoNegado, registrarLogout, registrarNavegacao } from "./modules/audit/services";
 import FeedbackHost from "./components/ui/FeedbackHost";
 import { notifyError, notifyInfo } from "./components/ui/feedbackBus";
+import { NavigationGuard } from "./shared/navigation";
 
 /*Pauground Test*/
 //import WorkspacePlayground from "./pages/WorkspacePlayground";
@@ -73,6 +74,7 @@ export default function App() {
   const sessionRegistrationInFlightRef = useRef(null);
   const activityTrackingStartedRef = useRef(false);
   const bootstrapInFlightRef = useRef(false);
+  const navigationGuardRef = useRef(null);
 
 
 
@@ -535,7 +537,16 @@ export default function App() {
     return titles[view] || "Cockpit";
   }
 
-  async function logout() {
+  function requestNavigation(navigate, origin = "App") {
+    if (navigationGuardRef.current) {
+      navigationGuardRef.current.requestNavigation(navigate, origin);
+      return;
+    }
+
+    navigate?.();
+  }
+
+  async function executarLogout() {
     isManualLogoutRef.current = true;
 
     try {
@@ -569,20 +580,31 @@ export default function App() {
       setPerfil(null);
       setAuthzReady(true);
     }
-}
+  }
+
+  function logout() {
+    requestNavigation(() => executarLogout(), "logout");
+  }
 
   function abrirFichaLead(id) {
-    setLeadSelecionadoId(id);
-    setViewAnteriorFicha(view);
+    requestNavigation(() => {
+      setLeadSelecionadoId(id);
+      setViewAnteriorFicha(view);
+    }, "abrirFichaLead");
   }
 
   async function abrirResultadoPesquisaCockpit(result) {
+    requestNavigation(() => executarResultadoPesquisaCockpit(result), "pesquisa global");
+  }
+
+  async function executarResultadoPesquisaCockpit(result) {
     if (!result?.targetId || !result?.targetType) {
       return;
     }
 
     if (result.targetType === "lead") {
-      abrirFichaLead(result.targetId);
+      setLeadSelecionadoId(result.targetId);
+      setViewAnteriorFicha(view);
       await registrarLog("pesquisa_global", `Abriu ${result.type}: ${result.title}`);
       return;
     }
@@ -615,7 +637,9 @@ export default function App() {
     }
   }
 
-  function mudarView(nextView) {
+  function executarMudancaView(nextView) {
+    setLeadSelecionadoId(null);
+
     if (nextView === "forbidden") {
       setView("forbidden");
       return;
@@ -652,6 +676,10 @@ export default function App() {
 
     setView(nextView);
     registrarLog("navegacao", `Acedeu a ${nextView}`);
+  }
+
+  function mudarView(nextView) {
+    requestNavigation(() => executarMudancaView(nextView), "mudança de menu");
   }
 
   async function handleForbiddenAccess(requestedView, requiredPermission, reason) {
@@ -710,6 +738,10 @@ export default function App() {
   }), [perfil, user]);
 
   function abrirLogs(modo) {
+    requestNavigation(() => executarAberturaLogs(modo), "abrir logs");
+  }
+
+  function executarAberturaLogs(modo) {
     if (!authzReady) return;
 
     const authorization = authorizeProtectedView("logs", createAuthorizationContext());
@@ -734,8 +766,10 @@ export default function App() {
   }
 
   function voltarDaFicha() {
-    setLeadSelecionadoId(null);
-    setView(viewAnteriorFicha);
+    requestNavigation(() => {
+      setLeadSelecionadoId(null);
+      setView(viewAnteriorFicha);
+    }, "voltar da ficha");
   }
 
   async function handleLogin(usuario) {
@@ -820,9 +854,9 @@ export default function App() {
     forbidden: <Forbidden requestedView={forbiddenState.requestedView} requiredPermission={forbiddenState.requiredPermission} />,
     fluxo: canAccessView("fluxo") ? <Fluxo user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="fluxo" requiredPermission={getRequiredPermission("fluxo")} />,
     dashboard: canAccessView("dashboard") ? <Dashboard onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="dashboard" requiredPermission={getRequiredPermission("dashboard")} />,
-    quente: canAccessView("quente") ? <LeadsPorTipo tipo="quente" user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="quente" requiredPermission={getRequiredPermission("quente")} />,
-    morno: canAccessView("morno") ? <LeadsPorTipo tipo="morno" user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="morno" requiredPermission={getRequiredPermission("morno")} />,
-    frio: canAccessView("frio") ? <LeadsPorTipo tipo="frio" user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="frio" requiredPermission={getRequiredPermission("frio")} />,
+    quente: canAccessView("quente") ? <LeadsPorTipo tipo="quente" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="quente" requiredPermission={getRequiredPermission("quente")} />,
+    morno: canAccessView("morno") ? <LeadsPorTipo tipo="morno" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="morno" requiredPermission={getRequiredPermission("morno")} />,
+    frio: canAccessView("frio") ? <LeadsPorTipo tipo="frio" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="frio" requiredPermission={getRequiredPermission("frio")} />,
     mensagens: canAccessView("mensagens") ? <MensagensPadrao /> : <Forbidden requestedView="mensagens" requiredPermission={getRequiredPermission("mensagens")} />,
     estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
     usuarios: canAccessView("usuarios") ? <Usuarios currentUser={user} selectionRequest={userSelectionRequest} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
@@ -857,8 +891,9 @@ export default function App() {
   );
 
   return (
-    <AuthProvider value={authContextValue}>
-      <TenantProvider currentUser={user}>
+    <NavigationGuard ref={navigationGuardRef}>
+      <AuthProvider value={authContextValue}>
+        <TenantProvider currentUser={user}>
       <Layout
         collapsed={sidebarCollapsed}
         header={
@@ -887,7 +922,8 @@ export default function App() {
         )}
       </Layout>
       <FeedbackHost />
-      </TenantProvider>
-    </AuthProvider>
+        </TenantProvider>
+      </AuthProvider>
+    </NavigationGuard>
   );
 }

@@ -1,17 +1,48 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useTheme } from "../theme/ThemeContext";
+import { FloatingWindow } from "../components/FloatingWindow";
 import Button from "../components/Button";
 import Input from "../Input";
 import Card from "../components/Card";
 import { useFluxoLead } from "../modules/leads/hooks";
 import { formatarOrigemLead, listarOrigensLead } from "../modules/leads/utils";
 import {
-  avancarCopiloto,
+  continuarCopiloto,
   criarEstadoInicialCopiloto,
   obterEtapaCopilotoPorIndice,
   processarRespostaCopiloto,
   voltarUmPassoCopiloto
 } from "./fluxoGuiaAngariacaoContent";
+
+function gerarResumo(historico) {
+  if (historico.length === 0) return "";
+  const n = historico.length;
+  const ultima = historico[n - 1];
+  return `${n} interaç${n === 1 ? "ão" : "ões"} registada${n === 1 ? "" : "s"}. Última: ${ultima.etapaLabel} — ${ultima.estadoLabel}.`;
+}
+
+function construirMemoria(state, objetivoAtual) {
+  const { historico, stepIndex } = state;
+  const ultima = historico.length > 0 ? historico[historico.length - 1] : null;
+  return {
+    resumo: gerarResumo(historico),
+    objetivoAtual: objetivoAtual ?? "",
+    ultimaEtapa: ultima?.etapaLabel ?? "",
+    ultimoEstado: ultima?.estadoLabel ?? "",
+    estrategiaAtual: ultima?.estrategia ?? "",
+    progresso: { atual: stepIndex + 1, total: 7 }
+  };
+}
+
+const ETAPAS_TIMELINE = [
+  "Primeira abordagem",
+  "Criar empatia",
+  "Descobrir necessidade",
+  "Quebrar objeções",
+  "Agendar visita",
+  "Encerrar contacto",
+  "Próximo passo"
+];
 
 export default function Fluxo({ user, onAbrirLead }) {
   const theme = useTheme();
@@ -22,8 +53,6 @@ export default function Fluxo({ user, onAbrirLead }) {
   const [historicoConversa, setHistoricoConversa] = useState([]);
   const [proximaAcao, setProximaAcao] = useState("");
   const [copilotoState, setCopilotoState] = useState(() => criarEstadoInicialCopiloto());
-  const [ultimaRespostaCopiloto, setUltimaRespostaCopiloto] = useState("");
-  const copilotoTimerRef = useRef(null);
 
   const origemOptions = useMemo(() => listarOrigensLead({ includeOutro: true }), []);
   const dadosCopiloto = useMemo(
@@ -36,16 +65,14 @@ export default function Fluxo({ user, onAbrirLead }) {
     return processarRespostaCopiloto({
       stepIndex: copilotoState.stepIndex,
       estadoKey: copilotoState.estadoConversa,
-      ultimoEstado: ultimaRespostaCopiloto,
+      ultimoEstado: copilotoState.ultimoEstado,
     });
-  }, [copilotoState.fase, copilotoState.estadoConversa, copilotoState.stepIndex, ultimaRespostaCopiloto]);
+  }, [copilotoState.fase, copilotoState.estadoConversa, copilotoState.stepIndex, copilotoState.ultimoEstado]);
 
-  useEffect(() => () => {
-    if (copilotoTimerRef.current) {
-      clearTimeout(copilotoTimerRef.current);
-      copilotoTimerRef.current = null;
-    }
-  }, []);
+  const conversationMemory = useMemo(
+    () => construirMemoria(copilotoState, etapaCopilotoAtual?.objetivo),
+    [copilotoState, etapaCopilotoAtual]
+  );
 
   const {
     etapa,
@@ -271,63 +298,6 @@ export default function Fluxo({ user, onAbrirLead }) {
       width: "100%",
       justifyContent: "space-between"
     },
-    drawer: {
-      position: "fixed",
-      top: theme.spacing.md,
-      right: theme.spacing.md,
-      width: "min(360px, calc(100vw - 24px))",
-      maxHeight: "calc(100vh - 24px)",
-      overflowY: "auto",
-      background: theme.colors.surface,
-      border: `1px solid ${theme.colors.border}`,
-      borderRadius: theme.borderRadius.lg,
-      boxShadow: theme.shadow.lg,
-      padding: theme.spacing.md,
-      zIndex: 1200,
-      display: "grid",
-      gap: theme.spacing.sm
-    },
-    drawerHeader: {
-      display: "flex",
-      justifyContent: "space-between",
-      alignItems: "center",
-      gap: theme.spacing.xs
-    },
-    drawerTitle: {
-      margin: 0,
-      color: theme.colors.text,
-      fontSize: "1rem"
-    },
-    drawerIndex: {
-      margin: 0,
-      paddingLeft: 0,
-      listStyle: "none",
-      display: "grid",
-      gap: theme.spacing.xs,
-      color: theme.colors.text,
-      fontSize: "0.92rem"
-    },
-    drawerProgressRow: {
-      display: "grid",
-      gridTemplateColumns: "repeat(7, minmax(0, 1fr))",
-      gap: theme.spacing.xs,
-      alignItems: "center",
-    },
-    drawerProgressDot: {
-      height: "6px",
-      border: `1px solid ${theme.colors.border}`,
-      borderRadius: "999px",
-      background: theme.colors.surface,
-      width: "100%"
-    },
-    drawerProgressDotActive: {
-      borderColor: theme.colors.primary,
-      background: theme.colors.primary
-    },
-    drawerContent: {
-      display: "grid",
-      gap: theme.spacing.sm
-    },
     quickAnswerWrap: {
       display: "flex",
       gap: theme.spacing.xs,
@@ -430,6 +400,39 @@ export default function Fluxo({ user, onAbrirLead }) {
       display: "grid",
       gap: theme.spacing.xs,
       marginTop: theme.spacing.sm
+    },
+    timelineItem: {
+      display: "flex",
+      alignItems: "center",
+      gap: "8px",
+      fontSize: "0.85rem",
+      padding: "2px 0"
+    },
+    historyItem: {
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.sm,
+      padding: theme.spacing.xs,
+      background: theme.colors.surfaceSoft,
+      display: "grid",
+      gap: "2px"
+    },
+    memoryPanel: {
+      border: `1px solid ${theme.colors.primary}22`,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.sm,
+      background: `${theme.colors.primary}08`,
+      display: "grid",
+      gap: theme.spacing.xs
+    },
+    memoryBadge: {
+      display: "inline-flex",
+      alignItems: "center",
+      padding: "2px 8px",
+      borderRadius: "999px",
+      background: theme.colors.surfaceSoft,
+      border: `1px solid ${theme.colors.border}`,
+      color: theme.colors.muted,
+      fontSize: "0.78rem"
     }
   };
 
@@ -480,43 +483,96 @@ export default function Fluxo({ user, onAbrirLead }) {
   }
 
   function atualizarEstadoConversa(estadoKey) {
-    if (copilotoTimerRef.current) {
-      clearTimeout(copilotoTimerRef.current);
-      copilotoTimerRef.current = null;
-    }
-
-    const proximoEstado = processarRespostaCopiloto({
-      stepIndex: copilotoState.stepIndex,
-      estadoKey,
-      ultimoEstado: ultimaRespostaCopiloto,
-    });
-
-    setCopilotoState({
+    const timestamp = new Date().toLocaleTimeString("pt-PT", { hour: "2-digit", minute: "2-digit" });
+    const etapaKey = etapaCopilotoAtual?.key ?? "";
+    const etapaLabel = ETAPAS_TIMELINE[copilotoState.stepIndex] ?? etapaKey;
+    const estadoLabel = (etapaCopilotoAtual?.estados || []).find((e) => e.key === estadoKey)?.label ?? estadoKey;
+    const resposta = processarRespostaCopiloto({ stepIndex: copilotoState.stepIndex, estadoKey, ultimoEstado: estadoKey });
+    const estrategia = resposta?.estrategia ?? "";
+    const resultado = resposta?.finalizar ? "encerrado" : "avançou";
+    setCopilotoState((prev) => ({
+      ...prev,
       fase: "strategy",
-      stepIndex: copilotoState.stepIndex,
       estadoConversa: estadoKey,
-    });
-    setUltimaRespostaCopiloto(estadoKey);
+      ultimoEstado: estadoKey,
+      historico: [...prev.historico, { etapa: etapaKey, etapaLabel, estado: estadoKey, estadoLabel, estrategia, resultado, timestamp }]
+    }));
+  }
 
-    copilotoTimerRef.current = setTimeout(() => {
-      if (proximoEstado.finalizar) {
-        copilotoTimerRef.current = null;
-        return;
-      }
-
-      setCopilotoState(avancarCopiloto(proximoEstado.nextStepIndex));
-      copilotoTimerRef.current = null;
-    }, 1800);
+  function continuarGuia() {
+    if (!respostaContextualAtual || copilotoState.concluido) return;
+    setCopilotoState((prev) =>
+      continuarCopiloto(prev, respostaContextualAtual.nextStepIndex, respostaContextualAtual.finalizar)
+    );
   }
 
   function voltarUmPassoGuia() {
-    if (copilotoTimerRef.current) {
-      clearTimeout(copilotoTimerRef.current);
-      copilotoTimerRef.current = null;
-    }
-    setCopilotoState((prev) => voltarUmPassoCopiloto(prev.stepIndex));
-    setUltimaRespostaCopiloto("");
+    setCopilotoState((prev) => voltarUmPassoCopiloto(prev));
   }
+
+  const copilotoMainContent = copilotoState.concluido ? (
+    <section style={styles.drawerSectionCard}>
+      <h4 style={styles.drawerSectionTitle}>Conversa concluída</h4>
+      <p style={styles.drawerFieldText}>Todas as etapas foram percorridas.</p>
+    </section>
+  ) : etapaCopilotoAtual ? (
+    <section key={`${etapaCopilotoAtual.key}-conteudo`} style={styles.drawerSectionCard}>
+      <h4 style={styles.drawerSectionTitle}>Orientação atual</h4>
+      {copilotoState.fase === "prompt" ? (
+        <>
+          <p style={styles.drawerFieldLabel}>Objetivo atual</p>
+          <p style={styles.drawerFieldText}>{etapaCopilotoAtual.objetivo}</p>
+          <p style={styles.drawerFieldLabel}>Perguntas sugeridas</p>
+          <ul style={styles.drawerQuestionList}>
+            {(etapaCopilotoAtual?.perguntas || []).map((pergunta) => (
+              <li key={`${etapaCopilotoAtual.key}-${pergunta}`}>{pergunta}</li>
+            ))}
+          </ul>
+          <p style={styles.drawerSectionPrompt}>Como respondeu o cliente?</p>
+          <div style={styles.quickAnswerWrap}>
+            {(etapaCopilotoAtual?.estados || etapaCopilotoAtual?.respostasRapidas || []).map((resposta) => (
+              <button
+                key={`${etapaCopilotoAtual.key}-${resposta.key}`}
+                type="button"
+                style={styles.quickAnswerButton}
+                onClick={() => atualizarEstadoConversa(resposta.key)}
+              >
+                {resposta.label}
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <>
+          <p style={styles.drawerFieldLabel}>Estratégia recomendada</p>
+          <p style={styles.drawerFieldText}>{respostaContextualAtual?.estrategia}</p>
+          <p style={styles.drawerFieldLabel}>Perguntas sugeridas</p>
+          <ul style={styles.drawerQuestionList}>
+            {(respostaContextualAtual?.perguntas || []).map((pergunta) => (
+              <li key={`${etapaCopilotoAtual.key}-seguinte-${pergunta}`}>{pergunta}</li>
+            ))}
+          </ul>
+          <p style={styles.drawerFieldLabel}>Sinais a observar</p>
+          <p style={styles.drawerFieldText}>{respostaContextualAtual?.sinais}</p>
+          <p style={styles.drawerFieldLabel}>O que evitar</p>
+          <p style={styles.drawerFieldText}>{respostaContextualAtual?.evitar}</p>
+          <p style={styles.drawerFieldLabel}>Critério para avançar</p>
+          <p style={styles.drawerFieldText}>{respostaContextualAtual?.criterioAvanco}</p>
+          <p style={styles.drawerFieldLabel}>Critério para terminar com elegância</p>
+          <p style={styles.drawerFieldText}>{respostaContextualAtual?.criterioFimElegante}</p>
+          {respostaContextualAtual?.encerramento ? (
+            <>
+              <p style={styles.drawerFieldLabel}>Encerramento sugerido</p>
+              <p style={styles.drawerFieldText}>{respostaContextualAtual.encerramento}</p>
+            </>
+          ) : null}
+          <Button color="light" style={styles.buttonFull} onClick={continuarGuia}>
+            Continuar →
+          </Button>
+        </>
+      )}
+    </section>
+  ) : null;
 
   return (
     <>
@@ -718,105 +774,72 @@ export default function Fluxo({ user, onAbrirLead }) {
         </div>
       </Card>
 
-      {guiaAberto && (
-        <aside style={styles.drawer}>
-          <div style={styles.drawerHeader}>
-            <h3 style={styles.drawerTitle}>📘 Copiloto Comercial</h3>
-            <Button color="light" onClick={() => setGuiaAberto(false)}>Fechar</Button>
+      <FloatingWindow
+        id="copiloto-comercial"
+        title="📘 Copiloto Comercial"
+        isOpen={guiaAberto}
+        onClose={() => setGuiaAberto(false)}
+        defaultPosition={{ x: 20, y: 80 }}
+        maxWidth={380}
+      >
+        <div style={styles.memoryPanel}>
+          <p style={{ ...styles.drawerFieldLabel, color: theme.colors.primary, margin: 0 }}>Objetivo atual</p>
+          <p style={styles.drawerFieldText}>{conversationMemory.objetivoAtual}</p>
+          {conversationMemory.resumo && (
+            <>
+              <p style={{ ...styles.drawerFieldLabel, margin: "4px 0 0" }}>Resumo da conversa</p>
+              <p style={styles.drawerFieldText}>{conversationMemory.resumo}</p>
+            </>
+          )}
+          <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
+            <span style={styles.memoryBadge}>📊 {conversationMemory.progresso.atual}/{conversationMemory.progresso.total}</span>
+            {conversationMemory.ultimoEstado && (
+              <span style={styles.memoryBadge}>💬 {conversationMemory.ultimoEstado}</span>
+            )}
+            {conversationMemory.estrategiaAtual && (
+              <span style={styles.memoryBadge} title={conversationMemory.estrategiaAtual}>💡 Estratégia ativa</span>
+            )}
           </div>
-
-          <div style={styles.drawerContent}>
-            <ol style={styles.drawerIndex}>
-              <li>
-                <div style={styles.drawerProgressRow}>
-                  {(dadosCopiloto?.etapas || []).map((item, index) => (
-                    <div
-                      key={item.key}
-                      style={{
-                        ...styles.drawerProgressDot,
-                        ...(index === dadosCopiloto.stepIndex ? styles.drawerProgressDotActive : {}),
-                      }}
-                    />
-                  ))}
+        </div>
+        <div style={{ display: "grid", gap: "4px" }}>
+          {ETAPAS_TIMELINE.map((label, index) => {
+            const isCurrent = index === dadosCopiloto.stepIndex;
+            const isDone = index < dadosCopiloto.stepIndex;
+            return (
+              <div key={label} style={{ ...styles.timelineItem, color: isCurrent ? theme.colors.primary : isDone ? theme.colors.success : theme.colors.muted, fontWeight: isCurrent ? 600 : 400 }}>
+                <span>{isDone ? "✔" : isCurrent ? "▶" : "○"}</span>
+                <span>{label}</span>
+              </div>
+            );
+          })}
+        </div>
+        <Button color="light" style={styles.buttonFull} onClick={voltarUmPassoGuia} disabled={dadosCopiloto.stepIndex === 0}>
+          ↩️ Recuar 1 passo
+        </Button>
+        {copilotoState.historico.length > 0 && (
+          <div style={styles.drawerSectionCard}>
+            <h4 style={styles.drawerSectionTitle}>Histórico da negociação</h4>
+            <div style={{ display: "grid", gap: "4px", maxHeight: "160px", overflowY: "auto" }}>
+              {copilotoState.historico.map((item, idx) => (
+                <div key={idx} style={styles.historyItem}>
+                  <span style={{ color: theme.colors.muted, fontSize: "0.75rem" }}>{item.timestamp}</span>
+                  <span style={{ color: theme.colors.text, fontSize: "0.82rem", fontWeight: 600 }}>{item.etapaLabel || item.etapa}</span>
+                  <span style={{ color: theme.colors.text, fontSize: "0.82rem" }}>{item.estadoLabel || item.estado}</span>
+                  {item.estrategia && (
+                    <span style={{ color: theme.colors.muted, fontSize: "0.8rem", lineHeight: 1.35 }}>Estratégia: {item.estrategia}</span>
+                  )}
+                  {item.resultado && (
+                    <span style={{ color: item.resultado === "encerrado" ? theme.colors.danger : theme.colors.success, fontSize: "0.75rem" }}>
+                      {item.resultado === "encerrado" ? "⏼ Encerrado" : "✅ Avançou"}
+                    </span>
+                  )}
                 </div>
-              </li>
-              <li>
-                <p style={styles.panelText}>Momento atual da conversa</p>
-              </li>
-              <li>
-                <Button color="light" style={styles.buttonFull} onClick={voltarUmPassoGuia} disabled={dadosCopiloto.stepIndex === 0}>
-                  ↩️ Recuar 1 passo
-                </Button>
-              </li>
-            </ol>
-
-            {etapaCopilotoAtual ? (
-              <section key={`${etapaCopilotoAtual.key}-conteudo`} style={styles.drawerSectionCard}>
-                <h4 style={styles.drawerSectionTitle}>Orientação atual</h4>
-
-                {copilotoState.fase === "prompt" ? (
-                  <>
-                    <p style={styles.drawerFieldLabel}>Objetivo atual</p>
-                    <p style={styles.drawerFieldText}>{etapaCopilotoAtual.objetivo}</p>
-
-                    <p style={styles.drawerFieldLabel}>Perguntas sugeridas</p>
-                    <ul style={styles.drawerQuestionList}>
-                      {(etapaCopilotoAtual?.perguntas || []).map((pergunta) => (
-                        <li key={`${etapaCopilotoAtual.key}-${pergunta}`}>{pergunta}</li>
-                      ))}
-                    </ul>
-
-                    <p style={styles.drawerSectionPrompt}>Como respondeu o cliente?</p>
-                    <div style={styles.quickAnswerWrap}>
-                      {(etapaCopilotoAtual?.estados || etapaCopilotoAtual?.respostasRapidas || []).map((resposta) => (
-                        <button
-                          key={`${etapaCopilotoAtual.key}-${resposta.key}`}
-                          type="button"
-                          style={styles.quickAnswerButton}
-                          onClick={() => atualizarEstadoConversa(resposta.key)}
-                        >
-                          {resposta.label}
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <p style={styles.drawerFieldLabel}>Estratégia recomendada</p>
-                    <p style={styles.drawerFieldText}>{respostaContextualAtual?.estrategia}</p>
-
-                    <p style={styles.drawerFieldLabel}>Perguntas sugeridas</p>
-                    <ul style={styles.drawerQuestionList}>
-                      {(respostaContextualAtual?.perguntas || []).map((pergunta) => (
-                        <li key={`${etapaCopilotoAtual.key}-seguinte-${pergunta}`}>{pergunta}</li>
-                      ))}
-                    </ul>
-
-                    <p style={styles.drawerFieldLabel}>Sinais a observar</p>
-                    <p style={styles.drawerFieldText}>{respostaContextualAtual?.sinais}</p>
-
-                    <p style={styles.drawerFieldLabel}>O que evitar</p>
-                    <p style={styles.drawerFieldText}>{respostaContextualAtual?.evitar}</p>
-
-                    <p style={styles.drawerFieldLabel}>Critério para avançar</p>
-                    <p style={styles.drawerFieldText}>{respostaContextualAtual?.criterioAvanco}</p>
-
-                    <p style={styles.drawerFieldLabel}>Critério para terminar com elegância</p>
-                    <p style={styles.drawerFieldText}>{respostaContextualAtual?.criterioFimElegante}</p>
-
-                    {respostaContextualAtual?.encerramento ? (
-                      <>
-                        <p style={styles.drawerFieldLabel}>Encerramento sugerido</p>
-                        <p style={styles.drawerFieldText}>{respostaContextualAtual.encerramento}</p>
-                      </>
-                    ) : null}
-                  </>
-                )}
-              </section>
-            ) : null}
+              ))}
+            </div>
           </div>
-        </aside>
-      )}
+        )}
+        {copilotoMainContent}
+      </FloatingWindow>
     </>
   );
 }

@@ -10,6 +10,7 @@ import {
   updateLeadById
 } from "../repositories/leadsRepository";
 import { resolverContratoIdentidade } from "../utils/identityContract";
+import { canManageLead, canTransferLead } from "./leadPermissionService";
 import {
   buildMissingEmpresaError,
   hasEmpresaId,
@@ -23,6 +24,21 @@ async function executarMutacaoComErro(mutationHandler) {
   return result;
 }
 
+function criarErroForbidden() {
+  return new Error("Não possui permissões para alterar esta Lead.");
+}
+
+async function carregarLeadAutorizada(leadId, empresaId, user, autorizador) {
+  const { data: lead, error } = await fetchLeadById(leadId, empresaId);
+  if (error) throw error;
+
+  if (!lead || !autorizador(user, lead)) {
+    throw criarErroForbidden();
+  }
+
+  return lead;
+}
+
 function criarContextoAuditoriaLeads({
   user,
   leadId,
@@ -34,7 +50,7 @@ function criarContextoAuditoriaLeads({
 
   return {
     userId: contrato.responsavelId,
-    empresaId: user?.user_metadata?.empresa_id || null,
+    empresaId: user?.empresa_id || user?.user_metadata?.empresa_id || null,
     modulo: "leads",
     entidade: "leads",
     entidadeId: leadId || null,
@@ -77,13 +93,15 @@ export async function carregarLeadsDashboard() {
   return { data: data || [], error: null };
 }
 
-export async function alterarTipoLead(leadId, novoTipo, user, leadAnterior = null) {
+export async function alterarTipoLead(leadId, novoTipo, user) {
   try {
     const empresaId = await resolveEmpresaId(user);
     if (!hasEmpresaId(empresaId)) {
       warnMissingEmpresaId();
       return { error: buildMissingEmpresaError() };
     }
+
+    const leadAtual = await carregarLeadAutorizada(leadId, empresaId, user, canManageLead);
 
     const contexto = criarContextoAuditoriaLeads({
       user,
@@ -93,7 +111,7 @@ export async function alterarTipoLead(leadId, novoTipo, user, leadAnterior = nul
       details: {
         mutation: "state_change",
         before: {
-          tipo: leadAnterior?.tipo || null
+          tipo: leadAtual?.tipo || null
         },
         after: {
           tipo: novoTipo
@@ -119,6 +137,8 @@ export async function salvarObservacaoLead(leadId, observacoes, user) {
       warnMissingEmpresaId();
       return { error: buildMissingEmpresaError() };
     }
+
+    await carregarLeadAutorizada(leadId, empresaId, user, canManageLead);
 
     const contexto = criarContextoAuditoriaLeads({
       user,
@@ -258,12 +278,19 @@ export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao
   return { error: null, duplicateLead: null };
 }
 
-export async function salvarFichaLead({ leadId, form, user, leadAtual = null }) {
+export async function salvarFichaLead({ leadId, form, user }) {
   const telefoneNormalizado = normalizarTelefone(form.telefone);
   const empresaId = await resolveEmpresaId(user);
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
     return { error: buildMissingEmpresaError() };
+  }
+
+  let leadAtual;
+  try {
+    leadAtual = await carregarLeadAutorizada(leadId, empresaId, user, canManageLead);
+  } catch (error) {
+    return { error };
   }
 
   if (!validarTelefone(telefoneNormalizado)) {
@@ -291,7 +318,6 @@ export async function salvarFichaLead({ leadId, form, user, leadAtual = null }) 
     origem: form.origem,
     observacoes: form.observacoes,
     status: form.status,
-    agente_id: form.agente_id || null,
     updated_at: new Date().toISOString()
   };
 
@@ -304,15 +330,12 @@ export async function salvarFichaLead({ leadId, form, user, leadAtual = null }) 
       details: {
         mutation: "lead_edit",
         statusChanged: (leadAtual?.status || null) !== (form.status || null),
-        responsavelChanged: (leadAtual?.agente_id || null) !== (form.agente_id || null),
         before: {
           status: leadAtual?.status || null,
-          agente_id: leadAtual?.agente_id || null,
           tipo: leadAtual?.tipo || null
         },
         after: {
           status: form.status || null,
-          agente_id: form.agente_id || null,
           tipo: form.tipo || null
         }
       }
@@ -324,4 +347,47 @@ export async function salvarFichaLead({ leadId, form, user, leadAtual = null }) 
   }
 
   return { error: null };
+}
+
+export async function transferirLead({ leadId, agenteId, user }) {
+  try {
+    const empresaId = await resolveEmpresaId(user);
+    if (!hasEmpresaId(empresaId)) {
+      warnMissingEmpresaId();
+      return { error: buildMissingEmpresaError() };
+    }
+
+    const leadAtual = await carregarLeadAutorizada(leadId, empresaId, user, canTransferLead);
+    const novoResponsavelId = agenteId || null;
+
+    if ((leadAtual.agente_id || null) === novoResponsavelId) {
+      return { error: null, data: leadAtual };
+    }
+
+    const contrato = resolverContratoIdentidade(user);
+    const contexto = criarContextoAuditoriaLeads({
+      user,
+      leadId,
+      eventType: "lead.transfer",
+      action: "transferir_responsavel_lead",
+      details: {
+        mutation: "lead_transfer",
+        origem: "FichaLead",
+        lead: leadId,
+        responsavelAnterior: leadAtual.agente_id || null,
+        novoResponsavel: novoResponsavelId,
+        utilizadorExecutor: contrato.responsavelId,
+        empresa: empresaId
+      }
+    });
+
+    const result = await auditMutation("lead.transfer", () => executarMutacaoComErro(() => updateLeadById(leadId, {
+      agente_id: novoResponsavelId,
+      updated_at: new Date().toISOString()
+    }, empresaId)), contexto);
+
+    return { error: null, data: result?.data || null };
+  } catch (error) {
+    return { error };
+  }
 }

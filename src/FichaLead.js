@@ -9,6 +9,7 @@ import { useFichaLead } from "./modules/leads/hooks";
 import { badgeTipoFicha, labelTipoLead } from "./modules/leads/viewmodels";
 import { criarOpcoesDropdownOrigemLead } from "./modules/leads/utils";
 import { parseRadarLeadMetadataFromObservation } from "./modules/radar/contracts/radarLeadMetadata";
+import { useDirtyForm, useNavigationGuard } from "./shared/navigation";
 
 export default function FichaLead({ leadId, user, voltar }) {
   const theme = useTheme();
@@ -18,12 +19,44 @@ export default function FichaLead({ leadId, user, voltar }) {
     agentes,
     loading,
     salvando,
+    transferindo,
     telefoneErro,
     atualizar,
     handleTelefoneChange,
     nomeAgente,
-    salvar
-  } = useFichaLead({ leadId, user, voltar });
+    salvar,
+    transferirAgente,
+    canManageLead,
+    canTransferLead
+  } = useFichaLead({ leadId, user });
+  const { isDirty, isDirtyNow, markDirty, markClean, reset } = useDirtyForm();
+
+  async function guardarFicha({ voltarAposGuardar = true } = {}) {
+    const result = await salvar();
+    if (!result?.error) {
+      markClean();
+      if (voltarAposGuardar) voltar?.();
+    }
+    return result;
+  }
+
+  useNavigationGuard({
+    isDirty,
+    isDirtyNow,
+    onSave: () => guardarFicha({ voltarAposGuardar: false }),
+    onDiscard: reset,
+    markClean
+  });
+
+  function atualizarCampo(campo, valor) {
+    markDirty();
+    atualizar(campo, valor);
+  }
+
+  function atualizarTelefone(valor) {
+    markDirty();
+    handleTelefoneChange(valor);
+  }
 
   const styles = useMemo(() => ({
     container: {
@@ -150,6 +183,8 @@ export default function FichaLead({ leadId, user, voltar }) {
   if (!lead || !form) return <Card style={styles.loading}>Lead não encontrada.</Card>;
 
   const badgeType = badgeTipoFicha(theme, form.tipo);
+  const podeGerir = canManageLead(lead);
+  const podeTransferir = canTransferLead(lead);
   const radarMetadata = parseRadarLeadMetadataFromObservation(lead.observacoes || form.observacoes || "");
   const isRadarImported = String(form.origem || lead.origem || "").toLowerCase() === "radar" || Boolean(radarMetadata);
   const origemOptions = criarOpcoesDropdownOrigemLead({
@@ -170,7 +205,7 @@ export default function FichaLead({ leadId, user, voltar }) {
       </div>
 
       <div style={styles.infoBox}>
-        <strong>Criada por:</strong> {nomeAgente(lead.agente_id)}
+        <strong>Agente responsável:</strong> {nomeAgente(lead.agente_id)}
       </div>
 
       {isRadarImported && radarMetadata ? (
@@ -187,21 +222,22 @@ export default function FichaLead({ leadId, user, voltar }) {
           Telefone
           <Input
             value={form.telefone}
-            onChange={(e) => handleTelefoneChange(e.target.value)}
+            onChange={(e) => atualizarTelefone(e.target.value)}
             maxLength={12}
             inputMode="numeric"
+            disabled={!podeGerir}
           />
           {telefoneErro && <div style={styles.errorText}>{telefoneErro}</div>}
         </label>
 
         <label style={styles.label}>
           Nome
-          <Input value={form.nome} onChange={(e) => atualizar("nome", e.target.value)} />
+          <Input value={form.nome} onChange={(e) => atualizarCampo("nome", e.target.value)} disabled={!podeGerir} />
         </label>
 
         <label style={styles.label}>
           Tipo
-          <select style={styles.select} value={form.tipo} onChange={(e) => atualizar("tipo", e.target.value)}>
+          <select style={styles.select} value={form.tipo} onChange={(e) => atualizarCampo("tipo", e.target.value)} disabled={!podeGerir}>
             <option value="quente">Quente</option>
             <option value="morno">Morno</option>
             <option value="frio">Frio</option>
@@ -210,7 +246,7 @@ export default function FichaLead({ leadId, user, voltar }) {
 
         <label style={styles.label}>
           Origem
-          <select style={styles.select} value={form.origem} onChange={(e) => atualizar("origem", e.target.value)}>
+          <select style={styles.select} value={form.origem} onChange={(e) => atualizarCampo("origem", e.target.value)} disabled={!podeGerir}>
             {origemOptions.map((option) => (
               <option key={option.value || "sem-origem"} value={option.value}>{option.label}</option>
             ))}
@@ -219,7 +255,7 @@ export default function FichaLead({ leadId, user, voltar }) {
 
         <label style={styles.label}>
           Status
-          <select style={styles.select} value={form.status} onChange={(e) => atualizar("status", e.target.value)}>
+          <select style={styles.select} value={form.status} onChange={(e) => atualizarCampo("status", e.target.value)} disabled={!podeGerir}>
             <option value="novo">Novo</option>
             <option value="contactado">Contactado</option>
             <option value="agendado">Agendado</option>
@@ -227,27 +263,39 @@ export default function FichaLead({ leadId, user, voltar }) {
           </select>
         </label>
 
-        <label style={styles.label}>
-          Agente responsável
-          <select style={styles.select} value={form.agente_id} onChange={(e) => atualizar("agente_id", e.target.value)}>
-            <option value="">Sem agente</option>
-            {agentes.map((agente) => (
-              <option key={agente.id} value={agente.id}>
-                {formatarNomeApresentacao(agente.nome)}
-              </option>
-            ))}
-          </select>
-        </label>
+        {podeTransferir ? (
+          <label style={styles.label}>
+            Agente responsável
+            <select
+              style={styles.select}
+              value={form.agente_id}
+              onChange={(e) => transferirAgente(e.target.value)}
+              disabled={transferindo}
+            >
+              <option value="">Sem agente</option>
+              {agentes.map((agente) => (
+                <option key={agente.id} value={agente.id}>
+                  {formatarNomeApresentacao(agente.nome)}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : (
+          <label style={styles.label}>
+            Agente responsável
+            <Input value={nomeAgente(lead.agente_id) || "Sem agente"} disabled />
+          </label>
+        )}
       </div>
 
       <label style={styles.label}>
         Observações
-        <Input as="textarea" style={styles.textarea} value={form.observacoes} onChange={(e) => atualizar("observacoes", e.target.value)} />
+        <Input as="textarea" style={styles.textarea} value={form.observacoes} onChange={(e) => atualizarCampo("observacoes", e.target.value)} disabled={!podeGerir} />
       </label>
 
       <div style={styles.footer}>
         <Button color="light" style={styles.btnSecondary} onClick={voltar}>Cancelar</Button>
-        <Button color="success" style={styles.btnPrimary} onClick={salvar} disabled={salvando}>
+        <Button color="success" style={styles.btnPrimary} onClick={() => guardarFicha()} disabled={salvando || !podeGerir}>
           {salvando ? "A guardar..." : "Guardar alterações"}
         </Button>
       </div>

@@ -5,7 +5,7 @@ import { emojiTipoLead, formatarDataLeadCard } from "../modules/leads/viewmodels
 import { notifyError } from "../components/ui/feedbackBus";
 import EmptyState from "../components/ui/EmptyState";
 
-export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
+export default function LeadsPorTipo({ tipo, user, onAbrirLead, onVoltarLead }) {
   const theme = useTheme();
   const {
     leads,
@@ -15,7 +15,8 @@ export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
     atualizarObsLocal,
     alterarTipo,
     salvarObservacao,
-    nomeAgente
+    nomeAgente,
+    canManageLead
   } = useLeadsPorTipo({ tipo, user, onAbrirLead });
 
   async function handleSalvarObservacao(id, texto) {
@@ -25,16 +26,32 @@ export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
     }
   }
 
+  async function handleAlterarTipo(id, novoTipo) {
+    const result = await alterarTipo(id, novoTipo);
+    if (result.error) {
+      notifyError(result.error.message);
+    }
+  }
+
+  function handleVoltarFicha() {
+    if (onVoltarLead) {
+      onVoltarLead();
+      return;
+    }
+
+    fecharFicha();
+  }
+
   if (leadSelecionadoId) {
     return (
       <div>
-        <button style={{ ...btnVoltar, background: theme.colors.surfaceSoft, border: `1px solid ${theme.colors.border}`, color: theme.colors.text }} onClick={fecharFicha}>
+        <button style={{ ...btnVoltar, background: theme.colors.surfaceSoft, border: `1px solid ${theme.colors.border}`, color: theme.colors.text }} onClick={handleVoltarFicha}>
           ← Voltar para a lista
         </button>
         <FichaLead
           leadId={leadSelecionadoId}
           user={user}
-          voltar={fecharFicha}
+          voltar={handleVoltarFicha}
         />
       </div>
     );
@@ -93,13 +110,15 @@ export default function LeadsPorTipo({ tipo, user, onAbrirLead }) {
                 onChange={(e) => atualizarObsLocal(lead.id, e.target.value)}
                 onBlur={(e) => handleSalvarObservacao(lead.id, e.target.value)}
                 onClick={(event) => event.stopPropagation()}
+                disabled={!canManageLead(lead)}
                 placeholder="Adicionar observações..."
               />
 
 	      <select
                 value={lead.tipo}
-                onChange={(e) => alterarTipo(lead.id, e.target.value)}
+                onChange={(e) => handleAlterarTipo(lead.id, e.target.value)}
                 onClick={(event) => event.stopPropagation()}
+                disabled={!canManageLead(lead)}
                 style={{ ...select, border: `1px solid ${theme.colors.border}`, background: theme.colors.surface }}
               >
                 <option value="quente">🔥 Quente</option>
