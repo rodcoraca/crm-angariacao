@@ -41,6 +41,32 @@ import { NavigationGuard } from "./shared/navigation";
 //import WorkspacePlayground from "./pages/WorkspacePlayground";
 
 const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
+const ACTIVE_VIEW_STORAGE_KEY = "osflow_active_view";
+const COCKPIT_VIEW = "home";
+const RESTORABLE_VIEWS = new Set([
+  "home",
+  "radar",
+  "radar_imovirtual",
+  "admin_documentacao",
+  "empresas_admin",
+  "forbidden",
+  "fluxo",
+  "dashboard",
+  "quente",
+  "morno",
+  "frio",
+  "mensagens",
+  "estoque_np",
+  "usuarios",
+  "logs"
+]);
+
+function getInitialView() {
+  if (typeof window === "undefined") return COCKPIT_VIEW;
+
+  const storedView = window.sessionStorage.getItem(ACTIVE_VIEW_STORAGE_KEY);
+  return RESTORABLE_VIEWS.has(storedView) ? storedView : COCKPIT_VIEW;
+}
 
 function detectPasswordRecoveryHash() {
   if (typeof window === "undefined") return false;
@@ -54,7 +80,7 @@ export default function App() {
   const [perfil, setPerfil] = useState(null);
   const [authReady, setAuthReady] = useState(false);
   const [authzReady, setAuthzReady] = useState(false);
-  const [view, setView] = useState("home");
+  const [view, setView] = useState(getInitialView);
   //const [view, setView] = useState("workspace_playground");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [leadSelecionadoId, setLeadSelecionadoId] = useState(null);
@@ -76,6 +102,22 @@ export default function App() {
   const bootstrapInFlightRef = useRef(false);
   const navigationGuardRef = useRef(null);
 
+  const requestNavigation = useCallback((navigate, origin = "App") => {
+    if (navigationGuardRef.current) {
+      navigationGuardRef.current.requestNavigation(navigate, origin);
+      return;
+    }
+
+    navigate?.();
+  }, []);
+
+  const entrarNoCockpit = useCallback((origin) => {
+    requestNavigation(() => {
+      setLeadSelecionadoId(null);
+      setView(COCKPIT_VIEW);
+    }, origin);
+  }, [requestNavigation]);
+
 
 
   useEffect(() => {
@@ -85,6 +127,12 @@ export default function App() {
   useEffect(() => {
     latestPerfilRef.current = perfil;
   }, [perfil]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    window.sessionStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
+  }, [view]);
 
   function reportAuthError(error, origem) {
     console.error(`[${origem}]`, error);
@@ -442,6 +490,12 @@ export default function App() {
         return;
       }
 
+      if (event === "SIGNED_IN") {
+        // O evento pode chegar antes do callback do formulário de login.
+        // Não restaura a última vista num novo login.
+        entrarNoCockpit("nova sessão");
+      }
+
       if (!session?.user) {
           sessionInitializedRef.current = false;
           sessionInitializedUserRef.current = null;
@@ -511,7 +565,7 @@ export default function App() {
       isMounted = false;
       listener?.subscription?.unsubscribe?.();
     };
-  }, [hydrateSessionFromAuth, isPasswordRecoveryMode, isSameUserSession, montarUsuarioSessao, reconcilePendingActivationFromSession, restoreEmpresaIdFromStorage]);
+  }, [entrarNoCockpit, hydrateSessionFromAuth, isPasswordRecoveryMode, isSameUserSession, montarUsuarioSessao, reconcilePendingActivationFromSession, restoreEmpresaIdFromStorage]);
 
   function getHeaderContextTitle() {
     if (leadSelecionadoId) return "Leads";
@@ -535,15 +589,6 @@ export default function App() {
     };
 
     return titles[view] || "Cockpit";
-  }
-
-  function requestNavigation(navigate, origin = "App") {
-    if (navigationGuardRef.current) {
-      navigationGuardRef.current.requestNavigation(navigate, origin);
-      return;
-    }
-
-    navigate?.();
   }
 
   async function executarLogout() {
@@ -773,6 +818,10 @@ export default function App() {
   }
 
   async function handleLogin(usuario) {
+    // Um novo login inicia sempre no Cockpit. A vista persistida é usada
+    // exclusivamente para restaurar a rota durante um refresh da sessão ativa.
+    entrarNoCockpit("login");
+
     if (usuario?.id) {
       setUser((prev) => (isSameUserSession(prev, usuario) ? prev : usuario));
     }
@@ -906,6 +955,7 @@ export default function App() {
         footer={authenticatedFooter}
         sidebar={
           <Sidebar
+            initialActiveView={view}
             setView={mudarView}
             logout={logout}
             collapsed={sidebarCollapsed}

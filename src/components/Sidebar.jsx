@@ -1,4 +1,4 @@
-﻿import { useState } from "react";
+﻿import { useEffect, useState } from "react";
 import { useTheme } from "../theme/ThemeContext";
 import SidebarLogo from "./SidebarLogo";
 import SidebarToggle from "./SidebarToggle";
@@ -7,15 +7,19 @@ import SidebarGroup from "./SidebarGroup";
 import SidebarLogout from "./SidebarLogout";
 import { getRequiredPermission, hasPermission } from "../modules/auth/services";
 
-export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, onSelectLogsView }) {
+export default function Sidebar({ initialActiveView = "home", setView, logout, collapsed, onToggle, perfil, onSelectLogsView }) {
   const theme = useTheme();
-  const [activeView, setActiveView] = useState("home");
+  const [activeView, setActiveView] = useState(initialActiveView);
   const [menuLeadsAberto, setMenuLeadsAberto] = useState(true);
   const [menuEstoqueAberto, setMenuEstoqueAberto] = useState(true);
   const [menuGestaoAberto, setMenuGestaoAberto] = useState(true);
   const [menuLogsAberto, setMenuLogsAberto] = useState(true);
   const [menuAdministracaoAberto, setMenuAdministracaoAberto] = useState(true);
   const [menuDocumentacaoAberto, setMenuDocumentacaoAberto] = useState(true);
+
+  useEffect(() => {
+    setActiveView(initialActiveView);
+  }, [initialActiveView]);
 
   const podeVerRota = (viewKey) => {
     const requiredPermission = getRequiredPermission(viewKey);
@@ -34,12 +38,10 @@ export default function Sidebar({ setView, logout, collapsed, onToggle, perfil, 
   ].some((modulo) => podeVerRota(modulo));
 
   function handleSelectView(view) {
-    setActiveView(view);
     setView(view);
   }
 
   function handleSelectLogsView(modo) {
-    setActiveView("logs");
     onSelectLogsView?.(modo);
   }
 

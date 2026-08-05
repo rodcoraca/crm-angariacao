@@ -20,14 +20,16 @@ export const NavigationGuard = forwardRef(function NavigationGuard({ children },
 
   const requestNavigation = useCallback((navigate, origin = "desconhecida") => {
     const activeGuard = activeGuardRef.current;
+    const isEditing = Boolean(activeGuard?.isEditing?.());
     const isDirty = Boolean(activeGuard?.isDirty?.());
 
     console.group("NavigationGuard");
+    console.log("isEditing", isEditing);
     console.log("isDirty", isDirty);
     console.log("pendingNavigation", Boolean(pendingNavigation));
     console.log("origem da navegação", origin);
 
-    if (!isDirty) {
+    if (!isEditing) {
       console.log("decisão", "navegação direta");
       console.groupEnd();
       navigate?.();
@@ -36,7 +38,7 @@ export const NavigationGuard = forwardRef(function NavigationGuard({ children },
 
     console.log("decisão", "mostrar diálogo");
     console.groupEnd();
-    setPendingNavigation({ navigate, guard: activeGuard, origin });
+    setPendingNavigation({ navigate, guard: activeGuard, origin, isDirty });
   }, [pendingNavigation]);
 
   useImperativeHandle(ref, () => ({ requestNavigation }), [requestNavigation]);
@@ -45,7 +47,7 @@ export const NavigationGuard = forwardRef(function NavigationGuard({ children },
     if (typeof window === "undefined") return undefined;
 
     function handleBeforeUnload(event) {
-      if (!activeGuardRef.current?.isDirty?.()) return;
+      if (!activeGuardRef.current?.isEditing?.()) return;
 
       event.preventDefault();
       event.returnValue = "";
@@ -65,6 +67,7 @@ export const NavigationGuard = forwardRef(function NavigationGuard({ children },
     if (!pendingNavigation?.guard?.onSave) return;
 
     console.group("NavigationGuard");
+    console.log("isEditing", pendingNavigation.guard.isEditing?.());
     console.log("isDirty", pendingNavigation.guard.isDirty?.());
     console.log("pendingNavigation", true);
     console.log("origem da navegação", pendingNavigation.origin);
@@ -83,6 +86,7 @@ export const NavigationGuard = forwardRef(function NavigationGuard({ children },
 
   const handleDiscard = useCallback(() => {
     console.group("NavigationGuard");
+    console.log("isEditing", pendingNavigation?.guard?.isEditing?.());
     console.log("isDirty", pendingNavigation?.guard?.isDirty?.());
     console.log("pendingNavigation", Boolean(pendingNavigation));
     console.log("origem da navegação", pendingNavigation?.origin || "desconhecida");
@@ -94,16 +98,32 @@ export const NavigationGuard = forwardRef(function NavigationGuard({ children },
     continuarNavegacao();
   }, [continuarNavegacao, pendingNavigation]);
 
+  const handleCancelEditing = useCallback(() => {
+    console.group("NavigationGuard");
+    console.log("isEditing", pendingNavigation?.guard?.isEditing?.());
+    console.log("isDirty", false);
+    console.log("pendingNavigation", Boolean(pendingNavigation));
+    console.log("origem da navegação", pendingNavigation?.origin || "desconhecida");
+    console.log("decisão", "cancelar edição");
+    console.groupEnd();
+
+    pendingNavigation?.guard?.onCancelEditing?.();
+    continuarNavegacao();
+  }, [continuarNavegacao, pendingNavigation]);
+
   return (
     <NavigationGuardContext.Provider value={{ registerGuard, requestNavigation }}>
       {children}
       <UnsavedChangesDialog
         open={Boolean(pendingNavigation)}
         saving={saving}
+        hasUnsavedChanges={Boolean(pendingNavigation?.isDirty)}
         onSave={handleSave}
         onDiscard={handleDiscard}
+        onCancelEditing={handleCancelEditing}
         onContinueEditing={() => {
           console.group("NavigationGuard");
+          console.log("isEditing", pendingNavigation?.guard?.isEditing?.());
           console.log("isDirty", pendingNavigation?.guard?.isDirty?.());
           console.log("pendingNavigation", Boolean(pendingNavigation));
           console.log("origem da navegação", pendingNavigation?.origin || "desconhecida");
@@ -116,7 +136,16 @@ export const NavigationGuard = forwardRef(function NavigationGuard({ children },
   );
 });
 
-export function useNavigationGuard({ isDirty, isDirtyNow, onSave, onDiscard, markClean }) {
+export function useNavigationGuard({
+  isDirty,
+  isDirtyNow,
+  isEditing = false,
+  isEditingNow,
+  onSave,
+  onDiscard,
+  onCancelEditing,
+  markClean
+}) {
   const context = useContext(NavigationGuardContext);
 
   useEffect(() => {
@@ -124,11 +153,13 @@ export function useNavigationGuard({ isDirty, isDirtyNow, onSave, onDiscard, mar
 
     return context.registerGuard({
       isDirty: isDirtyNow || (() => isDirty),
+      isEditing: isEditingNow || (() => isEditing),
       onSave,
       onDiscard,
+      onCancelEditing,
       markClean
     });
-  }, [context, isDirty, isDirtyNow, markClean, onDiscard, onSave]);
+  }, [context, isDirty, isDirtyNow, isEditing, isEditingNow, markClean, onCancelEditing, onDiscard, onSave]);
 
   return context?.requestNavigation || ((navigate) => navigate?.());
 }

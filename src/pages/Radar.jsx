@@ -18,7 +18,6 @@ import {
 import { createRadarStyles } from "./radarStyles";
 import { runImovirtualSync } from "../providers/services/providers/providerSyncRunner";
 import { canExecuteSync } from "../providers/services/providers/providerSyncService";
-import RadarSyncWorkspace from "../components/radar/RadarSyncWorkspace";
 import SyncProgressModal from "../components/radar/SyncProgressModal";
 import { getProviderSyncStatus } from "../providers/services/providers/providerSyncService";
 
@@ -70,19 +69,7 @@ export default function Radar() {
   const [filtroParticulares, setFiltroParticulares] = useState("todos");
   const [filtroData, setFiltroData] = useState("todos");
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(5);
-  const [syncStatus, setSyncStatus] = useState("");
   const [selectedOpportunityId, setSelectedOpportunityId] = useState(null);
-
-  const [syncWorkspaceOpen, setSyncWorkspaceOpen] = useState(false);
-
-  const [syncWorkspaceData, setSyncWorkspaceData] = useState({
-    status: "idle",
-    provider: "Imovirtual",
-    summary: null,
-    executionSeconds: null,
-    categories: [],
-    errors: []
-  });
 
   const [providerSyncStatus, setProviderSyncStatus] = useState(null);
   const [remainingMs, setRemainingMs] = useState(0);
@@ -244,43 +231,15 @@ export default function Radar() {
       return;
     }
 
-    setSyncWorkspaceOpen(true);
-
-    setSyncWorkspaceData({
-      status: "running",
-      provider: "Imovirtual",
-      summary: {},
-      executionSeconds: null,
-      categories: [],
-      errors: []
-    });
-
-    setSyncStatus("Atualizando oportunidades...");
     notifyInfo("Atualizando oportunidades...");
 
     try {
-      const result = await runImovirtualSync();
-
-      setSyncWorkspaceData({
-        status: "success",
-        provider: result?.provider || "Imovirtual",
-        summary: {
-          novas: result?.created || 0,
-          atualizadas: result?.updated || 0,
-          expiradas: result?.expired || 0,
-          ignoradas: result?.skipped || 0
-        },
-        executionSeconds: result?.executionSeconds || null,
-        categories: result?.categories || [],
-        errors: result?.errors || []
-      });
+      await runImovirtualSync();
 
       await reload();
       await waitForRenderCommit();
-      setSyncStatus("");
       notifySuccess("Oportunidades atualizadas.");
     } catch (error) {
-      setSyncStatus("");
       notifyError("Falha ao sincronizar: " + (error.message || "Erro desconhecido"));
     }
   }, [reload, waitForRenderCommit]);
@@ -652,7 +611,7 @@ export default function Radar() {
               )}
               </div>
 
-              {syncStatus ? <Loading label={syncStatus} /> : loading ? <Loading label="A carregar Radar..." /> : null}
+              {loading ? <Loading label="A carregar Radar..." /> : null}
           </div>
 
           {error ? (
@@ -815,13 +774,6 @@ export default function Radar() {
         </section>
       ) : null}
 
-      <RadarSyncWorkspace
-        open={syncWorkspaceOpen}
-        onClose={() => setSyncWorkspaceOpen(false)}
-        status={syncWorkspaceData.status}
-        provider={syncWorkspaceData.provider}
-        summary={syncWorkspaceData.summary || {}}
-      />
       <SyncProgressModal />
     </div>
   );

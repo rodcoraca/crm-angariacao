@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useTheme } from "./theme/ThemeContext";
 import { formatarNomeApresentacao } from "./utils/nomes";
 import Button from "./components/Button";
@@ -30,11 +30,21 @@ export default function FichaLead({ leadId, user, voltar }) {
     canTransferLead
   } = useFichaLead({ leadId, user });
   const { isDirty, isDirtyNow, markDirty, markClean, reset } = useDirtyForm();
+  const [isEditing, setIsEditing] = useState(true);
+  const isEditingRef = useRef(true);
+
+  const finishEditing = useCallback(() => {
+    isEditingRef.current = false;
+    setIsEditing(false);
+  }, []);
+
+  const isEditingNow = useCallback(() => isEditingRef.current, []);
 
   async function guardarFicha({ voltarAposGuardar = true } = {}) {
     const result = await salvar();
     if (!result?.error) {
       markClean();
+      finishEditing();
       if (voltarAposGuardar) voltar?.();
     }
     return result;
@@ -43,8 +53,14 @@ export default function FichaLead({ leadId, user, voltar }) {
   useNavigationGuard({
     isDirty,
     isDirtyNow,
+    isEditing,
+    isEditingNow,
     onSave: () => guardarFicha({ voltarAposGuardar: false }),
-    onDiscard: reset,
+    onDiscard: () => {
+      reset();
+      finishEditing();
+    },
+    onCancelEditing: finishEditing,
     markClean
   });
 
