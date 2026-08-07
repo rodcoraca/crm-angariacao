@@ -445,7 +445,7 @@ export async function requestPasswordReset(email, redirectTo) {
   });
 }
 
-export async function sendAccountActivationInvite(email, redirectTo) {
+export async function sendAccountActivationInvite(email, redirectTo, { nome = "", username = "", empresa = "" } = {}) {
   const normalizedEmail =
     normalizeIdentifier(email)
       .toLowerCase();
@@ -515,8 +515,10 @@ export async function sendAccountActivationInvite(email, redirectTo) {
 
     const payload = {
       email: normalizedEmail,
-      redirectTo:
-        redirectTo || undefined
+      redirectTo: redirectTo || undefined,
+      nome: nome || undefined,
+      username: username || undefined,
+      empresa: empresa || undefined
     };
 
     console.log(
@@ -794,7 +796,12 @@ export async function createAuthUserFromAdminFlow({ email, password, metadata = 
   const inviteResult =
     await sendAccountActivationInvite(
       normalizedEmail,
-      redirectTo
+      redirectTo,
+      {
+        nome: String(metadata?.nome || "").trim(),
+        username: String(metadata?.username || "").trim(),
+        empresa: String(metadata?.empresa || "").trim()
+      }
     );
 
   const invitePayload = inviteResult.data || null;

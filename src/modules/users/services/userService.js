@@ -332,7 +332,7 @@ export async function guardarUsuarioComAuditoria({
       }
 
       if (!authCreation.inviteSent) {
-        const { error: activationInviteError } = await sendAccountActivationInvite(email);
+        const { error: activationInviteError } = await sendAccountActivationInvite(email, undefined, { nome, username });
         if (activationInviteError) {
           return { error: activationInviteError };
         }
@@ -430,7 +430,7 @@ export async function reenviarConviteAtivacaoUtilizador({ usuarioId, currentUser
   const { data: targetUser, error: targetError } = await applyEmpresaScope(
     supabase
       .from(USERS_TABLE)
-      .select("id,email,account_status")
+      .select("id,email,account_status,nome,username")
       .eq("id", usuarioId),
     empresaId
   ).maybeSingle();
@@ -478,7 +478,10 @@ export async function reenviarConviteAtivacaoUtilizador({ usuarioId, currentUser
     };
   }
 
-  const { error: inviteError } = await sendAccountActivationInvite(targetUser.email);
+  const { error: inviteError } = await sendAccountActivationInvite(targetUser.email, undefined, {
+    nome: String(targetUser.nome || "").trim(),
+    username: String(targetUser.username || "").trim()
+  });
   if (inviteError) {
     return { error: inviteError };
   }

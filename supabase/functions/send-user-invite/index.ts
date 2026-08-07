@@ -203,6 +203,10 @@ Deno.serve(async (req: Request) => {
     const redirectTo =
       body.redirectTo;
 
+    const nome = String(body.nome || "").trim();
+    const username = String(body.username || "").trim();
+    const empresa = String(body.empresa || "").trim();
+
     console.log("EMAIL", email);
     console.log("REDIRECT", redirectTo);
 
@@ -270,7 +274,10 @@ Deno.serve(async (req: Request) => {
       const generated = await admin.auth.admin.generateLink({
         type: "invite",
         email,
-        options: redirectTo ? { redirectTo: String(redirectTo) } : undefined
+        options: {
+          ...(redirectTo ? { redirectTo: String(redirectTo) } : {}),
+          data: { nome, username, empresa }
+        }
       });
 
       if (generated.error) {
@@ -304,11 +311,10 @@ Deno.serve(async (req: Request) => {
       await admin.auth.admin
         .inviteUserByEmail(
           email,
-          redirectTo
-            ? {
-                redirectTo
-              }
-            : undefined
+          {
+            ...(redirectTo ? { redirectTo: String(redirectTo) } : {}),
+            data: { nome, username, empresa }
+          }
         );
 
     if (error) {
