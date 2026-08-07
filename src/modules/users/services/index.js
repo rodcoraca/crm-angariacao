@@ -6,7 +6,5 @@ export {
 	repararAssociacaoAuthUtilizador,
 	listarPreferenciasPorUtilizador,
 	registrarAcaoNegadaUtilizadores,
-	listarSessoesPorUtilizador,
-	listarAuditoriaPorUtilizador,
 	obterResumoAtividadePorUtilizador
 } from "./userService";

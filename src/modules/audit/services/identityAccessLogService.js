@@ -5,14 +5,6 @@ import {
   resolveEmpresaIdFromContext,
   warnMissingEmpresaId
 } from "../../../utils/empresaScope";
-
-function getFilterIds(userFilter = null) {
-  if (!userFilter) return [];
-
-  const ids = [userFilter.id, userFilter.auth_user_id].filter(Boolean);
-  return [...new Set(ids)];
-}
-
 function mapNavigationLogs(rows = []) {
   return rows.map((log) => ({
     id: `nav_${log.id}`,
@@ -33,7 +25,8 @@ function mapAuditLogs(rows = []) {
     userId: log.user_id || null,
     action: log.event_type || "audit",
     details: log.metadata?.action || log.modulo || log.entidade || "Evento de auditoria",
-    createdAt: log.created_at
+    createdAt: log.created_at,
+    raw: log
   }));
 }
 
@@ -49,26 +42,22 @@ function mapSessionLogs(rows = []) {
       session.ip_address ? `IP: ${session.ip_address}` : null,
       session.user_agent ? `Agent: ${session.user_agent}` : null
     ].filter(Boolean).join(" • ") || "Registo de sessão",
-    createdAt: session.last_activity_at || session.login_at || session.updated_at || null
+    createdAt: session.last_activity_at || session.login_at || session.updated_at || null,
+    raw: session
   }));
 }
 
 async function fetchNavigationLogs({ page, pageSize, userFilter }) {
   const offset = (page - 1) * pageSize;
-  const ids = getFilterIds(userFilter);
 
   let query = supabase
     .from("logs_navegacao")
-    .select("id,usuario_id,acao,detalhes,created_at")
+    .select("id,usuario_id,acao,detalhes,created_at", { count: 'exact' })
     .order("created_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
-  if (ids.length === 1) {
-    query = query.eq("usuario_id", ids[0]);
-  }
-
-  if (ids.length > 1) {
-    query = query.or(ids.map((id) => `usuario_id.eq.${id}`).join(","));
+  if (userFilter?.auth_user_id) {
+    query = query.eq("usuario_id", userFilter.auth_user_id);
   }
 
   return query;
@@ -76,21 +65,16 @@ async function fetchNavigationLogs({ page, pageSize, userFilter }) {
 
 async function fetchAuditLogs({ page, pageSize, userFilter, empresaId }) {
   const offset = (page - 1) * pageSize;
-  const ids = getFilterIds(userFilter);
 
   let query = applyEmpresaScope(supabase
     .from("audit_logs")
-    .select("id,user_id,event_type,status,modulo,entidade,metadata,created_at")
+    .select("id,user_id,event_type,status,modulo,entidade,metadata,created_at", { count: 'exact' })
   , empresaId)
     .order("created_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
-  if (ids.length === 1) {
-    query = query.eq("user_id", ids[0]);
-  }
-
-  if (ids.length > 1) {
-    query = query.or(ids.map((id) => `user_id.eq.${id}`).join(","));
+  if (userFilter?.auth_user_id) {
+    query = query.eq("user_id", userFilter.auth_user_id);
   }
 
   return query;
@@ -98,21 +82,16 @@ async function fetchAuditLogs({ page, pageSize, userFilter, empresaId }) {
 
 async function fetchSessionLogs({ page, pageSize, userFilter, empresaId }) {
   const offset = (page - 1) * pageSize;
-  const ids = getFilterIds(userFilter);
 
   let query = applyEmpresaScope(supabase
     .from("user_sessions")
-    .select("id,user_id,status,ip_address,user_agent,device,login_at,last_activity_at,logout_at,updated_at")
+    .select("id,user_id,status,ip_address,user_agent,device,login_at,last_activity_at,logout_at,updated_at", { count: 'exact' })
   , empresaId)
     .order("last_activity_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
-  if (ids.length === 1) {
-    query = query.eq("user_id", ids[0]);
-  }
-
-  if (ids.length > 1) {
-    query = query.or(ids.map((id) => `user_id.eq.${id}`).join(","));
+  if (userFilter?.auth_user_id) {
+    query = query.eq("user_id", userFilter.auth_user_id);
   }
 
   return query;
@@ -131,11 +110,11 @@ export async function listarUtilizadoresIdentityAccess({ currentUser = null } = 
     .order("nome", { ascending: true });
 }
 
-export async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilter = null, currentUser = null }) {
+async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilter = null, currentUser = null }) {
   const empresaId = resolveEmpresaIdFromContext(currentUser);
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
-    return { data: [], hasMore: false, error: null };
+    return { data: [], hasMore: false, count: 0, error: null };
   }
 
   const [navResult, auditResult, sessionResult] = await Promise.all([
@@ -146,7 +125,7 @@ export async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, us
 
   const error = navResult.error || auditResult.error || sessionResult.error || null;
   if (error) {
-    return { data: [], hasMore: false, error };
+    return { data: [], hasMore: false, count: null, error };
   }
 
   const merged = [
@@ -162,9 +141,49 @@ export async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, us
     (auditResult.data || []).length === pageSize ||
     (sessionResult.data || []).length === pageSize;
 
+  const count = (navResult.count || 0) + (auditResult.count || 0) + (sessionResult.count || 0);
+
   return {
     data: merged,
     hasMore,
+    count,
+    error: null
+  };
+}
+
+export async function listarAtividadeUtilizador({ perfilId = null, authUserId = null, page = 1, pageSize = 50, currentUser = null } = {}) {
+  const empresaId = resolveEmpresaIdFromContext(currentUser);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { sessoes: [], auditoria: [], navegacao: [], counts: { sessoes: 0, auditoria: 0, navegacao: 0 }, error: null };
+  }
+
+  const userFilter = (perfilId || authUserId) ? { id: perfilId, auth_user_id: authUserId } : null;
+
+  const [sessionResult, auditResult, navResult] = await Promise.all([
+    fetchSessionLogs({ page, pageSize, userFilter, empresaId }),
+    fetchAuditLogs({ page, pageSize, userFilter, empresaId }),
+    fetchNavigationLogs({ page, pageSize, userFilter }),
+  ]);
+
+  const error = sessionResult.error || auditResult.error || navResult.error || null;
+  if (error) {
+    return { sessoes: [], auditoria: [], navegacao: [], counts: { sessoes: null, auditoria: null, navegacao: null }, error };
+  }
+
+  const sessoes = sessionResult.data || [];
+  const auditoria = auditResult.data || [];
+  const navegacao = navResult.data || [];
+
+  return {
+    sessoes,
+    auditoria,
+    navegacao,
+    counts: {
+        sessoes: sessionResult.count ?? 0,
+        auditoria: auditResult.count ?? 0,
+        navegacao: navResult.count ?? 0,
+    },
     error: null
   };
 }

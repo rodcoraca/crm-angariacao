@@ -5,6 +5,8 @@ import {
   executeProviderSync,
   warnMissingEmpresaId
 } from "../../../src/shared/provider-engine/index.js";
+import { ProviderSearchBuilder } from "../../../src/providers/search/ProviderSearchBuilder.js";
+import "../../../src/providers/search/ImovirtualSearchBuilder.js";
 import { ProviderJobService } from "../_shared/ProviderJobService.ts";
 
 const corsHeaders = {
@@ -18,35 +20,7 @@ const MAX_PAGES = 20;
 const STALE_LOCK_WINDOW_MS = 30 * 60 * 1000;
 const SYNC_INTERVAL_MINUTES = 240;
 
-/**
- * RC1.0.2
- *
- * A pesquisa genérica "/comprar" foi removida
- * devido à baixa cobertura e enviesamento
- * para anúncios profissionais.
- *
- * A recolha passa a utilizar categorias
- * específicas do Imovirtual.
- *
- * Mantidas integralmente:
- *
- * - Paginação RC1.0.1
- * - Janela temporal 30/7
- * - Deduplicação provider + external_id
- * - Fluxo Radar
- * - Fluxo CRM
- *
- * NÃO alterar esta rotina sem auditoria
- * prévia de regressão.
- */
-const IMOVIRTUAL_SEARCH_URLS = [
-  "https://www.imovirtual.com/pt/resultados/comprar/apartamento",
-  "https://www.imovirtual.com/pt/resultados/comprar/moradia",
-  "https://www.imovirtual.com/pt/resultados/comprar/terreno",
-  "https://www.imovirtual.com/pt/resultados/comprar/armazens",
-  "https://www.imovirtual.com/pt/resultados/comprar/garagem",
-  "https://www.imovirtual.com/pt/resultados/comprar/empreendimentos"
-];
+
 
 function getCategoryLabel(searchUrl: string) {
   const pathParts = new URL(searchUrl).pathname.split("/").filter(Boolean);
@@ -243,6 +217,9 @@ Deno.serve(async (request: Request) => {
     const body = await request.json().catch(() => ({} as Record<string, unknown>));
     const provider = String(body?.provider || "imovirtual").trim().toLowerCase();
     const empresaId = String(body?.empresaId || "").trim();
+    const districts = Array.isArray(body?.districts) ? (body.districts as string[]) : [];
+    const includePrivateOwners = body?.includePrivateOwners !== false;
+    const includeProfessionalOwners = body?.includeProfessionalOwners !== false;
     let lockAcquired = false;
     let syncSucceeded = false;
     let syncErrorMessage: string | null = null;
@@ -294,10 +271,10 @@ Deno.serve(async (request: Request) => {
       return fallbackResponse("Falha ao adquirir lock de sincronização.");
     }
     lockAcquired = true;
-
-    const jobId = await ProviderJobService.createJob(supabaseAdmin, { provider, empresaId });
+    let jobId: string | null = null;
 
     try {
+      jobId = await ProviderJobService.createJob(supabaseAdmin, { provider, empresaId });
       const aggregatedResult = {
         provider,
         empresaId,
@@ -312,7 +289,18 @@ Deno.serve(async (request: Request) => {
         categories: [] as Array<{ category: string; analyzed: number; created: number; skipped: number }>
       };
 
-      for (const searchUrl of IMOVIRTUAL_SEARCH_URLS) {
+      console.log("[DEBUG CONFIG]", {
+        provider,
+        districts,
+        includePrivateOwners,
+        includeProfessionalOwners
+      });
+
+      const searchUrls = ProviderSearchBuilder.build(provider, { districts, includePrivateOwners, includeProfessionalOwners });
+
+      console.log("[DEBUG URLS]", searchUrls);
+
+      for (const searchUrl of searchUrls) {
         const categoryLabel = getCategoryLabel(searchUrl);
 
         const paginated = await collectImovirtualPaginatedListings({
@@ -465,12 +453,20 @@ Deno.serve(async (request: Request) => {
       return fallbackResponse(syncErrorMessage);
     } finally {
       if (lockAcquired) {
-        await unlockProvider({
-          supabaseAdmin,
-          provider,
-          success: syncSucceeded,
-          errorMessage: syncErrorMessage
-        });
+        try {
+          await unlockProvider({
+            supabaseAdmin,
+            provider,
+            success: syncSucceeded,
+            errorMessage: syncErrorMessage
+          });
+        } catch (unlockError) {
+          console.error("[UNLOCK] finally_error", {
+            provider,
+            error: unlockError instanceof Error ? unlockError.message : String(unlockError),
+            timestamp: new Date().toISOString()
+          });
+        }
       }
     }
   } catch (error) {

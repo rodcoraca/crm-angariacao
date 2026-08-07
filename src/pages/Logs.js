@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { listarTimelineIdentityAccess, listarUtilizadoresIdentityAccess } from '../modules/audit/services';
-
+import { listarAtividadeUtilizador, listarUtilizadoresIdentityAccess } from '../modules/audit/services';
+console.log("LOGS PAGE LOADED");
 const PAGE_SIZE = 50;
 
 export default function Logs({ modo = 'geral', onModoChange, currentUser = null }) {
@@ -11,6 +11,7 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
   const [usuarioSelecionadoId, setUsuarioSelecionadoId] = useState(null);
+  const [totalCount, setTotalCount] = useState(null);
   const pageRef = useRef(0);
 
   useEffect(() => {
@@ -25,7 +26,8 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
     }
   }, [currentUser]);
 
-  const carregarLogs = useCallback(async ({ reset = false, userId = null } = {}) => {
+  const carregarLogs = useCallback(async ({ reset = false, userId = null, startPage = null } = {}) => {
+    console.log("[CARREGAR_LOGS] ENTROU");
     if (reset) {
       setLoading(true);
       setLogs([]);
@@ -35,17 +37,31 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
       setLoadingMore(true);
     }
 
-    const targetPage = reset ? 1 : pageRef.current + 1;
+    const targetPage = startPage != null ? startPage : (reset ? 1 : pageRef.current + 1);
 
     const selectedUser = userId
       ? usuarios.find((usuario) => usuario.id === userId) || null
       : null;
 
-    const { data, error, hasMore: nextHasMore } = await listarTimelineIdentityAccess({
+    console.log("[LOGS] Antes", {
+      targetPage,
+      selectedUser
+    });
+
+    const { data, error, hasMore: nextHasMore, count } = await listarAtividadeUtilizador({
+      perfilId: selectedUser?.id || null,
+      authUserId: selectedUser?.auth_user_id || null,
       page: targetPage,
       pageSize: PAGE_SIZE,
-      userFilter: selectedUser,
       currentUser
+    });
+
+
+    console.log("[LOGS] Depois", {
+      error,
+      count,
+      rows: data?.length,
+      hasMore: nextHasMore
     });
 
     if (!error) {
@@ -53,6 +69,7 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
       setLogs((prev) => (reset ? proximoBatch : [...prev, ...proximoBatch]));
       setHasMore(Boolean(nextHasMore));
       setPage(targetPage);
+      if (count != null) setTotalCount(count);
     }
 
     setLoading(false);
@@ -60,10 +77,21 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
   }, [usuarios, currentUser]);
 
   useEffect(() => {
+    console.log("[LOGS] useEffect 1");
     carregarUsuarios();
   }, [carregarUsuarios]);
 
+  console.log("[LOGS] render", {
+    modo,
+    utilizadores: usuarios.length,
+    usuarioSelecionadoId
+  });
+
   useEffect(() => {
+    console.log("[LOGS] useEffect 2", {
+    modo,
+    usuarioSelecionadoId
+  });
     setUsuarioSelecionadoId(null);
     carregarLogs({ reset: true, userId: null });
   }, [carregarLogs, modo, usuarios.length]);
@@ -161,6 +189,12 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
 
         {loading ? <p>A carregar...</p> : null}
 
+        {!loading && logs.length > 0 && (modo === 'geral' || usuarioSelecionadoId) ? (
+          <span style={styles.count}>
+            Mostrando {logs.length}{totalCount != null ? ` de ${totalCount}` : ''} registos
+          </span>
+        ) : null}
+
         {modo === 'utilizadores' && !usuarioSelecionadoId ? null : (
           <div style={styles.list}>
             {logs.map((log) => {
@@ -190,10 +224,24 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
           <p style={styles.empty}>Ainda não existem logs para mostrar.</p>
         ) : null}
 
-        {hasMore && !loading ? (
-          <button style={styles.loadMore} onClick={() => carregarLogs({ reset: false, userId: usuarioSelecionadoId })} disabled={loadingMore}>
-            {loadingMore ? 'A carregar...' : 'Carregar mais 50'}
-          </button>
+        {page > 0 && !loading && (modo === 'geral' || usuarioSelecionadoId) ? (
+          <div style={styles.paginationRow}>
+            <button
+              style={styles.pageBtn}
+              disabled={page <= 1}
+              onClick={() => carregarLogs({ reset: true, userId: usuarioSelecionadoId, startPage: page - 1 })}
+            >
+              ‹ Anterior
+            </button>
+            <span style={styles.pageMeta}>Página {page}</span>
+            <button
+              style={styles.pageBtn}
+              disabled={!hasMore}
+              onClick={() => carregarLogs({ reset: true, userId: usuarioSelecionadoId, startPage: page + 1 })}
+            >
+              Seguinte ›
+            </button>
+          </div>
         ) : null}
       </div>
     </div>
@@ -222,6 +270,10 @@ const styles = {
   meta: { fontSize: '13px', color: 'var(--os-color-muted)', whiteSpace: 'nowrap' },
   empty: { margin: 0, color: 'var(--os-color-muted)' },
   loadMore: { justifySelf: 'start', border: '1px solid var(--os-color-border)', background: 'white', borderRadius: '999px', padding: '8px 12px', cursor: 'pointer' },
+  count: { color: 'var(--os-color-muted)', fontSize: '13px', justifySelf: 'start' },
+  paginationRow: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap' },
+  pageBtn: { border: '1px solid var(--os-color-border)', background: 'white', borderRadius: '999px', padding: '8px 12px', cursor: 'pointer', color: 'var(--os-color-text)' },
+  pageMeta: { color: 'var(--os-color-muted)', fontSize: '13px' },
 };
 
 

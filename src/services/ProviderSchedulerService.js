@@ -121,8 +121,8 @@ export class ProviderSchedulerService {
 
   async markAsIdle(provider) {
     const interval =
-      provider.interval_minutes || 240;
-
+    provider.interval_minutes || 240;  
+    
     const nextExecution =
       new Date(
         Date.now() +

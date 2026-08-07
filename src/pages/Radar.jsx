@@ -19,6 +19,7 @@ import { createRadarStyles } from "./radarStyles";
 import { runImovirtualSync } from "../providers/services/providers/providerSyncRunner";
 import { canExecuteSync } from "../providers/services/providers/providerSyncService";
 import SyncProgressModal from "../components/radar/SyncProgressModal";
+import SyncPreparationModal from "../components/radar/SyncPreparationModal";
 import { getProviderSyncStatus } from "../providers/services/providers/providerSyncService";
 
 function buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData }) {
@@ -73,6 +74,7 @@ export default function Radar() {
 
   const [providerSyncStatus, setProviderSyncStatus] = useState(null);
   const [remainingMs, setRemainingMs] = useState(0);
+  const [syncPreparationOpen, setSyncPreparationOpen] = useState(false);
 
   const TIMELINE_PAGE_SIZE = 5;
   const styles = useMemo(() => createRadarStyles(theme), [theme]);
@@ -224,7 +226,14 @@ export default function Radar() {
     }, 2500);
   }, [originalCloseDetail, restoreSelectedOpportunityRow]);
 
-  const handleManualSync = useCallback(async () => {
+  const handleManualSync = useCallback(() => {
+    setSyncPreparationOpen(true);
+  }, []);
+
+  const handleConfirmSyncPreparation = useCallback(async (config) => {
+    setSyncPreparationOpen(false);
+    await waitForRenderCommit();
+
     const canSync = await canExecuteSync("imovirtual");
     if (!canSync) {
       notifyInfo("Atualização disponível apenas de 4 em 4 horas.");
@@ -234,7 +243,7 @@ export default function Radar() {
     notifyInfo("Atualizando oportunidades...");
 
     try {
-      await runImovirtualSync();
+      await runImovirtualSync(config);
 
       await reload();
       await waitForRenderCommit();
@@ -774,6 +783,11 @@ export default function Radar() {
         </section>
       ) : null}
 
+      <SyncPreparationModal
+        open={syncPreparationOpen}
+        onClose={() => setSyncPreparationOpen(false)}
+        onConfirm={handleConfirmSyncPreparation}
+      />
       <SyncProgressModal />
     </div>
   );

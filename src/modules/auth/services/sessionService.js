@@ -139,15 +139,25 @@ async function createSessionRecord(context = {}) {
 function bindActivityTracking(context = {}) {
   if (typeof window === "undefined" || isTrackingStarted) return;
 
+  // Marca o início do tracking para que o timeout não expire imediatamente.
+  //trackerLastFlushAt = Date.now();
+
   const flushActivity = async () => {
     const sessionId = getStoredSessionId();
     if (!sessionId) return;
 
     const now = Date.now();
+
     if (now - trackerLastFlushAt < 30000) return;
 
-    trackerLastFlushAt = now;
-    await updateSessionActivity({ sessionId, userId: context.userId || null });
+    const result = await updateSessionActivity({
+      sessionId,
+      userId: context.userId || null,
+    });
+
+    if (result.ok) {
+      trackerLastFlushAt = now;
+    }
   };
 
   const events = ["click", "keydown", "mousemove", "scroll", "touchstart"];
@@ -156,6 +166,8 @@ function bindActivityTracking(context = {}) {
   });
 
   document.addEventListener("visibilitychange", () => {
+    console.log("[TIMEOUT][VISIBILITY]", document.visibilityState);
+    
     if (document.visibilityState === "visible") {
       flushActivity();
     }
@@ -326,4 +338,30 @@ export function startSessionActivityTracking(
   context = {}
 ) {
   bindActivityTracking(context);
+}
+
+export function getLastActivityTimestamp() {
+  return trackerLastFlushAt;
+}
+
+export async function expireSessionOnTimeout(context = {}) {
+  console.log("[TIMEOUT][S1] Enter");
+  const sessionId = context.sessionId || getStoredSessionId();
+  if (!sessionId) return { ok: false, reason: "missing_session" };
+
+  const { data, error } = await supabase
+    .from(USER_SESSIONS_TABLE)
+    .update({
+      status: "expired",
+      logout_at: nowIso(),
+      updated_at: nowIso(),
+      metadata: { terminated_reason: "idle_timeout" }
+    })
+    .eq("id", sessionId)
+    .eq("status", "active");
+
+  console.log("[TIMEOUT][S2] Update finished", { error, data });
+  clearSessionContext();
+  console.log("[TIMEOUT][S3] Exit");
+  return { ok: !error, error };
 }

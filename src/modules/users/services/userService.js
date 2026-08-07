@@ -617,42 +617,6 @@ export async function repararAssociacaoAuthUtilizador({ usuarioId, email, curren
   };
 }
 
-export async function listarSessoesPorUtilizador({ perfilId, authUserId, limit = 50, currentUser = null }) {
-  if (!perfilId && !authUserId) return { data: [], error: null };
-  const empresaId = resolveEmpresaIdFromContext(currentUser);
-  if (!hasEmpresaId(empresaId)) {
-    warnMissingEmpresaId();
-    return { data: [], error: null };
-  }
-
-  let query = applyEmpresaScope(supabase
-    .from("user_sessions")
-    .select("id,user_id,empresa_id,status,ip_address,user_agent,device,login_at,last_activity_at,logout_at,updated_at")
-  , empresaId)
-    .order("login_at", { ascending: false })
-    .limit(limit);
-
-  return applyUserFilter(query, { perfilId, authUserId });
-}
-
-export async function listarAuditoriaPorUtilizador({ perfilId, authUserId, limit = 50, currentUser = null }) {
-  if (!perfilId && !authUserId) return { data: [], error: null };
-  const empresaId = resolveEmpresaIdFromContext(currentUser);
-  if (!hasEmpresaId(empresaId)) {
-    warnMissingEmpresaId();
-    return { data: [], error: null };
-  }
-
-  let query = applyEmpresaScope(supabase
-    .from("audit_logs")
-    .select("id,user_id,event_type,status,modulo,entidade,entidade_id,metadata,created_at")
-  , empresaId)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  return applyUserFilter(query, { perfilId, authUserId });
-}
-
 export async function obterResumoAtividadePorUtilizador({ perfilId, authUserId, currentUser = null }) {
   if (!perfilId && !authUserId) {
     return {

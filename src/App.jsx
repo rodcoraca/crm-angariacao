@@ -29,6 +29,8 @@ import {
   registerUserSession,
   startSessionActivityTracking,
   updateSessionActivity,
+  getLastActivityTimestamp,
+  expireSessionOnTimeout,
 } from "./modules/auth/services";
 import { AuthProvider } from "./modules/auth/context";
 import { TenantProvider } from "./modules/tenant";
@@ -43,6 +45,8 @@ import { NavigationGuard } from "./shared/navigation";
 const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
 const ACTIVE_VIEW_STORAGE_KEY = "osflow_active_view";
 const COCKPIT_VIEW = "home";
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+const IDLE_CHECK_INTERVAL_MS = 30 * 1000;
 const RESTORABLE_VIEWS = new Set([
   "home",
   "radar",
@@ -133,6 +137,57 @@ export default function App() {
 
     window.sessionStorage.setItem(ACTIVE_VIEW_STORAGE_KEY, view);
   }, [view]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const intervalId = window.setInterval(async () => {
+      console.log("[TIMEOUT][1] Tick");
+
+      console.log("[TIMEOUT][CHECK]", {
+        now: Date.now(),
+        lastActivity: getLastActivityTimestamp(),
+        diff: Date.now() - getLastActivityTimestamp(),
+        timeout: IDLE_TIMEOUT_MS,
+      });
+      if (!sessionInitializedRef.current || !latestUserRef.current) return;
+
+      const lastActivity = getLastActivityTimestamp();
+      if (!lastActivity || Date.now() - lastActivity <= IDLE_TIMEOUT_MS) return;
+
+      console.log("[TIMEOUT][2] Expired");
+      window.clearInterval(intervalId);
+
+      const actorId = latestUserRef.current?.perfil_id || latestUserRef.current?.id || null;
+
+      console.log("[TIMEOUT][3] Before expireSessionOnTimeout");
+      await expireSessionOnTimeout();
+      console.log("[TIMEOUT][4] After expireSessionOnTimeout");
+
+      if (actorId) {
+        await registrarNavegacao({
+          userId: actorId,
+          acao: "SESSION_TIMEOUT",
+          detalhes: "Sessão terminada automaticamente por inatividade."
+        });
+      }
+
+      notifyInfo("A sua sessão expirou por inatividade.");
+      isManualLogoutRef.current = true;
+
+      sessionInitializedRef.current = false;
+      sessionInitializedUserRef.current = null;
+      activityTrackingStartedRef.current = false;
+      sessionRegistrationInFlightRef.current = null;
+      hydrationInFlightRef.current = null;
+
+      console.log("[TIMEOUT][5] Before signOut");
+      await supabase.auth.signOut();
+      console.log("[TIMEOUT][6] After signOut");
+    }, IDLE_CHECK_INTERVAL_MS);
+
+    return () => window.clearInterval(intervalId);
+  }, [user]);
 
   function reportAuthError(error, origem) {
     console.error(`[${origem}]`, error);
@@ -491,9 +546,13 @@ export default function App() {
       }
 
       if (event === "SIGNED_IN") {
-        // O evento pode chegar antes do callback do formulário de login.
-        // Não restaura a última vista num novo login.
-        entrarNoCockpit("nova sessão");
+        // Só navega para o cockpit num login genuíno; ignora revalidações de token/foco.
+        const isSessionRestore =
+          bootstrapInFlightRef.current ||
+          (sessionInitializedRef.current && sessionInitializedUserRef.current === session?.user?.id);
+        if (!isSessionRestore) {
+          entrarNoCockpit("nova sessão");
+        }
       }
 
       if (!session?.user) {

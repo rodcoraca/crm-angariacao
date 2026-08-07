@@ -8,7 +8,7 @@ const PROVIDER = "imovirtual";
  * Runner intermediário para sincronização manual do Imovirtual.
  * Toda a comunicação de progresso é emitida através do PSE (ADR-003).
  */
-export async function runImovirtualSync() {
+export async function runImovirtualSync(config = {}) {
   const startedAt = new Date().toISOString();
 
   providerSyncEngine.emit(SyncState.PREPARING, PROVIDER, { startedAt });
@@ -38,10 +38,18 @@ export async function runImovirtualSync() {
     providerSyncEngine.emit(SyncState.CONNECTING, PROVIDER, { startedAt });
 
     providerSyncEngine.emit(SyncState.FETCHING, PROVIDER, { startedAt });
+
+    console.log("[SYNC] invoke body", {
+      provider: PROVIDER,
+      empresaId,
+      ...config
+    });
+
     const { data, error } = await supabase.functions.invoke("provider-sync", {
       body: {
         provider: PROVIDER,
-        empresaId
+        empresaId,
+        ...config
       }
     });
 
