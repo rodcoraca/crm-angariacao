@@ -11,7 +11,7 @@ const PROVIDER = "imovirtual";
 export async function runImovirtualSync(config = {}) {
   const startedAt = new Date().toISOString();
 
-  providerSyncEngine.emit(SyncState.PREPARING, PROVIDER, { startedAt });
+  providerSyncEngine.emit(SyncState.PREPARING, PROVIDER, { startedAt, ...config });
 
   console.log("[SYNC]", {
     phase: "runImovirtualSync_start",
@@ -36,13 +36,13 @@ export async function runImovirtualSync(config = {}) {
     }
 
     providerSyncEngine.emit(SyncState.CONNECTING, PROVIDER, { startedAt });
-
     providerSyncEngine.emit(SyncState.FETCHING, PROVIDER, { startedAt });
 
-    console.log("[SYNC] invoke body", {
+    console.log("[ProviderSync][SEARCH]", {
       provider: PROVIDER,
-      empresaId,
-      ...config
+      districts: config.districts,
+      includePrivateOwners: config.includePrivateOwners,
+      includeProfessionalOwners: config.includeProfessionalOwners
     });
 
     const { data, error } = await supabase.functions.invoke("provider-sync", {
@@ -62,28 +62,34 @@ export async function runImovirtualSync(config = {}) {
       throw new Error(error.message || "Provider Sync indisponível.");
     }
 
-    if (!data?.success) {
+    if (!data || data.success !== true) {
       providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
         startedAt,
         finishedAt: new Date().toISOString(),
-        error: data?.message
+        error: data?.message || "Provider Sync indisponível."
       });
       throw new Error(data?.message || "Provider Sync indisponível.");
     }
 
+    const result = data;
+
+    if (!result) {
+      throw new Error("Provider Sync indisponível.");
+    }
+
     const stats = {
       startedAt,
-      processed:   data.discovered || 0,
-      total:       data.discovered || 0,
-      imported:    data.created    || 0,
+      processed:   result.discovered || 0,
+      total:       result.discovered || 0,
+      imported:    result.created    || 0,
       updated:     0,
-      ignored:     data.skipped    || 0,
-      errors:      (data.errors    || []).length,
-      elapsedTime: data.executionSeconds || 0
+      ignored:     result.skipped    || 0,
+      errors:      (result.errors    || []).length,
+      elapsedTime: result.executionSeconds || 0
     };
 
     providerSyncEngine.emit(SyncState.PROCESSING, PROVIDER, stats);
-    providerSyncEngine.emit(SyncState.FINALIZING, PROVIDER, { ...stats, result: data });
+    providerSyncEngine.emit(SyncState.FINALIZING, PROVIDER, { ...stats, result });
 
     console.log("[SYNC]", {
       phase: "runImovirtualSync_success",
@@ -93,9 +99,9 @@ export async function runImovirtualSync(config = {}) {
     providerSyncEngine.emit(SyncState.COMPLETED, PROVIDER, {
       ...stats,
       finishedAt: new Date().toISOString(),
-      result: data
+      result
     });
-    return data;
+    return result;
   } catch (error) {
     if (providerSyncEngine.state !== SyncState.FAILED) {
       providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {

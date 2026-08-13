@@ -169,9 +169,12 @@ function applyRadarFilters(query, filters = {}) {
   if (filters.estado === "importado") {
     query = query.eq("imported", true);
   } else if (filters.estado === "novo") {
-    query = query
-      .or("imported.is.null,imported.eq.false")
-      .or("status.is.null,status.neq.ignored");
+    query = query.or(
+      "and(imported.is.null,status.is.null)," +
+      "and(imported.is.null,status.neq.ignored)," +
+      "and(imported.eq.false,status.is.null)," +
+      "and(imported.eq.false,status.neq.ignored)"
+    );
   } else if (filters.estado === "ignorado") {
     query = query.eq("status", "ignored");
   } else {
@@ -210,12 +213,11 @@ export class RadarRepository {
     }
 
     try {
-      const providerLeadsQuery = applyEmpresaScope(
-        supabase.from("provider_leads").select("*"),
-        empresaId
-      );
-
-      const { data: providerLeads, error: providerError } = await fetchAllProviderLeads(providerLeadsQuery);
+      const { data: providerLeads, error: providerError } = await supabase
+        .from("provider_leads")
+        .select("*, empresa_provider_listings!inner(empresa_id)")
+        .eq("empresa_provider_listings.empresa_id", empresaId)
+        .eq("provider_active", true);
 
       if (providerError) {
         console.log("Erro Provider:", providerError?.message || providerError);
@@ -250,8 +252,8 @@ export class RadarRepository {
     const mkBase = () =>
       supabase
         .from("provider_leads")
-        .select("*", { count: "exact", head: true })
-        .eq("empresa_id", empresaId)
+        .select("*, empresa_provider_listings!inner(empresa_id)", { count: "exact", head: true })
+        .eq("empresa_provider_listings.empresa_id", empresaId)
         .eq("provider_active", true);
 
     const [
@@ -280,38 +282,24 @@ export class RadarRepository {
     const empresaId = await resolveEmpresaId();
     if (!empresaId) return { data: [], page, pageSize, total: 0 };
 
-    const from = (page - 1) * pageSize;
-    const to = from + pageSize - 1;
-    console.log("[Radar Repository] getPage recebeu | page:", page, "| pageSize:", pageSize, "| from:", from, "| to:", to);
-
-    let query = supabase
-      .from("provider_leads")
-      .select("*", { count: "exact" })
-      .eq("empresa_id", empresaId)
-      .eq("provider_active", true);
-
-    query = applyRadarFilters(query, filters);
-
-    // Reproduces Radar.jsx sort: created_at_first > published_at > created_at, all DESC
-    query = query
-      .order("created_at_first", { ascending: false, nullsFirst: false })
-      .order("published_at", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false, nullsFirst: false })
-      .range(from, to);
-
-    const { data, count, error } = await query;
+    const { data, error } = await supabase.rpc("radar_get_page", {
+      p_empresa_id: empresaId,
+      p_page: page,
+      p_page_size: pageSize,
+      p_filters: filters || {}
+    });
 
     if (error) {
       console.warn("[Radar Repository] getPage error:", error);
       return { data: [], page, pageSize, total: 0 };
     }
 
-    console.log("[Radar Repository] getPage resultado | total:", count, "| rows devolvidas:", (data ?? []).length);
+    const rows = Array.isArray(data) ? data : [];
     return {
-      data: (data ?? []).map(mapProviderLeadToOpportunity),
+      data: rows.map(mapProviderLeadToOpportunity),
       page,
       pageSize,
-      total: count ?? 0
+      total: rows[0]?.total_count ?? 0
     };
   }
 

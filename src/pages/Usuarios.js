@@ -21,6 +21,7 @@ import UserActivitySection from '../components/users/UserActivitySection';
 import UserOrganizationSection from '../components/users/UserOrganizationSection';
 import UserPreferencesSection from '../components/users/UserPreferencesSection';
 import { criarUsuariosViewModel } from '../viewmodels/usuariosViewModel';
+import { notifySuccess } from '../components/ui/feedbackBus';
 
 const USER_STEPS = [
   { key: 'lista', label: 'Lista de Utilizadores' },
@@ -428,10 +429,23 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
     }
 
     if (resultado?.error) {
-      setErro(resultado.error.message || 'Falha ao guardar utilizador.');
+      if (resultado.error.code === 'email_already_exists') {
+        setErro(
+          <>
+            <strong>E-mail já registado</strong>
+            <br />
+            Já existe uma conta associada a este endereço de e-mail.
+            <br /><br />
+            Utilize outro endereço de e-mail ou utilize a opção "Reenviar Convite", caso pretenda reenviar a ativação da conta existente.
+          </>
+        );
+      } else {
+        setErro(resultado.error.message || 'Falha ao guardar utilizador.');
+      }
       return;
     }
 
+    notifySuccess(modoEdicao ? 'Utilizador alterado com sucesso.' : 'Utilizador inserido com sucesso.');
     resetForm();
     await carregarUsuarios();
     setEtapaAtiva('lista');

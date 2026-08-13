@@ -64,9 +64,9 @@ export function buildImovirtualSearchUrls({
       const url = new URL(`/${pathParts.join("/")}`, BASE_URL);
 
       if (includePrivateOwners && !includeProfessionalOwners) {
-        url.searchParams.set("ownerTypeSingleSelect[0]", OWNER_TYPES.PRIVATE);
+        url.searchParams.set("ownerTypeSingleSelect", OWNER_TYPES.PRIVATE);
       } else if (!includePrivateOwners && includeProfessionalOwners) {
-        url.searchParams.set("ownerTypeSingleSelect[0]", OWNER_TYPES.PROFESSIONAL);
+        url.searchParams.set("ownerTypeSingleSelect", OWNER_TYPES.PROFESSIONAL);
       }
 
       urls.push(url.toString());

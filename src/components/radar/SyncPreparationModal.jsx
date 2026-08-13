@@ -26,6 +26,7 @@ export default function SyncPreparationModal({
   const [includePrivateOwners, setIncludePrivateOwners] = useState(true);
   const [includeProfessionalOwners, setIncludeProfessionalOwners] = useState(true);
   const [saveAsDefault, setSaveAsDefault] = useState(false);
+  const [confirming, setConfirming] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -114,24 +115,31 @@ export default function SyncPreparationModal({
       : [...current, district]);
   }
 
-  function handleConfirm() {
-    if (saveAsDefault) {
-      void saveProfile(provider, {
-        districts: selectedDistricts,
-        advertisers: {
-          private: includePrivateOwners,
-          professional: includeProfessionalOwners
-        }
-      });
-    }
+  async function handleConfirm() {
+    if (confirming) return;
+    setConfirming(true);
 
-    onConfirm?.({
-      provider,
-      districts: selectedDistricts,
-      includePrivateOwners,
-      includeProfessionalOwners,
-      saveAsDefault
-    });
+    try {
+      if (saveAsDefault) {
+        await saveProfile(provider, {
+          districts: selectedDistricts,
+          advertisers: {
+            private: includePrivateOwners,
+            professional: includeProfessionalOwners
+          }
+        });
+      }
+
+      await onConfirm?.({
+        provider,
+        districts: selectedDistricts,
+        includePrivateOwners,
+        includeProfessionalOwners,
+        saveAsDefault
+      });
+    } finally {
+      setConfirming(false);
+    }
   }
 
   const sectionStyle = {
@@ -175,7 +183,8 @@ export default function SyncPreparationModal({
           <Button
             variant="secondary"
             onClick={handleConfirm}
-            disabled={loadingDistricts || Boolean(districtsError)}
+            disabled={loadingDistricts || Boolean(districtsError) || confirming}
+            loading={confirming}
           >
             Sincronizar
           </Button>
@@ -185,6 +194,26 @@ export default function SyncPreparationModal({
       <p style={{ margin: 0, color: theme.colors.muted, fontSize: theme.typography.body.fontSize }}>
         Seleccione o âmbito desta sincronização.
       </p>
+
+      {!loadingDistricts && !districtsError ? (
+        <p style={{
+          margin: `${theme.spacing.xs} 0 0`,
+          fontSize: theme.typography?.caption?.fontSize ?? "0.8rem",
+          color: theme.colors.muted
+        }}>
+          {[
+            providers.find((p) => p.value === provider)?.label || provider,
+            selectedDistricts.length > 0 ? selectedDistricts.join(", ") : null,
+            (includePrivateOwners && includeProfessionalOwners)
+              ? "Particulares e Profissionais"
+              : includePrivateOwners
+                ? "Particulares"
+                : includeProfessionalOwners
+                  ? "Profissionais"
+                  : null
+          ].filter(Boolean).join(" \u203a ")}
+        </p>
+      ) : null}
 
       <section style={sectionStyle} aria-labelledby="sync-provider-label">
         <label id="sync-provider-label" style={{ display: "block", marginBottom: theme.spacing.xs, fontWeight: 600 }}>

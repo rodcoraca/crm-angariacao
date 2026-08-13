@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { listarAtividadeUtilizador, listarUtilizadoresIdentityAccess } from '../modules/audit/services';
-console.log("LOGS PAGE LOADED");
 const PAGE_SIZE = 50;
 
 export default function Logs({ modo = 'geral', onModoChange, currentUser = null }) {

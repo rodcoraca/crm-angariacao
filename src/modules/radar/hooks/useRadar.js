@@ -15,7 +15,6 @@ export function useRadar() {
   const [pageSize] = useState(20);
 
   const reload = useCallback(async ({ page: _page, pageSize: _pageSize, filters: _filters, sort: _sort } = {}) => {
-    console.log("[Radar Hook] reload recebeu | page:", _page, "| pageSize:", _pageSize);
     setLoading(true);
     setError(null);
 

@@ -16,25 +16,28 @@ LANGUAGE sql
 STABLE
 SECURITY INVOKER
 AS $$
-  -- Um único scan via CTE MATERIALIZED; os três DISTINCT operam sobre o resultado em memória.
   WITH scope AS MATERIALIZED (
-    SELECT district, city, provider
-    FROM public.provider_leads
-    WHERE empresa_id     = p_empresa_id
-      AND provider_active = true
-      -- Estado mapeado para colunas físicas (espelho de normalizeProviderEstado)
+    SELECT pl.district, pl.city, pl.provider
+    FROM public.provider_leads pl
+    WHERE pl.provider_active = true
+      AND EXISTS (
+        SELECT 1
+        FROM public.empresa_provider_listings epl
+        WHERE epl.empresa_id = p_empresa_id
+          AND epl.provider_lead_id = pl.id
+      )
       AND CASE
-            WHEN p_estado = 'importado' THEN (imported = true)
-            WHEN p_estado = 'novo'      THEN ((imported IS NULL OR imported = false)
-                                              AND (status IS NULL OR status != 'ignored'))
-            WHEN p_estado = 'ignorado'  THEN (status = 'ignored')
-            ELSE (status IS NULL OR status != 'ignored')
+            WHEN p_estado = 'importado' THEN (pl.imported = true)
+            WHEN p_estado = 'novo'      THEN ((pl.imported IS NULL OR pl.imported = false)
+                                              AND (pl.status IS NULL OR pl.status != 'ignored'))
+            WHEN p_estado = 'ignorado'  THEN (pl.status = 'ignored')
+            ELSE (pl.status IS NULL OR pl.status != 'ignored')
           END
-      AND (p_district  IS NULL OR p_district  = 'todos' OR district        =  p_district)
-      AND (p_provider  IS NULL OR p_provider  = 'todos' OR provider        =  p_provider)
-      AND (p_is_private IS NULL                         OR is_private_owner = p_is_private)
-      AND (p_date_after  IS NULL OR COALESCE(created_at_first, detected_at) >= p_date_after)
-      AND (p_date_before IS NULL OR COALESCE(created_at_first, detected_at) <= p_date_before)
+      AND (p_district  IS NULL OR p_district  = 'todos' OR pl.district        =  p_district)
+      AND (p_provider  IS NULL OR p_provider  = 'todos' OR pl.provider        =  p_provider)
+      AND (p_is_private IS NULL                         OR pl.is_private_owner = p_is_private)
+      AND (p_date_after  IS NULL OR COALESCE(pl.created_at_first, pl.detected_at) >= p_date_after)
+      AND (p_date_before IS NULL OR COALESCE(pl.created_at_first, pl.detected_at) <= p_date_before)
   )
   SELECT json_build_object(
     'districts', COALESCE(

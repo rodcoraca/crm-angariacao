@@ -5,6 +5,7 @@ import {
   providerSyncEngine,
   SyncState
 } from "../../shared/provider-engine/sync/ProviderSyncEngine";
+import { runImovirtualSync } from "../../providers/services/providers/providerSyncRunner";
 
 const WORKFLOW_STEPS = [
   { state: SyncState.PREPARING,  label: "Preparação" },
@@ -47,7 +48,23 @@ const ACTIVE_STATES = new Set([
   SyncState.FINALIZING,
 ]);
 
-const AUTO_CLOSE_COMPLETED_MS = 1200;
+function buildQueryLabel(config) {
+  if (!config) return null;
+  const provLabel = config.provider
+    ? config.provider.charAt(0).toUpperCase() + config.provider.slice(1)
+    : "";
+  const districtList = Array.isArray(config.districts) && config.districts.length > 0
+    ? config.districts.map(d => d.charAt(0).toUpperCase() + d.slice(1)).join(", ")
+    : null;
+  const priv = config.includePrivateOwners !== false;
+  const prof = config.includeProfessionalOwners !== false;
+  const owners = (priv && prof)
+    ? "Particulares e Profissionais"
+    : priv ? "Particulares"
+    : prof ? "Profissionais"
+    : null;
+  return [provLabel, districtList, owners].filter(Boolean).join(" › ");
+}
 
 function formatElapsed(seconds) {
   const mm = String(Math.floor(seconds / 60)).padStart(2, "0");
@@ -59,10 +76,30 @@ export default function SyncProgressModal() {
   const theme = useTheme();
   const [open, setOpen] = useState(false);
   const [event, setEvent] = useState(null);
+  const [syncConfig, setSyncConfig] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [lastActiveIndex, setLastActiveIndex] = useState(-1);
-  const autoCloseTimerRef = useRef(null);
   const timerRef = useRef(null);
+
+  const currentState = event?.state ?? SyncState.IDLE;
+  const providerName = event?.provider ?? "";
+  const isBlocking   = ACTIVE_STATES.has(currentState);
+  const isCompleted  = currentState === SyncState.COMPLETED;
+  const isFailed     = currentState === SyncState.FAILED;
+
+  useEffect(() => {
+    if (!isBlocking) {
+      return undefined;
+    }
+
+    const handleBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [isBlocking]);
 
   useEffect(() => {
     const unsubscribe = providerSyncEngine.subscribe((incoming) => {
@@ -74,25 +111,21 @@ export default function SyncProgressModal() {
         return;
       }
 
+      if (incoming.state === SyncState.PREPARING && incoming.detail) {
+        setSyncConfig(incoming.detail);
+        setLastActiveIndex(-1);
+      }
+
       setOpen(true);
 
       const incomingIndex = STATE_INDEX[incoming.state] ?? -1;
       if (ACTIVE_STATES.has(incoming.state)) {
         setLastActiveIndex(incomingIndex);
       }
-
-      if (incoming.state === SyncState.COMPLETED) {
-        clearTimeout(autoCloseTimerRef.current);
-        autoCloseTimerRef.current = setTimeout(() => {
-          setOpen(false);
-          providerSyncEngine.reset();
-        }, AUTO_CLOSE_COMPLETED_MS);
-      }
     });
 
     return () => {
       unsubscribe();
-      clearTimeout(autoCloseTimerRef.current);
       clearInterval(timerRef.current);
     };
   }, []);
@@ -124,14 +157,20 @@ export default function SyncProgressModal() {
     return () => clearInterval(timerRef.current);
   }, [startedAt, finishedAt]);
 
-  const currentState = event?.state ?? SyncState.IDLE;
-  const providerName = event?.provider ?? "";
-  const isBlocking   = ACTIVE_STATES.has(currentState);
-  const isCompleted  = currentState === SyncState.COMPLETED;
-  const isFailed     = currentState === SyncState.FAILED;
   const currentIndex = STATE_INDEX[currentState] ?? -1;
   const workflowIndex = isFailed ? lastActiveIndex : currentIndex;
   const stateLabel   = STATE_LABEL[currentState] ?? "";
+
+  const queryLabel = buildQueryLabel(syncConfig) || providerName;
+
+  async function handleRetry() {
+    if (!syncConfig) return;
+    try {
+      await runImovirtualSync(syncConfig);
+    } catch (_) {
+      // estado FAILED emitido pelo runner
+    }
+  }
 
   const processed = event?.processed ?? 0;
   const total     = event?.total     ?? 0;
@@ -190,65 +229,112 @@ export default function SyncProgressModal() {
         closeOnBackdrop={false}
         hideCloseButton={isBlocking}
         onClose={isBlocking ? undefined : handleClose}
+        style={{
+          width: "min(100%, 420px)",
+          maxWidth: "min(90vw, 420px)"
+        }}
       >
-        {/* Provider + estado */}
-        {providerName ? (
+        {/* Resumo da consulta */}
+        {queryLabel ? (
           <p style={{
             margin: 0,
-            marginBottom: theme.spacing.xs,
+            marginBottom: theme.spacing.sm,
             fontSize: theme.typography?.caption?.fontSize ?? "0.8rem",
-            color: theme.colors.muted,
-            textTransform: "uppercase",
-            letterSpacing: "0.06em"
+            color: theme.colors.muted
           }}>
-            {providerName}
+            {queryLabel}
           </p>
         ) : null}
 
-        <div style={{
-          display: "flex",
-          alignItems: "center",
-          gap: theme.spacing.xs,
-          marginBottom: theme.spacing.sm
-        }}>
-          {isBlocking ? (
-            <span
-              aria-hidden="true"
-              style={{
-                display: "inline-block",
-                width: "14px",
-                height: "14px",
-                borderRadius: theme.borderRadius.full,
-                border: `2px solid ${theme.colors.statusInfoBorder}`,
-                borderTopColor: theme.colors.statusInfoText,
-                animation: "osflow-sync-spin 0.8s linear infinite",
-                flexShrink: 0
-              }}
-            />
-          ) : null}
-          <p style={{
-            margin: 0,
-            fontSize: theme.typography?.body?.fontSize ?? "0.95rem",
-            fontWeight: isCompleted ? 600 : 400,
-            color: isCompleted
-              ? theme.colors.success
-              : isFailed
-                ? theme.colors.danger
-                : theme.colors.text
+        {isBlocking ? (
+          <div style={{
+            display: "grid",
+            gap: theme.spacing.xs,
+            marginBottom: theme.spacing.sm,
+            padding: `${theme.spacing.sm} ${theme.spacing.md}`,
+            borderRadius: theme.borderRadius.md,
+            background: theme.colors.surfaceSoft,
+            border: `1px solid ${theme.colors.statusInfoBorder}`,
+            overflowWrap: "anywhere",
+            wordBreak: "break-word"
           }}>
-            {isCompleted ? "✓ " : ""}{stateLabel}
-          </p>
-        </div>
-
-        {isFailed && event?.error ? (
-          <p style={{
-            margin: `-${theme.spacing.xs} 0 ${theme.spacing.sm}`,
-            color: theme.colors.danger,
-            fontSize: theme.typography?.caption?.fontSize ?? "0.8rem"
+            <div style={{
+              display: "flex",
+              alignItems: "center",
+              gap: theme.spacing.xs,
+              minWidth: 0
+            }}>
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-block",
+                  width: "14px",
+                  height: "14px",
+                  borderRadius: theme.borderRadius.full,
+                  border: `2px solid ${theme.colors.statusInfoBorder}`,
+                  borderTopColor: theme.colors.statusInfoText,
+                  animation: "osflow-sync-spin 0.8s linear infinite",
+                  flexShrink: 0
+                }}
+              />
+              <p style={{
+                margin: 0,
+                fontSize: theme.typography?.body?.fontSize ?? "0.95rem",
+                fontWeight: 600,
+                color: theme.colors.text,
+                minWidth: 0,
+                overflowWrap: "anywhere"
+              }}>
+                A atualização está em andamento.
+              </p>
+            </div>
+            <p style={{
+              margin: 0,
+              fontSize: theme.typography?.caption?.fontSize ?? "0.8rem",
+              color: theme.colors.muted,
+              lineHeight: 1.5,
+              overflowWrap: "anywhere",
+              wordBreak: "break-word"
+            }}>
+              Pode demorar devido ao número de oportunidades encontradas. Não feche a janela/sistema nem atualize a página durante o processo.
+            </p>
+          </div>
+        ) : (
+          <div style={{
+            display: "flex",
+            alignItems: "center",
+            gap: theme.spacing.xs,
+            marginBottom: theme.spacing.sm
           }}>
-            {event.error}
-          </p>
-        ) : null}
+            {isBlocking ? (
+              <span
+                aria-hidden="true"
+                style={{
+                  display: "inline-block",
+                  width: "14px",
+                  height: "14px",
+                  borderRadius: theme.borderRadius.full,
+                  border: `2px solid ${theme.colors.statusInfoBorder}`,
+                  borderTopColor: theme.colors.statusInfoText,
+                  animation: "osflow-sync-spin 0.8s linear infinite",
+                  flexShrink: 0
+                }}
+              />
+            ) : null}
+            <p style={{
+              margin: 0,
+              fontSize: theme.typography?.body?.fontSize ?? "0.95rem",
+              fontWeight: isCompleted ? 600 : 400,
+              color: isCompleted
+                ? theme.colors.success
+                : isFailed
+                  ? theme.colors.danger
+                  : theme.colors.text
+            }}>
+              {isCompleted ? "✓ " : ""}{stateLabel}
+            </p>
+          </div>
+        )}
 
         <hr style={dividerStyle} />
 
@@ -399,20 +485,40 @@ export default function SyncProgressModal() {
         </div>
 
         {/* Failed: close button */}
-        {isFailed ? (
-          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        {(isCompleted || isFailed) && !isBlocking ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.spacing.sm }}>
+            {isFailed ? (
+              <button
+                type="button"
+                onClick={handleRetry}
+                style={{
+                  padding: `${theme.spacing.xs} ${theme.spacing.md}`,
+                  borderRadius: theme.borderRadius.sm,
+                  border: "none",
+                  background: theme.colors.success,
+                  color: "#fff",
+                  fontSize: theme.typography?.body?.fontSize ?? "0.9rem",
+                  cursor: "pointer",
+                  fontFamily: "inherit",
+                  fontWeight: 600
+                }}
+              >
+                Tentar novamente
+              </button>
+            ) : null}
             <button
               type="button"
               onClick={handleClose}
               style={{
                 padding: `${theme.spacing.xs} ${theme.spacing.md}`,
                 borderRadius: theme.borderRadius.sm,
-                border: `1px solid ${theme.colors.border}`,
-                background: theme.colors.surface,
-                color: theme.colors.text,
+                border: "none",
+                background: theme.colors.danger,
+                color: "#fff",
                 fontSize: theme.typography?.body?.fontSize ?? "0.9rem",
                 cursor: "pointer",
-                fontFamily: "inherit"
+                fontFamily: "inherit",
+                fontWeight: 600
               }}
             >
               Fechar

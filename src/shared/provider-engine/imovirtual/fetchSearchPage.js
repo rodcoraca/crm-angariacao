@@ -47,6 +47,7 @@ export async function fetchImovirtualSearchPage({
   return {
     html,
     fetchedAt: new Date().toISOString(),
-    statusCode: response.status
+    statusCode: response.status,
+    finalUrl: response.url
   };
 }

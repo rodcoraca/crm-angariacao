@@ -21,6 +21,8 @@ import { canExecuteSync } from "../providers/services/providers/providerSyncServ
 import SyncProgressModal from "../components/radar/SyncProgressModal";
 import SyncPreparationModal from "../components/radar/SyncPreparationModal";
 import { getProviderSyncStatus } from "../providers/services/providers/providerSyncService";
+import { providerSyncEngine, SyncState } from "../shared/provider-engine/sync/ProviderSyncEngine";
+import { useNavigationGuard } from "../shared/navigation";
 
 function buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData }) {
   const f = {};
@@ -75,6 +77,8 @@ export default function Radar() {
   const [providerSyncStatus, setProviderSyncStatus] = useState(null);
   const [remainingMs, setRemainingMs] = useState(0);
   const [syncPreparationOpen, setSyncPreparationOpen] = useState(false);
+  const [syncActive, setSyncActive] = useState(false);
+  const syncActiveRef = useRef(false);
 
   const TIMELINE_PAGE_SIZE = 5;
   const styles = useMemo(() => createRadarStyles(theme), [theme]);
@@ -108,6 +112,60 @@ export default function Radar() {
       void loadProviderSyncStatus();
     }
   }, [loading, loadProviderSyncStatus]);
+
+  useEffect(() => {
+    const refreshStatus = () => {
+      if (!loading) {
+        void loadProviderSyncStatus();
+      }
+    };
+
+    window.addEventListener("focus", refreshStatus);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        refreshStatus();
+      }
+    });
+
+    return () => {
+      window.removeEventListener("focus", refreshStatus);
+      document.removeEventListener("visibilitychange", refreshStatus);
+    };
+  }, [loading, loadProviderSyncStatus]);
+
+  useEffect(() => {
+    const syncStates = new Set([
+      SyncState.PREPARING,
+      SyncState.CONNECTING,
+      SyncState.FETCHING,
+      SyncState.PROCESSING,
+      SyncState.SAVING,
+      SyncState.FINALIZING
+    ]);
+
+    const updateSyncActive = (eventState) => {
+      const active = syncStates.has(eventState) || Boolean(providerSyncStatus?.sync_running);
+      syncActiveRef.current = active;
+      setSyncActive(active);
+    };
+
+    updateSyncActive(providerSyncEngine.state);
+
+    const unsubscribe = providerSyncEngine.subscribe((incoming) => {
+      updateSyncActive(incoming.state);
+    });
+
+    return () => unsubscribe();
+  }, [providerSyncStatus?.sync_running]);
+
+  useNavigationGuard({
+    isEditing: syncActive,
+    isEditingNow: () => syncActiveRef.current || Boolean(providerSyncStatus?.sync_running),
+    onSave: undefined,
+    onDiscard: undefined,
+    onCancelEditing: undefined,
+    markClean: undefined
+  });
 
   useEffect(() => {
     if (!providerSyncStatus?.next_execution) {
@@ -230,26 +288,38 @@ export default function Radar() {
     setSyncPreparationOpen(true);
   }, []);
 
-  const handleConfirmSyncPreparation = useCallback(async (config) => {
-    setSyncPreparationOpen(false);
-    await waitForRenderCommit();
+  const syncGuardRef = useRef(false);
 
-    const canSync = await canExecuteSync("imovirtual");
-    if (!canSync) {
-      notifyInfo("Atualização disponível apenas de 4 em 4 horas.");
+  const handleConfirmSyncPreparation = useCallback(async (config) => {
+    if (syncGuardRef.current) {
       return;
     }
 
-    notifyInfo("Atualizando oportunidades...");
+    syncGuardRef.current = true;
+    setSyncPreparationOpen(false);
 
     try {
-      await runImovirtualSync(config);
-
-      await reload();
       await waitForRenderCommit();
-      notifySuccess("Oportunidades atualizadas.");
-    } catch (error) {
-      notifyError("Falha ao sincronizar: " + (error.message || "Erro desconhecido"));
+
+      const canSync = await canExecuteSync("imovirtual");
+      if (!canSync) {
+        notifyInfo("Atualização disponível apenas de 4 em 4 horas.");
+        return;
+      }
+
+      notifyInfo("Atualizando oportunidades...");
+
+      try {
+        await runImovirtualSync(config);
+
+        await reload();
+        await waitForRenderCommit();
+        notifySuccess("Oportunidades atualizadas.");
+      } catch (error) {
+        notifyError("Falha ao sincronizar: " + (error.message || "Erro desconhecido"));
+      }
+    } finally {
+      syncGuardRef.current = false;
     }
   }, [reload, waitForRenderCommit]);
 

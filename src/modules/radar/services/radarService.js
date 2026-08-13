@@ -167,7 +167,6 @@ export class RadarService {
   }
 
   async getSnapshot({ page = 1, pageSize = 20, filters = {}, sort = null } = {}) {
-    console.log("[Radar Service] getSnapshot recebeu | page:", page, "| pageSize:", pageSize);
     const [summary, pageResult, filterOptions] = await Promise.all([
       this.repository.getSummary(filters),
       this.repository.getPage({ page, pageSize, filters, sort }),
@@ -332,7 +331,6 @@ export function clearRadarDataProvider() {
 }
 
 export async function fetchRadarSnapshot({ page = 1, pageSize = 20, filters = {}, sort = null } = {}) {
-  console.log("[Radar API] fetchRadarSnapshot recebeu | page:", page, "| pageSize:", pageSize);
   return radarService.getSnapshot({ page, pageSize, filters, sort });
 }
 

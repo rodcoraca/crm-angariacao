@@ -477,8 +477,6 @@ export default function App() {
 
         if (data?.session?.user) {
 
-          console.log("[BOOTSTRAP] sessão encontrada");
-
           const restoredEmpresaId = restoreEmpresaIdFromStorage();
           const bootstrapProfile = restoredEmpresaId ? { empresa_id: restoredEmpresaId } : null;
           const nextUser = montarUsuarioSessao(data.session.user, bootstrapProfile, data.session?.expires_at || null);

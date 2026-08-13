@@ -245,7 +245,6 @@ otp_expiry = 3600
 
 [auth.email.template.invite]
 subject = "Bem-vindo ao OSFlow – Ative a sua conta"
-content_path = "./templates/invite.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

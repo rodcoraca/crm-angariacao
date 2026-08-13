@@ -68,13 +68,16 @@ export default function Modal({
           padding: theme.layout.padding,
           width: "100%",
           maxWidth,
+          maxHeight: "calc(100vh - 32px)",
+          display: "flex",
+          flexDirection: "column",
           color: theme.colors.text,
           fontFamily: theme.typography.fontFamily,
           ...style
         }}
         onClick={(event) => event.stopPropagation()}
       >
-        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: theme.spacing.sm }}>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: theme.spacing.sm, flexShrink: 0 }}>
           {title ? <h3 style={{ margin: 0, marginBottom: theme.spacing.md, color: theme.colors.text, fontSize: theme.typography.cardTitle.fontSize, fontWeight: theme.typography.cardTitle.fontWeight }}>{title}</h3> : null}
           {!hideCloseButton ? (
             <button
@@ -97,8 +100,8 @@ export default function Modal({
             </button>
           ) : null}
         </div>
-        <div>{children}</div>
-        {footer ? <div style={{ marginTop: theme.spacing.md }}>{footer}</div> : null}
+        <div style={{ overflowY: "auto", flex: 1, minHeight: 0 }}>{children}</div>
+        {footer ? <div style={{ marginTop: theme.spacing.md, flexShrink: 0 }}>{footer}</div> : null}
       </div>
     </div>
   );

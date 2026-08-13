@@ -251,6 +251,21 @@ export async function guardarUsuarioComAuditoria({
       empresaId
     ));
   } else {
+    const inviteStatusResult = await getAuthUserInviteStatus(email);
+    
+    console.log("inviteStatusResult =", inviteStatusResult);
+    
+    if (inviteStatusResult.data?.exists) {
+      return {
+        error: {
+          code: "email_already_exists",
+          message: "Já existe uma conta associada a este endereço de e-mail. Utilize outro endereço de e-mail ou utilize a opção \"Reenviar Convite\", caso pretenda reenviar a ativação da conta existente."
+        }
+      };
+    }
+
+    console.log(">>> VAI CONTINUAR A CRIAÇÃO <<<");
+
     const { data: existingProfileByEmail, error: existingProfileError } = await applyEmpresaScope(
       supabase
         .from(USERS_TABLE)

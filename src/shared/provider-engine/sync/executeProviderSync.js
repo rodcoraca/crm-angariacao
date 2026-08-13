@@ -3,6 +3,7 @@ import { requireEmpresaId, warnMissingEmpresaId } from "../tenant/empresaContext
 const PRIVATE_OWNER_WINDOW_DAYS = 30;
 const AGENCY_WINDOW_DAYS = 7;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
+const CONCURRENCY_LIMIT = 10;
 
 function toDateOrNull(value) {
   if (!value) return null;
@@ -47,52 +48,18 @@ function isListingWithinWindow(listing, referenceDate) {
   return ageMs <= (maxWindowDays * DAY_IN_MS);
 }
 
-async function updateExistingListing({ supabaseClient, scopedEmpresaId, providerName, externalId, listing, syncStartedAt }) {
-  const nowIso = new Date().toISOString();
-  const updatePayload = {
-    price: listing.price ?? null,
-    short_description: listing.shortDescription || null,
-    owner_name: listing.ownerName || null,
-    updated_at: nowIso,
-    imported_at: nowIso,
-    provider_active: true,
-    last_seen_at: syncStartedAt
-  };
-
-  const baseUpdateQuery = supabaseClient
-    .from("provider_leads")
-    .update(updatePayload)
-    .eq("empresa_id", scopedEmpresaId)
-    .eq("provider", providerName)
-    .eq("external_id", externalId);
-
-  const { error } = await baseUpdateQuery;
-  if (!error) {
-    return null;
-  }
-
-  const importedAtMissing = /imported_at/i.test(String(error.message || ""));
-  if (!importedAtMissing) {
-    return error;
-  }
-
-  const fallbackPayload = {
-    price: updatePayload.price,
-    short_description: updatePayload.short_description,
-    owner_name: updatePayload.owner_name,
-    updated_at: updatePayload.updated_at,
-    provider_active: true,
-    last_seen_at: updatePayload.last_seen_at
-  };
-
-  const { error: fallbackError } = await supabaseClient
-    .from("provider_leads")
-    .update(fallbackPayload)
-    .eq("empresa_id", scopedEmpresaId)
-    .eq("provider", providerName)
-    .eq("external_id", externalId);
-
-  return fallbackError || null;
+// Runs async task functions with at most `limit` concurrent executions.
+async function runConcurrent(tasks, limit) {
+  const results = new Array(tasks.length);
+  const queue = tasks.map((task, i) => ({ task, i }));
+  const workers = Array.from({ length: Math.min(limit, tasks.length) }, async () => {
+    while (queue.length > 0) {
+      const { task, i } = queue.shift();
+      results[i] = await task();
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 export async function executeProviderSync({
@@ -145,85 +112,130 @@ export async function executeProviderSync({
 
   const scopedEmpresaId = requireEmpresaId(empresaId);
 
+  // Single batch lookup to identify all existing listings — eliminates per-listing SELECTs.
+  const existingMap = new Map(); // externalId → provider_lead_id
+  const listingByExtId = new Map(); // externalId → listing
+
   for (const listing of eligibleListings) {
     const externalId = String(listing?.externalId || "").trim();
     if (!externalId) {
       errors.push({ externalId: "unknown", error: "externalId em falta no listing." });
       continue;
     }
+    listingByExtId.set(externalId, listing);
+  }
 
-    const { data: existing, error: checkError } = await supabaseClient
+  const validExternalIds = [...listingByExtId.keys()];
+
+  // trivially ok when there is nothing to look up
+  let lookupOk = validExternalIds.length === 0;
+
+  if (validExternalIds.length > 0) {
+    const { data: foundRows, error: lookupError } = await supabaseClient
       .from("provider_leads")
-      .select("id")
-      .eq("empresa_id", scopedEmpresaId)
+      .select("id, external_id")
       .eq("provider", providerName)
-      .eq("external_id", externalId)
-      .maybeSingle();
+      .in("external_id", validExternalIds);
 
-    if (checkError) {
-      errors.push({ externalId, error: checkError.message });
-      continue;
-    }
-
-    if (existing) {
-      const updateError = await updateExistingListing({
-        supabaseClient,
-        scopedEmpresaId,
-        providerName,
-        externalId,
-        listing,
-        syncStartedAt: syncStartedAtIso
-      });
-
-      if (updateError) {
-        errors.push({ externalId, error: updateError.message });
+    if (lookupError) {
+      for (const externalId of validExternalIds) {
+        errors.push({ externalId, error: lookupError.message });
       }
-
-      skipped += 1;
-      continue;
-    }
-
-    const score = typeof scoreCalculator === "function"
-      ? scoreCalculator(listing)
-      : undefined;
-
-    const payload = {
-      empresa_id: scopedEmpresaId,
-      provider: providerName,
-      external_id: externalId,
-      title: listing.title || null,
-      price: listing.price ?? null,
-      location: [listing.city, listing.district].filter(Boolean).join(", ") || null,
-      url: listing.url || null,
-      area: listing.area ?? null,
-      rooms: listing.rooms ?? null,
-      city: listing.city || null,
-      district: listing.district || null,
-      owner_name: listing.ownerName || null,
-      is_private_owner: Boolean(listing.isPrivateOwner),
-      created_at_first: toIsoOrNull(listing.createdAtFirst),
-      short_description: listing.shortDescription || null,
-      source: listing.source || null,
-      status: "new",
-      detected_at: toIsoOrNull(fetchedAt) || (detectedAtFallbackNow ? new Date().toISOString() : null),
-      provider_active: true,
-      last_seen_at: syncStartedAtIso,
-      raw_data: listing
-    };
-
-    if (score !== undefined) {
-      payload.score = score;
-    }
-
-    const { error: insertError } = await supabaseClient
-      .from("provider_leads")
-      .insert([payload]);
-
-    if (insertError) {
-      errors.push({ externalId, error: insertError.message });
     } else {
-      created += 1;
+      lookupOk = true;
+      for (const row of (foundRows || [])) {
+        existingMap.set(row.external_id, row.id);
+      }
     }
+  }
+
+  // Split listings only when lookup succeeded — prevents INSERT on lookup failure.
+  const existingEntries = [];
+  const newEntries = [];
+
+  if (lookupOk) {
+    for (const [externalId, listing] of listingByExtId) {
+      if (existingMap.has(externalId)) {
+        existingEntries.push({ externalId, listing, providerLeadId: existingMap.get(externalId) });
+      } else {
+        newEntries.push({ externalId, listing });
+      }
+    }
+  }
+
+  const junctionRows = [];
+  const junctionNow = new Date().toISOString();
+
+  // Existing listings are retained as duplicates and still contribute to the junction rows.
+  if (existingEntries.length > 0) {
+    const existingTasks = existingEntries.map(({ externalId, providerLeadId }) => async () => ({
+      externalId,
+      providerLeadId
+    }));
+
+    const existingResults = await runConcurrent(existingTasks, CONCURRENCY_LIMIT);
+
+    for (const { externalId, providerLeadId } of existingResults) {
+      skipped += 1;
+      junctionRows.push({ empresa_id: scopedEmpresaId, provider_lead_id: providerLeadId, first_seen_at: syncStartedAtIso, created_at: junctionNow, updated_at: junctionNow });
+    }
+  }
+
+  // Insert new listings with controlled concurrency.
+  if (newEntries.length > 0) {
+    const insertTasks = newEntries.map(({ externalId, listing }) => async () => {
+      const score = typeof scoreCalculator === "function" ? scoreCalculator(listing) : undefined;
+      const payload = {
+        provider: providerName,
+        external_id: externalId,
+        title: listing.title || null,
+        price: listing.price ?? null,
+        location: [listing.city, listing.district].filter(Boolean).join(", ") || null,
+        url: listing.url || null,
+        area: listing.area ?? null,
+        rooms: listing.rooms ?? null,
+        city: listing.city || null,
+        district: listing.district || null,
+        owner_name: listing.ownerName || null,
+        is_private_owner: Boolean(listing.isPrivateOwner),
+        created_at_first: toIsoOrNull(listing.createdAtFirst),
+        short_description: listing.shortDescription || null,
+        source: listing.source || null,
+        status: "new",
+        detected_at: toIsoOrNull(fetchedAt) || (detectedAtFallbackNow ? new Date().toISOString() : null),
+        provider_active: true,
+        last_seen_at: syncStartedAtIso,
+        raw_data: listing
+      };
+      if (score !== undefined) payload.score = score;
+
+      const { data: inserted, error: insertError } = await supabaseClient
+        .from("provider_leads")
+        .insert([payload])
+        .select("id")
+        .single();
+
+      return { externalId, inserted, insertError };
+    });
+
+    const insertResults = await runConcurrent(insertTasks, CONCURRENCY_LIMIT);
+
+    for (const { externalId, inserted, insertError } of insertResults) {
+      if (insertError) {
+        errors.push({ externalId, error: insertError.message });
+      } else if (inserted) {
+        created += 1;
+        junctionRows.push({ empresa_id: scopedEmpresaId, provider_lead_id: inserted.id, first_seen_at: syncStartedAtIso, created_at: junctionNow, updated_at: junctionNow });
+      }
+    }
+  }
+
+  // Single batch upsert for empresa_provider_listings — replaces per-listing individual upserts.
+  if (junctionRows.length > 0) {
+    const { error: junctionError } = await supabaseClient
+      .from("empresa_provider_listings")
+      .upsert(junctionRows, { onConflict: "empresa_id,provider_lead_id", ignoreDuplicates: true });
+    if (junctionError) errors.push({ externalId: "*", error: junctionError.message });
   }
 
   const executionSeconds = Number(((Date.now() - startedAtMs) / 1000).toFixed(2));

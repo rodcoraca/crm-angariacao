@@ -347,6 +347,19 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    const invitedUserId = (data as any)?.user?.id;
+    if (invitedUserId && (nome || username || empresa)) {
+      const { error: updateError } = await admin.auth.admin.updateUserById(invitedUserId, {
+        user_metadata: { nome, username, empresa }
+      });
+      if (updateError) {
+        console.error("[send-user-invite] metadata_update_failed", {
+          userId: invitedUserId,
+          error: updateError.message
+        });
+      }
+    }
+
     return logAndRespond("invite_success", 200, {
       success: true,
       alreadyExists: false,
