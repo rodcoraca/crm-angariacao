@@ -5,8 +5,10 @@ import {
   executeProviderSync,
   warnMissingEmpresaId
 } from "../../../src/shared/provider-engine/index.js";
+import { collectCustoJustoPaginatedListings } from "../../../src/shared/provider-engine/custojusto/collectPaginatedListings.js";
 import { ProviderSearchBuilder } from "../../../src/providers/search/ProviderSearchBuilder.js";
 import "../../../src/providers/search/ImovirtualSearchBuilder.js";
+import "../../../src/providers/search/CustoJustoSearchBuilder.js";
 import { ProviderJobService } from "../_shared/ProviderJobService.ts";
 
 const corsHeaders = {
@@ -20,7 +22,22 @@ const MAX_PAGES = 20;
 const STALE_LOCK_WINDOW_MS = 30 * 60 * 1000;
 const SYNC_INTERVAL_MINUTES = 240;
 
+function resolveMaxPages(rawValue: unknown): { ok: true; value: number } | { ok: false; message: string } {
+  if (rawValue === undefined || rawValue === null || rawValue === "") {
+    return { ok: true, value: MAX_PAGES };
+  }
 
+  const numericValue = Number(rawValue);
+  if (!Number.isInteger(numericValue)) {
+    return { ok: false, message: `maxPages deve ser um inteiro entre 1 e ${MAX_PAGES}.` };
+  }
+
+  if (numericValue < 1 || numericValue > MAX_PAGES) {
+    return { ok: false, message: `maxPages deve ser um inteiro entre 1 e ${MAX_PAGES}.` };
+  }
+
+  return { ok: true, value: numericValue };
+}
 
 function getCategoryLabel(searchUrl: string) {
   const pathParts = new URL(searchUrl).pathname.split("/").filter(Boolean);
@@ -61,17 +78,26 @@ function computeNextExecution(success: boolean, now = new Date()) {
   return new Date(now.getTime() + SYNC_INTERVAL_MINUTES * 60 * 1000).toISOString();
 }
 
-async function loadRegistryRow(supabaseAdmin: ReturnType<typeof createClient>, provider: string) {
+async function loadRegistryRow(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  empresaId: string,
+  provider: string
+) {
   const { data, error } = await supabaseAdmin
     .from("provider_registry")
     .select("provider_code,sync_running,last_execution,next_execution,last_error")
+    .eq("empresa_id", empresaId)
     .eq("provider_code", provider)
     .maybeSingle();
 
   return { data, error };
 }
 
-async function lockProvider(supabaseAdmin: ReturnType<typeof createClient>, provider: string) {
+async function lockProvider(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  empresaId: string,
+  provider: string
+) {
   const nowIso = new Date().toISOString();
 
   const { error } = await supabaseAdmin
@@ -81,6 +107,7 @@ async function lockProvider(supabaseAdmin: ReturnType<typeof createClient>, prov
       last_execution: nowIso,
       last_error: null
     })
+    .eq("empresa_id", empresaId)
     .eq("provider_code", provider);
 
   if (error) {
@@ -102,11 +129,13 @@ async function lockProvider(supabaseAdmin: ReturnType<typeof createClient>, prov
 
 async function unlockProvider({
   supabaseAdmin,
+  empresaId,
   provider,
   success,
   errorMessage
 }: {
   supabaseAdmin: ReturnType<typeof createClient>;
+  empresaId: string;
   provider: string;
   success: boolean;
   errorMessage?: string | null;
@@ -123,6 +152,7 @@ async function unlockProvider({
       next_execution: nextExecutionIso,
       last_error: success ? null : (errorMessage || "Provider Sync indisponível.")
     })
+    .eq("empresa_id", empresaId)
     .eq("provider_code", provider);
 
   if (error) {
@@ -143,8 +173,12 @@ async function unlockProvider({
   });
 }
 
-async function unlockStaleLockIfNeeded(supabaseAdmin: ReturnType<typeof createClient>, provider: string) {
-  const { data: registryRow, error } = await loadRegistryRow(supabaseAdmin, provider);
+async function unlockStaleLockIfNeeded(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  empresaId: string,
+  provider: string
+) {
+  const { data: registryRow, error } = await loadRegistryRow(supabaseAdmin, empresaId, provider);
 
   if (error) {
     console.error("[LOCK] watchdog_read_failed", {
@@ -188,6 +222,7 @@ async function unlockStaleLockIfNeeded(supabaseAdmin: ReturnType<typeof createCl
 
   await unlockProvider({
     supabaseAdmin,
+    empresaId,
     provider,
     success: false,
     errorMessage: "Watchdog desbloqueou lock órfão"
@@ -218,11 +253,47 @@ Deno.serve(async (request: Request) => {
     const provider = String(body?.provider || "imovirtual").trim().toLowerCase();
     const empresaId = String(body?.empresaId || "").trim();
     const districts = Array.isArray(body?.districts) ? (body.districts as string[]) : [];
+    const tipologia = body?.tipologia !== undefined && body?.tipologia !== null ? String(body.tipologia).trim() : "";
+    const minPrice = body?.minPrice !== undefined && body?.minPrice !== null && String(body.minPrice).trim() !== "" ? Number(body.minPrice) : undefined;
+    const maxPrice = body?.maxPrice !== undefined && body?.maxPrice !== null && String(body.maxPrice).trim() !== "" ? Number(body.maxPrice) : undefined;
     const includePrivateOwners = body?.includePrivateOwners !== false;
     const includeProfessionalOwners = body?.includeProfessionalOwners !== false;
+    const maxPagesValidation = resolveMaxPages(body?.maxPages);
+    if (!maxPagesValidation.ok) {
+      return jsonResponse(400, {
+        success: false,
+        fallback: true,
+        message: maxPagesValidation.message
+      });
+    }
+    const effectiveMaxPages = maxPagesValidation.value;
     let lockAcquired = false;
     let syncSucceeded = false;
     let syncErrorMessage: string | null = null;
+    let syncUnlockAttempted = false;
+
+    const releaseProviderLock = async () => {
+      if (!lockAcquired || syncUnlockAttempted) {
+        return;
+      }
+
+      syncUnlockAttempted = true;
+      try {
+        await unlockProvider({
+          supabaseAdmin,
+          empresaId,
+          provider,
+          success: syncSucceeded,
+          errorMessage: syncErrorMessage
+        });
+      } catch (unlockError) {
+        console.error("[UNLOCK] finally_error", {
+          provider,
+          error: unlockError instanceof Error ? unlockError.message : String(unlockError),
+          timestamp: new Date().toISOString()
+        });
+      }
+    };
 
     console.log("[SYNC] request_received", {
       provider,
@@ -230,7 +301,7 @@ Deno.serve(async (request: Request) => {
       timestamp: new Date().toISOString()
     });
 
-    if (provider !== "imovirtual") {
+    if (provider !== "imovirtual" && provider !== "custojusto") {
       return jsonResponse(400, {
         success: false,
         fallback: true,
@@ -257,7 +328,7 @@ Deno.serve(async (request: Request) => {
       }
     });
 
-    const watchdog = await unlockStaleLockIfNeeded(supabaseAdmin, provider);
+    const watchdog = await unlockStaleLockIfNeeded(supabaseAdmin, empresaId, provider);
     if (!watchdog.ok) {
       return fallbackResponse(`Watchdog falhou: ${watchdog.reason || "erro desconhecido"}`);
     }
@@ -266,7 +337,11 @@ Deno.serve(async (request: Request) => {
       return fallbackResponse("Sincronização já em execução.");
     }
 
-    const lockResult = await lockProvider(supabaseAdmin, provider);
+    const previousRegistryRow = await loadRegistryRow(supabaseAdmin, empresaId, provider);
+    const previousLastExecution = toDateOrNull(previousRegistryRow?.data?.last_execution);
+    const checkpoint = previousLastExecution ? previousLastExecution.getTime() - (5 * 60 * 1000) : null;
+
+    const lockResult = await lockProvider(supabaseAdmin, empresaId, provider);
     if (!lockResult.ok) {
       return fallbackResponse("Falha ao adquirir lock de sincronização.");
     }
@@ -293,48 +368,57 @@ Deno.serve(async (request: Request) => {
         provider,
         districts,
         includePrivateOwners,
-        includeProfessionalOwners
+        includeProfessionalOwners,
+        effectiveMaxPages
       });
 
-      const searchUrls = ProviderSearchBuilder.build(provider, { districts, includePrivateOwners, includeProfessionalOwners });
+      const searchUrls = ProviderSearchBuilder.build(provider, {
+        districts,
+        tipologia,
+        minPrice,
+        maxPrice,
+        includePrivateOwners,
+        includeProfessionalOwners
+      });
 
       console.log("[DEBUG URLS]", searchUrls);
 
       for (const searchUrl of searchUrls) {
         const categoryLabel = getCategoryLabel(searchUrl);
 
-        const paginated = await collectImovirtualPaginatedListings({
-          maxPages: MAX_PAGES,
-          fetchPage: (page: number) => {
-            console.log("[ProviderSync][SEARCH]", {
-              provider,
-              searchUrl,
-              category: categoryLabel,
-              page
-            });
-            return fetchImovirtualSearchPage({
-              searchUrl,
-              page,
-              fetchImpl: globalThis.fetch
-            });
-          },
-          onPage: ({ page, found }: { page: number; found: number; totalPages: number | null }) => {
-            console.log(`[${categoryLabel}] Página ${page} -> ${found} anúncios`);
-          }
-        });
+        let paginated;
+        if (provider === "imovirtual") {
+          paginated = await collectImovirtualPaginatedListings({
+            maxPages: effectiveMaxPages,
+            checkpoint,
+            fetchPage: (page: number) => {
+              return fetchImovirtualSearchPage({
+                searchUrl,
+                page,
+                fetchImpl: globalThis.fetch
+              });
+            }
+          });
+        } else if (provider === "custojusto") {
+          paginated = await collectCustoJustoPaginatedListings(searchUrl, {
+            maxPages: effectiveMaxPages
+          });
+        } else {
+          return fallbackResponse("Provider não suportado.");
+        }
 
         console.log(`[ProviderSync][RC1.0.2][${categoryLabel}] pagination_end`, {
-          pagesProcessed: paginated.pagesProcessed,
-          stopReason: paginated.stopReason,
-          maxPages: paginated.maxPages,
-          lastPageKnown: paginated.lastPageKnown
+          pagesProcessed: paginated.pagesProcessed ?? paginated.pagesFetched ?? 0,
+          stopReason: paginated.stopReason ?? "collector_result",
+          maxPages: effectiveMaxPages,
+          lastPageKnown: paginated.lastPageKnown ?? null
         });
 
         const categoryResult = await executeProviderSync({
           providerName: provider,
           empresaId,
           listings: paginated.listings,
-          fetchedAt: paginated.fetchedAt,
+          fetchedAt: paginated.fetchedAt ?? new Date().toISOString(),
           supabaseClient: supabaseAdmin,
           detectedAtFallbackNow: true,
           syncStartedAtMs
@@ -435,23 +519,11 @@ Deno.serve(async (request: Request) => {
       if (jobId) {
         await ProviderJobService.failJob(supabaseAdmin, jobId, syncErrorMessage);
       }
+      await releaseProviderLock();
       return fallbackResponse(syncErrorMessage);
     } finally {
-      if (lockAcquired) {
-        try {
-          await unlockProvider({
-            supabaseAdmin,
-            provider,
-            success: syncSucceeded,
-            errorMessage: syncErrorMessage
-          });
-        } catch (unlockError) {
-          console.error("[UNLOCK] finally_error", {
-            provider,
-            error: unlockError instanceof Error ? unlockError.message : String(unlockError),
-            timestamp: new Date().toISOString()
-          });
-        }
+      if (lockAcquired && !syncUnlockAttempted) {
+        await releaseProviderLock();
       }
     }
   } catch (error) {

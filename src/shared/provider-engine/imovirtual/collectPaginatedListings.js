@@ -26,15 +26,74 @@ function resolveLastPage(nextData) {
 // Paginacao implementada para evitar perda de oportunidades.
 // Limite inicial Beta: 20 paginas.
 // Futuramente tornar configuravel por empresa.
+function toTimestamp(value) {
+  if (value == null || value === "") return null;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function getOldestListingTimestamp(listings) {
+  let oldest = null;
+
+  for (const listing of listings) {
+    const timestamp = toTimestamp(listing?.createdAtFirst || listing?.createdAt || listing?.publishedAt);
+    if (timestamp === null) continue;
+    if (oldest === null || timestamp < oldest) {
+      oldest = timestamp;
+    }
+  }
+
+  return oldest;
+}
+
+function filterPageListingsByCheckpoint(listings, checkpointMs) {
+  if (!Number.isFinite(checkpointMs)) {
+    return { filtered: listings, stopAtPage: false, stopReason: null };
+  }
+
+  const filtered = [];
+  let hasAfterCheckpoint = false;
+  let hasAtOrBeforeCheckpoint = false;
+
+  for (const listing of listings) {
+    const listingTimestamp = toTimestamp(listing?.createdAtFirst || listing?.createdAt || listing?.publishedAt);
+
+    if (listingTimestamp === null) {
+      filtered.push(listing);
+      hasAfterCheckpoint = true;
+      continue;
+    }
+
+    if (listingTimestamp > checkpointMs) {
+      filtered.push(listing);
+      hasAfterCheckpoint = true;
+    } else {
+      hasAtOrBeforeCheckpoint = true;
+    }
+  }
+
+  if (hasAfterCheckpoint && hasAtOrBeforeCheckpoint) {
+    return { filtered, stopAtPage: true, stopReason: "checkpoint_reached" };
+  }
+
+  if (!hasAfterCheckpoint && hasAtOrBeforeCheckpoint) {
+    return { filtered: [], stopAtPage: true, stopReason: "checkpoint_reached" };
+  }
+
+  return { filtered, stopAtPage: false, stopReason: null };
+}
+
 export async function collectImovirtualPaginatedListings({
   maxPages = DEFAULT_MAX_PAGES,
   fetchPage,
-  onPage
+  onPage,
+  checkpoint = null
 } = {}) {
   if (typeof fetchPage !== "function") {
     throw new Error("fetchPage é obrigatório para paginação do Imovirtual.");
   }
 
+  const checkpointMs = checkpoint === null || checkpoint === undefined ? null : Number(checkpoint);
   const listings = [];
   let fetchedAt = null;
   let pagesProcessed = 0;
@@ -51,7 +110,7 @@ export async function collectImovirtualPaginatedListings({
     }
 
     const nextData = extractNextData(html);
-    const pageListings = extractListings(nextData);
+    const rawPageListings = extractListings(nextData);
     const resolvedLastPage = resolveLastPage(nextData);
     if (resolvedLastPage) {
       lastPageKnown = resolvedLastPage;
@@ -62,17 +121,32 @@ export async function collectImovirtualPaginatedListings({
     if (typeof onPage === "function") {
       onPage({
         page,
-        found: pageListings.length,
+        found: rawPageListings.length,
         totalPages: lastPageKnown
       });
     }
 
-    if (pageListings.length === 0) {
+    if (rawPageListings.length === 0) {
       stopReason = "empty_page";
       break;
     }
 
-    listings.push(...pageListings);
+    const checkpointPage = filterPageListingsByCheckpoint(rawPageListings, checkpointMs);
+    const effectiveListings = checkpointPage.filtered;
+
+    if (checkpointMs !== null && checkpointPage.stopAtPage) {
+      if (effectiveListings.length > 0) {
+        listings.push(...effectiveListings);
+      }
+      stopReason = checkpointPage.stopReason;
+      break;
+    }
+
+    if (checkpointMs === null) {
+      listings.push(...rawPageListings);
+    } else {
+      listings.push(...effectiveListings);
+    }
 
     if (lastPageKnown && page >= lastPageKnown) {
       stopReason = "last_page";

@@ -1,11 +1,20 @@
 import { supabase } from "../../../supabase";
+import { resolveEmpresaId, warnMissingEmpresaId } from "../../../utils/empresaScope";
 
 export async function getProviderSyncStatus(providerCode) {
+  const empresaId = await resolveEmpresaId();
+
+  if (!empresaId) {
+    warnMissingEmpresaId();
+    return null;
+  }
+
   const { data, error } = await supabase
     .from("provider_registry")
     .select("*")
+    .eq("empresa_id", empresaId)
     .eq("provider_code", providerCode)
-    .single();
+    .maybeSingle();
 
   if (error || !data) {
     console.error(

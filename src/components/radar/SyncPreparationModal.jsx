@@ -5,10 +5,24 @@ import { useTheme } from "../../theme/ThemeContext";
 import { supabase } from "../../supabase";
 import { resolveEmpresaId } from "../../utils/empresaScope";
 import { loadProfile, saveProfile } from "../../providers/services/providers/ProviderSyncProfileService";
+import { getProviderSyncStatus } from "../../providers/services/providers/providerSyncService";
+import imovirtualLogo from "../../assets/imovirtual.jpg";
+import custojustoLogo from "../../assets/custojusto.jpg";
 
 const DEFAULT_PROVIDERS = [
-  { value: "imovirtual", label: "Imovirtual" }
+  { value: "imovirtual", label: "Imovirtual" },
+  { value: "custojusto", label: "CustoJusto" }
 ];
+
+const PROVIDER_LOGOS = {
+  imovirtual: imovirtualLogo,
+  custojusto: custojustoLogo
+};
+
+function getProviderLogo(providerValue) {
+  const normalized = String(providerValue || "").trim().toLowerCase();
+  return PROVIDER_LOGOS[normalized] || null;
+}
 
 export default function SyncPreparationModal({
   open,
@@ -17,19 +31,70 @@ export default function SyncPreparationModal({
   providers = DEFAULT_PROVIDERS
 }) {
   const theme = useTheme();
-  const [provider, setProvider] = useState(providers[0]?.value || "imovirtual");
+  const availableProviders = Array.isArray(providers) && providers.length > 0 ? providers : DEFAULT_PROVIDERS;
+  const allProviderValues = useMemo(() => availableProviders.map((providerItem) => providerItem.value), [availableProviders]);
+  const [selectedProviders, setSelectedProviders] = useState(() => [...allProviderValues]);
+  const [providerStatuses, setProviderStatuses] = useState({});
   const [districts, setDistricts] = useState([]);
   const [selectedDistricts, setSelectedDistricts] = useState([]);
   const [districtQuery, setDistrictQuery] = useState("");
   const [loadingDistricts, setLoadingDistricts] = useState(false);
   const [districtsError, setDistrictsError] = useState("");
+  const [tipologia, setTipologia] = useState("");
+  const [minPrice, setMinPrice] = useState("");
+  const [maxPrice, setMaxPrice] = useState("");
   const [includePrivateOwners, setIncludePrivateOwners] = useState(true);
   const [includeProfessionalOwners, setIncludeProfessionalOwners] = useState(true);
   const [saveAsDefault, setSaveAsDefault] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
+  const formatShortDateTime = (value) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    const pad = (input) => String(input).padStart(2, "0");
+    return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
+  const getProviderStatusText = (status) => {
+    if (!status) return "Estado indisponível";
+    if (status.sync_running) return "Em atualização";
+    if (status.canSync) return "Disponível";
+    if (status.next_execution) return `Disponível novamente às ${formatShortDateTime(status.next_execution)}`;
+    if (!status.last_execution) return "Ainda não atualizado";
+    return "Estado indisponível";
+  };
+
+  const eligibleProviderValues = useMemo(
+    () => availableProviders
+      .filter((providerItem) => {
+        const status = providerStatuses[providerItem.value];
+        return Boolean(status?.canSync) && !status?.sync_running;
+      })
+      .map((providerItem) => providerItem.value),
+    [availableProviders, providerStatuses]
+  );
+  const eligibleSelectedProviders = selectedProviders.filter((providerValue) => eligibleProviderValues.includes(providerValue));
+  const allSelectedProviders = eligibleProviderValues.length > 0 && eligibleProviderValues.every((providerValue) => selectedProviders.includes(providerValue));
+  const primaryActionLabel = eligibleSelectedProviders.length === 0
+    ? "Nenhum provider selecionado"
+    : allSelectedProviders
+      ? "Consultar todos os providers"
+      : eligibleSelectedProviders.length === 1
+        ? "Consultar 1 provider"
+        : `Consultar ${eligibleSelectedProviders.length} providers`;
+
   useEffect(() => {
     if (!open) return;
+
+    setSelectedProviders((current) => {
+      if (current.length === 0) {
+        return [...allProviderValues];
+      }
+      return current.filter((value) => allProviderValues.includes(value)).length > 0
+        ? current.filter((value) => allProviderValues.includes(value))
+        : [...allProviderValues];
+    });
 
     let active = true;
     setDistrictQuery("");
@@ -53,7 +118,7 @@ export default function SyncPreparationModal({
             p_date_after: null,
             p_date_before: null
           }),
-          loadProfile(provider)
+          loadProfile(allProviderValues[0] || "imovirtual")
         ]);
 
         if (error) throw error;
@@ -98,7 +163,37 @@ export default function SyncPreparationModal({
     return () => {
       active = false;
     };
-  }, [open, provider]);
+  }, [open, allProviderValues]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    let active = true;
+    const loadProviderStatuses = async () => {
+      const nextStatuses = {};
+      for (const providerItem of availableProviders) {
+        try {
+          const status = await getProviderSyncStatus(providerItem.value);
+          if (active) {
+            nextStatuses[providerItem.value] = status;
+          }
+        } catch (error) {
+          if (active) {
+            nextStatuses[providerItem.value] = null;
+          }
+        }
+      }
+      if (active) {
+        setProviderStatuses(nextStatuses);
+      }
+    };
+
+    void loadProviderStatuses();
+
+    return () => {
+      active = false;
+    };
+  }, [open, availableProviders]);
 
   const visibleDistricts = useMemo(() => {
     const query = districtQuery.trim().toLocaleLowerCase("pt-PT");
@@ -115,24 +210,54 @@ export default function SyncPreparationModal({
       : [...current, district]);
   }
 
+  function toggleProvider(providerValue) {
+    setSelectedProviders((current) => {
+      const isSelected = current.includes(providerValue);
+      const next = isSelected
+        ? current.filter((item) => item !== providerValue)
+        : [...current, providerValue];
+      return next;
+    });
+  }
+
+  function toggleAllProviders() {
+    if (eligibleProviderValues.length === 0) {
+      return;
+    }
+
+    setSelectedProviders((current) => {
+      if (allSelectedProviders) {
+        return current.filter((providerValue) => !eligibleProviderValues.includes(providerValue));
+      }
+
+      return Array.from(new Set([...current.filter((providerValue) => !eligibleProviderValues.includes(providerValue)), ...eligibleProviderValues]));
+    });
+  }
+
   async function handleConfirm() {
-    if (confirming) return;
+    const toConfirm = selectedProviders.filter((providerValue) => eligibleProviderValues.includes(providerValue));
+    if (confirming || toConfirm.length === 0) return;
     setConfirming(true);
 
     try {
       if (saveAsDefault) {
-        await saveProfile(provider, {
-          districts: selectedDistricts,
-          advertisers: {
-            private: includePrivateOwners,
-            professional: includeProfessionalOwners
-          }
-        });
+        for (const providerValue of toConfirm) {
+          await saveProfile(providerValue, {
+            districts: selectedDistricts,
+            advertisers: {
+              private: includePrivateOwners,
+              professional: includeProfessionalOwners
+            }
+          });
+        }
       }
 
       await onConfirm?.({
-        provider,
+        providers: toConfirm,
         districts: selectedDistricts,
+        tipologia,
+        minPrice,
+        maxPrice,
         includePrivateOwners,
         includeProfessionalOwners,
         saveAsDefault
@@ -171,26 +296,81 @@ export default function SyncPreparationModal({
   };
 
   return (
-    <Modal
-      open={open}
-      title="Preparar sincronização"
-      size="md"
-      onClose={onClose}
-      closeOnBackdrop={!loadingDistricts}
-      footer={(
-        <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.spacing.sm }}>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button
-            variant="secondary"
-            onClick={handleConfirm}
-            disabled={loadingDistricts || Boolean(districtsError) || confirming}
-            loading={confirming}
-          >
-            Sincronizar
-          </Button>
-        </div>
-      )}
-    >
+    <>
+      <style>{`
+        .sync-modal-provider-list {
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+        }
+
+        .sync-provider-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          width: 100%;
+          padding: 10px 12px;
+          border: 1px solid ${theme.colors.border};
+          border-radius: ${theme.borderRadius.sm};
+          background: ${theme.colors.surface};
+        }
+
+        .sync-provider-main {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          min-width: 0;
+          flex: 1;
+        }
+
+        .sync-provider-meta {
+          display: flex;
+          flex-direction: column;
+          align-items: flex-end;
+          gap: 3px;
+          color: ${theme.colors.muted};
+          font-size: 0.78rem;
+          text-align: right;
+          flex-shrink: 0;
+        }
+
+        @media (max-width: 768px) {
+          .sync-provider-row {
+            align-items: flex-start;
+            flex-direction: column;
+            gap: 8px;
+          }
+
+          .sync-provider-meta {
+            align-items: flex-start;
+            text-align: left;
+            width: 100%;
+          }
+        }
+      `}</style>
+      <Modal
+        open={open}
+        title="Preparar sincronização"
+        size="xl"
+        onClose={onClose}
+        closeOnBackdrop={!loadingDistricts}
+        style={{ width: "min(1000px, calc(100vw - 32px))", maxWidth: "min(1000px, calc(100vw - 32px))" }}
+        footer={(
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.spacing.sm, flexWrap: "wrap" }}>
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+            <Button
+              variant="secondary"
+              onClick={handleConfirm}
+              disabled={loadingDistricts || Boolean(districtsError) || confirming || eligibleSelectedProviders.length === 0}
+              loading={confirming}
+              style={{ minWidth: "180px" }}
+            >
+              {primaryActionLabel}
+            </Button>
+          </div>
+        )}
+      >
       <p style={{ margin: 0, color: theme.colors.muted, fontSize: theme.typography.body.fontSize }}>
         Seleccione o âmbito desta sincronização.
       </p>
@@ -202,7 +382,9 @@ export default function SyncPreparationModal({
           color: theme.colors.muted
         }}>
           {[
-            providers.find((p) => p.value === provider)?.label || provider,
+            eligibleSelectedProviders.length > 0
+              ? eligibleSelectedProviders.map((value) => availableProviders.find((providerItem) => providerItem.value === value)?.label || value).join(", ")
+              : null,
             selectedDistricts.length > 0 ? selectedDistricts.join(", ") : null,
             (includePrivateOwners && includeProfessionalOwners)
               ? "Particulares e Profissionais"
@@ -216,18 +398,62 @@ export default function SyncPreparationModal({
       ) : null}
 
       <section style={sectionStyle} aria-labelledby="sync-provider-label">
-        <label id="sync-provider-label" style={{ display: "block", marginBottom: theme.spacing.xs, fontWeight: 600 }}>
-          Provider
-        </label>
-        <select
-          value={provider}
-          onChange={(event) => setProvider(event.target.value)}
-          style={controlStyle}
-        >
-          {providers.map((item) => (
-            <option key={item.value} value={item.value}>{item.label}</option>
-          ))}
-        </select>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: theme.spacing.sm, alignItems: "baseline", marginBottom: theme.spacing.xs }}>
+          <strong id="sync-provider-label">Providers</strong>
+          <span style={{ color: theme.colors.muted, fontSize: theme.typography.caption?.fontSize || "0.8rem" }}>
+            {eligibleSelectedProviders.length} de {availableProviders.length}
+          </span>
+        </div>
+
+        <div className="sync-modal-provider-list" style={{ marginBottom: theme.spacing.sm }}>
+          <label style={{ ...labelStyle, justifyContent: "space-between", width: "100%" }}>
+            <span style={{ display: "flex", alignItems: "center", gap: theme.spacing.sm }}>
+              <input
+                type="checkbox"
+                checked={allSelectedProviders}
+                disabled={eligibleProviderValues.length === 0}
+                onChange={toggleAllProviders}
+              />
+              <span>Todos</span>
+            </span>
+          </label>
+
+          {availableProviders.map((providerItem) => {
+            const status = providerStatuses[providerItem.value];
+            const lastUpdatedLabel = status?.last_execution ? formatShortDateTime(status.last_execution) : "Ainda não atualizado";
+            const statusText = getProviderStatusText(status);
+            const isEligible = Boolean(status?.canSync) && !status?.sync_running;
+            const isChecked = selectedProviders.includes(providerItem.value);
+            const logoUrl = getProviderLogo(providerItem.value);
+
+            return (
+              <label key={providerItem.value} className="sync-provider-row" title={providerItem.label}>
+                <span className="sync-provider-main">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    disabled={!isEligible}
+                    onChange={() => toggleProvider(providerItem.value)}
+                  />
+                  {logoUrl ? (
+                    <img
+                      src={logoUrl}
+                      alt={providerItem.label}
+                      title={providerItem.label}
+                      style={{ width: 80, height: 80, objectFit: "contain", display: "block", borderRadius: 4 }}
+                    />
+                  ) : (
+                    <span>{providerItem.label}</span>
+                  )}
+                </span>
+                <span className="sync-provider-meta">
+                  <span>Última atualização: {lastUpdatedLabel}</span>
+                  <span>{statusText}</span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
       </section>
 
       <section style={sectionStyle} aria-labelledby="sync-districts-label">
@@ -309,6 +535,7 @@ export default function SyncPreparationModal({
         <input type="checkbox" checked={saveAsDefault} onChange={(event) => setSaveAsDefault(event.target.checked)} />
         Guardar esta selecção como padrão
       </label>
-    </Modal>
+      </Modal>
+    </>
   );
 }

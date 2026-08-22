@@ -30,8 +30,7 @@ function normalizePrice(item) {
 }
 
 function normalizePublished(item) {
-  const publishedAt = item?.created_at_first || item?.publicado_em || item?.published_at || item?.publicado || null;
-  return formatPublishedDate(publishedAt);
+  return formatPublishedDate(null);
 }
 
 function normalizeStatus(item) {
@@ -155,10 +154,7 @@ export class RadarViewModel {
         cidade: item.cidade || ""
       }),
       preco: normalizePrice(item),
-      publicado: normalizePublished({
-        ...item,
-        publicado_em: item.created_at_first || item.publicado_em || item.published_at || null
-      }),
+      publicado: normalizePublished({}),
       estado: normalizeStatus(item),
       // Adicionamos os campos extra para consumo na UI
       tipo: item.tipo,
@@ -305,10 +301,7 @@ export function mapRadarTableViewModel(rows) {
       cidade: item.cidade || ""
     }),
     preco: normalizePrice(item),
-    publicado: normalizePublished({
-      ...item,
-      publicado_em: item.created_at_first || item.publicado_em || item.published_at || null
-    }),
+    publicado: normalizePublished({}),
     estado: normalizeStatus(item)
   }));
 }

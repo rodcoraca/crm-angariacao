@@ -35,6 +35,8 @@ export async function fetchImovirtualSearchPage({
   }
 
   resolvedSearchUrl.searchParams.set("page", String(page));
+  resolvedSearchUrl.searchParams.set("by", "LATEST");
+  resolvedSearchUrl.searchParams.set("direction", "DESC");
 
   const response = await fetchImpl(resolvedSearchUrl.toString());
   if (!response.ok) {

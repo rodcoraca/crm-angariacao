@@ -7,6 +7,7 @@ const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
 
 let isTrackingStarted = false;
 let trackerLastFlushAt = 0;
+let activityFlushInFlight = false;
 
 function nowIso() {
   return new Date().toISOString();
@@ -143,22 +144,31 @@ function bindActivityTracking(context = {}) {
   //trackerLastFlushAt = Date.now();
 
   const flushActivity = async () => {
-    const sessionId = getStoredSessionId();
-    if (!sessionId) return;
+  if (activityFlushInFlight) return;
 
-    const now = Date.now();
+  const sessionId = getStoredSessionId();
+  if (!sessionId) return;
 
-    if (now - trackerLastFlushAt < 30000) return;
+  const now = Date.now();
 
+  if (now - trackerLastFlushAt < 30000) return;
+
+  activityFlushInFlight = true;
+  trackerLastFlushAt = now;
+
+  try {
     const result = await updateSessionActivity({
       sessionId,
       userId: context.userId || null,
     });
 
-    if (result.ok) {
-      trackerLastFlushAt = now;
+    if (!result.ok) {
+      trackerLastFlushAt = 0;
     }
-  };
+  } finally {
+    activityFlushInFlight = false;
+  }
+};
 
   const events = ["click", "keydown", "mousemove", "scroll", "touchstart"];
   events.forEach((eventName) => {

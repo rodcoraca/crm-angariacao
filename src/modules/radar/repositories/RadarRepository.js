@@ -35,6 +35,7 @@ function normalizeOpportunitySource(value) {
   if (source === "crm") return "crm";
   if (source === "olx") return "olx";
   if (source === "idealista") return "idealista";
+  if (source) return source;
   return "imovirtual";
 }
 
@@ -76,11 +77,14 @@ function mapProviderLeadToOpportunity(lead) {
   const title = lead?.title || raw?.title || "";
   const tipo = inferPropertyType(title, lead);
   const quartos = inferRooms(title, lead);
-  const dataReferencia = lead?.created_at_first || raw?.createdAtFirst || null;
+  const dataReferencia = lead?.created_at || null;
   const providerOrigin = String(lead?.provider || lead?.origem || lead?.source || raw?.source || "imovirtual").trim().toLowerCase();
   const source = normalizeOpportunitySource(providerOrigin);
   const ownerName = lead?.owner_name || raw?.ownerName || raw?.advertOwner?.name || "N/A";
-  const freguesia = lead?.freguesia || raw?.freguesia || raw?.location?.address?.city?.name || "";
+  const explicitFreguesia = lead?.freguesia || raw?.freguesia || "";
+  const freguesia = providerOrigin === "imovirtual" && !explicitFreguesia
+    ? (lead?.city || raw?.city || "")
+    : explicitFreguesia || raw?.location?.address?.city?.name || "";
   const city = lead?.city || raw?.city || freguesia || "";
   const district = lead?.district || raw?.district || raw?.location?.address?.province?.name || "";
   const municipality = raw?.municipality || raw?.location?.address?.county?.name || lead?.concelho || "";
@@ -108,9 +112,9 @@ function mapProviderLeadToOpportunity(lead) {
     location: locationLabel,
     area: toNullableNumber(lead?.area ?? raw?.area ?? raw?.areaInSquareMeters),
     preco: toNullableNumber(lead?.price ?? raw?.price ?? raw?.totalPrice?.value),
-    publicado: dataReferencia,
-    publicado_em: dataReferencia,
-    published_at: dataReferencia,
+    publicado: lead?.created_at_first || null,
+    publicado_em: lead?.created_at_first || null,
+    published_at: lead?.created_at_first || null,
     encontrado_em: lead?.detected_at || dataReferencia,
     detected_at: lead?.detected_at || null,
     created_at_first: lead?.created_at_first || raw?.createdAtFirst || null,

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import logo from "../assets/logo.png";
 import { supabase } from "../supabase";
 import { useTheme } from "../theme/ThemeContext";
 import Button from "../components/ui/Button";
@@ -409,10 +410,18 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
   return (
     <div style={{ ...styles.container, background: theme.colors.brandGradient }}>
+      <div style={styles.glowOne} />
+      <div style={styles.glowTwo} />
+
       <Card style={styles.card}>
-        <div style={{ ...styles.badge, background: `${theme.colors.secondary}14`, color: theme.colors.primary }}>OSFlow</div>
-        <h2 style={{ ...styles.title, color: theme.colors.primary }}>Acesso seguro</h2>
-        <p style={{ ...styles.subtitle, color: theme.colors.muted }}>Gestão operacional com controlo total</p>
+        <div style={styles.brandWrap}>
+          <img src={logo} alt="OSFlow" style={styles.logo} />
+        </div>
+
+        <div style={styles.headerWrap}>
+          <h2 style={{ ...styles.title, color: theme.colors.primary }}>Acesso seguro</h2>
+          <p style={{ ...styles.subtitle, color: theme.colors.muted }}>Gestão operacional com controlo total</p>
+        </div>
 
         {recoveryMode ? (
           <>
@@ -536,6 +545,11 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
             </Button>
           </>
         )}
+
+        <div style={styles.footer}>
+          <span style={{ opacity: 0.7 }}>© 2026 OSFlow</span>
+          <span style={{ opacity: 0.7 }}>Plataforma imobiliária</span>
+        </div>
       </Card>
     </div>
   );
@@ -543,46 +557,86 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
 const styles = {
   container: {
+    position: "relative",
     height: "100vh",
     display: "flex",
     justifyContent: "center",
     alignItems: "center",
-    padding: "var(--os-page-padding)"
+    padding: "var(--os-page-padding)",
+    overflow: "hidden"
+  },
+
+  glowOne: {
+    position: "absolute",
+    width: "420px",
+    height: "420px",
+    borderRadius: "50%",
+    background: "rgba(255,255,255,0.10)",
+    filter: "blur(16px)",
+    transform: "translate(-220px, -160px)"
+  },
+
+  glowTwo: {
+    position: "absolute",
+    width: "420px",
+    height: "420px",
+    borderRadius: "50%",
+    background: "rgba(22,163,74,0.12)",
+    filter: "blur(18px)",
+    transform: "translate(210px, 170px)"
   },
 
   card: {
-    padding: "var(--os-padding)",
-    borderRadius: "var(--os-radius-md)",
-    width: "360px",
-    textAlign: "center"
+    position: "relative",
+    zIndex: 1,
+    padding: "28px 24px 20px",
+    borderRadius: "24px",
+    width: "420px",
+    maxWidth: "calc(100vw - 32px)",
+    textAlign: "center",
+    border: "1px solid rgba(255,255,255,0.28)",
+    background: "rgba(255,255,255,0.96)",
+    boxShadow: "0 22px 60px rgba(10, 31, 48, 0.16)"
   },
 
-  badge: {
-    display: "inline-flex",
+  brandWrap: {
+    display: "flex",
+    flexDirection: "column",
     alignItems: "center",
-    justifyContent: "center",
-    padding: "8px 12px",
-    borderRadius: "var(--os-radius-pill)",
-    fontSize: "13px",
-    fontWeight: 500,
-    marginBottom: "12px"
+    gap: "10px",
+    marginBottom: "22px"
+  },
+
+  logo: {
+    width: "128px",
+    height: "128px",
+    objectFit: "contain",
+    borderRadius: "22px",
+    boxShadow: "0 12px 28px rgba(14, 77, 100, 0.14)"
+  },
+
+  headerWrap: {
+    marginBottom: "18px"
   },
 
   title: {
-    marginBottom: "5px",
-    fontSize: "24px",
-    fontWeight: 600
+    margin: "0 0 6px",
+    fontSize: "28px",
+    fontWeight: 700,
+    lineHeight: 1.2
   },
 
   subtitle: {
-    marginBottom: "20px"
+    margin: 0,
+    fontSize: "14px",
+    lineHeight: 1.5
   },
 
   input: {
     width: "100%",
     padding: "var(--os-padding)",
     marginBottom: "15px",
-    borderRadius: "var(--os-radius-md)",
+    borderRadius: "14px",
     fontSize: "14px",
     outline: "none"
   },
@@ -590,16 +644,29 @@ const styles = {
   button: {
     width: "100%",
     padding: "var(--os-padding)",
-    borderRadius: "var(--os-radius-md)",
+    borderRadius: "14px",
     fontSize: "16px",
-    fontWeight: 600
+    fontWeight: 700,
+    marginBottom: "6px"
   },
 
   secondaryButton: {
     width: "100%",
     padding: "var(--os-padding)",
-    borderRadius: "var(--os-radius-md)",
+    borderRadius: "14px",
     fontSize: "14px",
     marginTop: "10px"
+  },
+
+  footer: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "12px",
+    marginTop: "18px",
+    paddingTop: "14px",
+    borderTop: "1px solid rgba(15, 23, 42, 0.08)",
+    color: "#5B6B76",
+    fontSize: "12px",
+    lineHeight: 1.4
   }
 };

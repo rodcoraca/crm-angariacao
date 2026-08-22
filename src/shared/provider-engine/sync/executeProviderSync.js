@@ -187,6 +187,7 @@ export async function executeProviderSync({
       const score = typeof scoreCalculator === "function" ? scoreCalculator(listing) : undefined;
       const payload = {
         provider: providerName,
+        empresa_id: scopedEmpresaId,
         external_id: externalId,
         title: listing.title || null,
         price: listing.price ?? null,
@@ -195,10 +196,14 @@ export async function executeProviderSync({
         area: listing.area ?? null,
         rooms: listing.rooms ?? null,
         city: listing.city || null,
+        concelho: listing.concelho ?? null,
+        freguesia: listing.freguesia ?? null,
         district: listing.district || null,
         owner_name: listing.ownerName || null,
         is_private_owner: Boolean(listing.isPrivateOwner),
         created_at_first: toIsoOrNull(listing.createdAtFirst),
+        published_at: toIsoOrNull(listing.createdAtFirst),
+        modified_at: toIsoOrNull(listing.modifiedAt),
         short_description: listing.shortDescription || null,
         source: listing.source || null,
         status: "new",

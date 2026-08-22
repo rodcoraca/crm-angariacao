@@ -8,6 +8,75 @@ import {
   imovirtualListingSelectors
 } from "../shared/provider-engine/index.js";
 
+export function extractTipologiaFromDetailHtml(html) {
+  if (typeof html !== "string" || html.length === 0) return null;
+
+  const normalizedHtml = html
+    .replace(/&nbsp;/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalizedHtml) return null;
+
+  const labelMatch = normalizedHtml.match(/Tipologia\s*[:\-]?\s*([TV](?:0|[1-9]\d*)(?:\+)?)/i);
+  if (labelMatch) {
+    const value = labelMatch[1].trim().toUpperCase();
+    return /^(?:T|V)(?:0|[1-9]\d*)(?:\+)?$/.test(value) ? value : null;
+  }
+
+  const descriptionMatch = normalizedHtml.match(/(?:tipologia|tipologia comercial)\s*[:\-]?\s*([TV](?:0|[1-9]\d*)(?:\+)?)/i);
+  if (descriptionMatch) {
+    const value = descriptionMatch[1].trim().toUpperCase();
+    return /^(?:T|V)(?:0|[1-9]\d*)(?:\+)?$/.test(value) ? value : null;
+  }
+
+  return null;
+}
+
+export function extractModifiedAtFromDetailHtml(html) {
+  if (typeof html !== "string" || html.length === 0) return null;
+
+  const normalizedHtml = html
+    .replace(/&nbsp;/gi, " ")
+    .replace(/<br\s*\/?>/gi, " ")
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (!normalizedHtml) return null;
+
+  const match = normalizedHtml.match(
+    /(?:Última\s+atualização|Last\s+update|Last\s+updated|Updated|Atualização)\s*[:\-]?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4})/i
+  );
+
+  if (!match || !match[1]) return null;
+
+  const rawValue = match[1].trim();
+  const parts = rawValue.split(/[./-]/).map((part) => part.trim());
+  if (parts.length !== 3) return null;
+
+  const [dayPart, monthPart, yearPart] = parts;
+  const day = Number(dayPart);
+  const month = Number(monthPart);
+  const year = Number(yearPart);
+
+  if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) return null;
+  if (day < 1 || day > 31 || month < 1 || month > 12) return null;
+
+  const resolvedYear = year < 100 ? 2000 + year : year;
+  const utcDate = new Date(Date.UTC(resolvedYear, month - 1, day, 0, 0, 0));
+
+  if (Number.isNaN(utcDate.getTime())) return null;
+
+  return utcDate.toISOString();
+}
+
 /**
  * Contrato de provider para futuras integrações com o Imovirtual.
  * Não realiza chamadas de rede nem contém lógica de scraping.
@@ -126,6 +195,24 @@ export class ImovirtualProvider {
         owner_name: listing.ownerName
       });
 
+      let tipologia = null;
+      let modifiedAt = null;
+      try {
+        const detailUrl = listing.url || `https://www.imovirtual.com/pt/anuncio/${listing.externalId}`;
+        const fetchImplementation = this.options.fetch || globalThis.fetch || (typeof window !== "undefined" ? window.fetch : null);
+        if (typeof fetchImplementation === "function") {
+          const detailResponse = await fetchImplementation(detailUrl);
+          if (detailResponse && detailResponse.ok) {
+            const detailHtml = await detailResponse.text();
+            tipologia = extractTipologiaFromDetailHtml(detailHtml);
+            modifiedAt = extractModifiedAtFromDetailHtml(detailHtml);
+          }
+        }
+      } catch (error) {
+        tipologia = null;
+        modifiedAt = null;
+      }
+
       const result = await createLead({
         provider: this.name,
         external_id: listing.externalId,
@@ -141,11 +228,12 @@ export class ImovirtualProvider {
         is_private_owner: listing.isPrivateOwner,
         score,
         created_at_first: listing.createdAtFirst,
+        modified_at: modifiedAt,
         short_description: listing.shortDescription,
         source: listing.source,
         status: "new",
         detected_at: fetchedAt,
-        raw_data: listing
+        raw_data: { ...listing, tipologia, modifiedAt }
       });
 
       if (result.error) {

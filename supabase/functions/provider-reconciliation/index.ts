@@ -146,7 +146,16 @@ async function saveSeenListings(
       if (adStatus === "active") {
         await client
           .from("provider_leads")
-          .update({ price: listing.price ?? null, owner_name: listing.ownerName || null, short_description: listing.shortDescription || null, last_seen_at: now, updated_at: now, provider_active: true })
+          .update({
+            price: listing.price ?? null,
+            owner_name: listing.ownerName || null,
+            short_description: listing.shortDescription || null,
+            published_at: listing.createdAtFirst ? new Date(listing.createdAtFirst).toISOString() : null,
+            modified_at: listing.modifiedAt ? new Date(listing.modifiedAt).toISOString() : null,
+            last_seen_at: now,
+            updated_at: now,
+            provider_active: true
+          })
           .eq("provider", provider)
           .eq("external_id", extId);
         seenRows.push({ reconciliation_job_id: jobId, provider_lead_id: leadId, external_id: extId });
@@ -177,6 +186,8 @@ async function saveSeenListings(
           owner_name: listing.ownerName || null, url: listing.url || null,
           is_private_owner: Boolean(listing.isPrivateOwner),
           created_at_first: listing.createdAtFirst || null,
+          published_at: listing.createdAtFirst ? new Date(listing.createdAtFirst).toISOString() : null,
+          modified_at: listing.modifiedAt ? new Date(listing.modifiedAt).toISOString() : null,
           short_description: listing.shortDescription || null,
           source: listing.source || null,
           status: "new", provider_active: true,

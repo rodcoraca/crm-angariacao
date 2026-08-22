@@ -28,12 +28,26 @@ function logAndRespond(
   body: Record<string, unknown>
 ) {
   if (status >= 400) {
-    console.error("RETURN", { stage, status, body });
+    console.error("RETURN", {
+      stage,
+      status,
+      body
+    });
   } else {
-    console.log("RETURN", { stage, status, body });
+    console.log("RETURN", {
+      stage,
+      status,
+      body
+    });
   }
 
   return response(status, body);
+}
+
+function normalizeEmail(value: unknown) {
+  return String(value || "")
+    .trim()
+    .toLowerCase();
 }
 
 type AuthAdminUser = {
@@ -42,12 +56,12 @@ type AuthAdminUser = {
   email_confirmed_at?: string | null;
 };
 
-function normalizeEmail(value: unknown) {
-  return String(value || "").trim().toLowerCase();
-}
-
-async function findAuthUserByEmail(adminClient: any, email: string) {
+async function findAuthUserByEmail(
+  adminClient: any,
+  email: string
+) {
   const targetEmail = normalizeEmail(email);
+
   if (!targetEmail) {
     return null;
   }
@@ -56,18 +70,37 @@ async function findAuthUserByEmail(adminClient: any, email: string) {
   const perPage = 200;
 
   for (;;) {
-    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
+    const {
+      data,
+      error
+    } =
+      await adminClient.auth.admin.listUsers({
+        page,
+        perPage
+      });
+
     if (error) {
       throw error;
     }
 
-    const users = (data?.users || []) as AuthAdminUser[];
-    const found = users.find((item) => normalizeEmail(item?.email) === targetEmail) || null;
+    const users =
+      (data?.users || []) as AuthAdminUser[];
+
+    const found =
+      users.find(
+        (item) =>
+          normalizeEmail(item?.email) ===
+          targetEmail
+      ) || null;
+
     if (found) {
       return found;
     }
 
-    if (!users.length || !data?.nextPage) {
+    if (
+      !users.length ||
+      !data?.nextPage
+    ) {
       break;
     }
 
@@ -78,9 +111,17 @@ async function findAuthUserByEmail(adminClient: any, email: string) {
 }
 
 Deno.serve(async (req: Request) => {
+  // ---------------------------------------------------------
   // PRE-FLIGHT
+  // ---------------------------------------------------------
   if (req.method === "OPTIONS") {
-    console.log("OPTIONS REQUEST", { method: req.method });
+    console.log(
+      "OPTIONS REQUEST",
+      {
+        method: req.method
+      }
+    );
+
     return new Response(
       "ok",
       {
@@ -91,8 +132,13 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
+    // -------------------------------------------------------
+    // RUNTIME SECRETS
+    // -------------------------------------------------------
     const supabaseUrl =
-      Deno.env.get("SUPABASE_URL");
+      Deno.env.get(
+        "SUPABASE_URL"
+      );
 
     const serviceRoleKey =
       Deno.env.get(
@@ -103,23 +149,42 @@ Deno.serve(async (req: Request) => {
       !supabaseUrl ||
       !serviceRoleKey
     ) {
-      console.error("RUNTIME VALIDATION", {
-        supabaseUrlExists: Boolean(supabaseUrl),
-        serviceRoleKeyExists: Boolean(serviceRoleKey)
-      });
+      console.error(
+        "RUNTIME VALIDATION",
+        {
+          supabaseUrlExists:
+            Boolean(supabaseUrl),
 
-      return logAndRespond("missing_runtime_secrets", 500, {
-        success: false,
-        error:
-          "missing_runtime_secrets"
-      });
+          serviceRoleKeyExists:
+            Boolean(serviceRoleKey)
+        }
+      );
+
+      return logAndRespond(
+        "missing_runtime_secrets",
+        500,
+        {
+          success: false,
+          error:
+            "missing_runtime_secrets"
+        }
+      );
     }
 
-    console.log("RUNTIME VALIDATION", {
-      supabaseUrlExists: Boolean(supabaseUrl),
-      serviceRoleKeyExists: Boolean(serviceRoleKey)
-    });
+    console.log(
+      "RUNTIME VALIDATION",
+      {
+        supabaseUrlExists:
+          Boolean(supabaseUrl),
 
+        serviceRoleKeyExists:
+          Boolean(serviceRoleKey)
+      }
+    );
+
+    // -------------------------------------------------------
+    // ADMIN CLIENT
+    // -------------------------------------------------------
     const admin =
       createClient(
         supabaseUrl,
@@ -132,21 +197,32 @@ Deno.serve(async (req: Request) => {
         }
       );
 
+    // -------------------------------------------------------
+    // AUTHORIZATION
+    // -------------------------------------------------------
     const authHeader =
       req.headers.get(
         "Authorization"
       );
 
-    console.log("AUTH HEADER RECEIVED", {
-      hasAuthorization: Boolean(authHeader)
-    });
+    console.log(
+      "AUTH HEADER RECEIVED",
+      {
+        hasAuthorization:
+          Boolean(authHeader)
+      }
+    );
 
     if (!authHeader) {
-      return logAndRespond("missing_authorization", 401, {
-        success: false,
-        error:
-          "missing_authorization"
-      });
+      return logAndRespond(
+        "missing_authorization",
+        401,
+        {
+          success: false,
+          error:
+            "missing_authorization"
+        }
+      );
     }
 
     const jwt =
@@ -167,142 +243,311 @@ Deno.serve(async (req: Request) => {
       authError ||
       !authUser.user
     ) {
-      console.error("INVALID TOKEN", {
-        authError,
-        hasUser: Boolean(authUser?.user)
-      });
+      console.error(
+        "INVALID TOKEN",
+        {
+          authError,
+          hasUser:
+            Boolean(
+              authUser?.user
+            )
+        }
+      );
 
-      return logAndRespond("invalid_token", 401, {
-        success: false,
-        error: "invalid_token",
-        details: authError || null
-      });
+      return logAndRespond(
+        "invalid_token",
+        401,
+        {
+          success: false,
+          error:
+            "invalid_token",
+          details:
+            authError || null
+        }
+      );
     }
 
-    let body: Record<string, unknown>;
+    // -------------------------------------------------------
+    // REQUEST PAYLOAD
+    // -------------------------------------------------------
+    let body:
+      Record<string, unknown>;
+
     try {
       body =
         await req.json();
     } catch (payloadError) {
-      console.error("INVALID PAYLOAD", payloadError);
-      return logAndRespond("invalid_payload", 400, {
-        success: false,
-        error: "invalid_payload",
-        details: payloadError instanceof Error
-          ? payloadError.message
-          : String(payloadError)
-      });
+      console.error(
+        "INVALID PAYLOAD",
+        payloadError
+      );
+
+      return logAndRespond(
+        "invalid_payload",
+        400,
+        {
+          success: false,
+          error:
+            "invalid_payload",
+          details:
+            payloadError instanceof Error
+              ? payloadError.message
+              : String(
+                  payloadError
+                )
+        }
+      );
     }
 
-    console.log("REQUEST BODY", body);
+    console.log(
+      "REQUEST BODY",
+      body
+    );
 
-    const email = normalizeEmail(body.email);
-
-    const action = String(body.action || "invite").trim().toLowerCase();
+    const email =
+      normalizeEmail(
+        body.email
+      );
 
     const redirectTo =
       body.redirectTo;
 
-    const nome = String(body.nome || "").trim();
-    const username = String(body.username || "").trim();
-    const empresa = String(body.empresa || "").trim();
+    const nome =
+      String(
+        body.nome || ""
+      ).trim();
 
-    console.log("EMAIL", email);
-    console.log("REDIRECT", redirectTo);
+    const username =
+      String(
+        body.username || ""
+      ).trim();
 
+    const empresa =
+      String(
+        body.empresa || ""
+      ).trim();
+
+    console.log(
+      "EMAIL",
+      email
+    );
+
+    console.log(
+      "REDIRECT",
+      redirectTo
+    );
+
+    // -------------------------------------------------------
+    // VALIDATE REDIRECT
+    // -------------------------------------------------------
     if (
       redirectTo !== undefined &&
       redirectTo !== null &&
-      typeof redirectTo !== "string"
+      typeof redirectTo !==
+        "string"
     ) {
-      return logAndRespond("invalid_payload_redirect", 400, {
-        success: false,
-        error: "invalid_payload",
-        details: {
-          field: "redirectTo",
-          expected: "string",
-          received: typeof redirectTo
-        }
-      });
-    }
-
-    if (!email) {
-      return logAndRespond("missing_email", 400, {
-        success: false,
-        error:
-          "missing_email"
-      });
-    }
-
-    const existingUser = await findAuthUserByEmail(admin, email);
-    const emailConfirmed = Boolean(existingUser?.email_confirmed_at);
-
-    if (action === "status") {
-      return logAndRespond("status", 200, {
-        success: true,
-        alreadyExists: Boolean(existingUser),
-        emailConfirmed,
-        data: {
-          user: existingUser
-            ? {
-                id: existingUser.id,
-                email: existingUser.email,
-                email_confirmed_at: existingUser.email_confirmed_at || null
-              }
-            : null
-        }
-      });
-    }
-
-    if (existingUser && emailConfirmed) {
-      return logAndRespond("existing_user_confirmed", 200, {
-        success: true,
-        alreadyExists: true,
-        emailConfirmed: true,
-        inviteSent: false,
-        data: {
-          user: {
-            id: existingUser.id,
-            email: existingUser.email,
-            email_confirmed_at: existingUser.email_confirmed_at || null
+      return logAndRespond(
+        "invalid_payload_redirect",
+        400,
+        {
+          success: false,
+          error:
+            "invalid_payload",
+          details: {
+            field:
+              "redirectTo",
+            expected:
+              "string",
+            received:
+              typeof redirectTo
           }
         }
-      });
+      );
     }
 
-    if (existingUser && !emailConfirmed) {
-      const generated = await admin.auth.admin.generateLink({
-        type: "invite",
-        email,
-        options: {
-          ...(redirectTo ? { redirectTo: String(redirectTo) } : {}),
-          data: { nome, username, empresa }
-        }
-      });
-
-      if (generated.error) {
-        return logAndRespond("invite_generate_link_error", Number(generated.error.status || 500), {
+    // -------------------------------------------------------
+    // VALIDATE EMAIL
+    // -------------------------------------------------------
+    if (!email) {
+      return logAndRespond(
+        "missing_email",
+        400,
+        {
           success: false,
-          error: generated.error.message,
-          details: generated.error
-        });
-      }
-
-      return logAndRespond("invite_regenerated", 200, {
-        success: true,
-        alreadyExists: true,
-        emailConfirmed: false,
-        inviteSent: true,
-        data: {
-          user: {
-            id: existingUser.id,
-            email: existingUser.email,
-            email_confirmed_at: existingUser.email_confirmed_at || null
-          },
-          generatedLink: generated.data?.properties?.action_link || null
+          error:
+            "missing_email"
         }
-      });
+      );
     }
+
+    // -------------------------------------------------------
+    // FIND EXISTING AUTH USER
+    // -------------------------------------------------------
+    const existingUser =
+      await findAuthUserByEmail(
+        admin,
+        email
+      );
+
+    const emailConfirmed =
+      Boolean(
+        existingUser?.email_confirmed_at
+      );
+
+    console.log(
+      "AUTH USER CHECK",
+      {
+        exists:
+          Boolean(existingUser),
+
+        emailConfirmed,
+
+        userId:
+          existingUser?.id ||
+          null
+      }
+    );
+
+    // -------------------------------------------------------
+    // STATUS REQUEST
+    // -------------------------------------------------------
+    const action =
+      String(
+        body.action ||
+          "invite"
+      )
+        .trim()
+        .toLowerCase();
+
+    if (
+      action === "status"
+    ) {
+      return logAndRespond(
+        "status",
+        200,
+        {
+          success: true,
+
+          alreadyExists:
+            Boolean(
+              existingUser
+            ),
+
+          emailConfirmed,
+
+          data: {
+            user:
+              existingUser
+                ? {
+                    id:
+                      existingUser.id,
+
+                    email:
+                      existingUser.email,
+
+                    email_confirmed_at:
+                      existingUser.email_confirmed_at ||
+                      null
+                  }
+                : null
+          }
+        }
+      );
+    }
+
+    // -------------------------------------------------------
+    // EXISTING CONFIRMED USER
+    // -------------------------------------------------------
+    //
+    // A confirmed account must not receive an invitation.
+    //
+    if (
+      existingUser &&
+      emailConfirmed
+    ) {
+      return logAndRespond(
+        "existing_user_confirmed",
+        200,
+        {
+          success: true,
+
+          alreadyExists:
+            true,
+
+          emailConfirmed:
+            true,
+
+          inviteSent:
+            false,
+
+          data: {
+            user: {
+              id:
+                existingUser.id,
+
+              email:
+                existingUser.email,
+
+              email_confirmed_at:
+                existingUser.email_confirmed_at ||
+                null
+            }
+          }
+        }
+      );
+    }
+
+    // -------------------------------------------------------
+    // INVITE / RE-INVITE
+    // -------------------------------------------------------
+    //
+    // IMPORTANT:
+    //
+    // We deliberately DO NOT return merely because the user
+    // already exists.
+    //
+    // inviteUserByEmail() is the Supabase operation that
+    // actually sends the invitation email.
+    //
+    // For a new user:
+    //   - creates the user
+    //   - sends the invite
+    //
+    // For an existing user:
+    //   - Supabase determines whether the invite can be sent
+    //   - we return the actual result/error
+    //
+    const inviteOptions = {
+      ...(redirectTo
+        ? {
+            redirectTo:
+              String(
+                redirectTo
+              )
+          }
+        : {}),
+
+      data: {
+        nome,
+        username,
+        empresa
+      }
+    };
+
+    console.log(
+      "INVITE REQUEST",
+      {
+        email,
+        existingUser:
+          Boolean(
+            existingUser
+          ),
+        emailConfirmed,
+        redirectTo:
+          redirectTo ||
+          null
+      }
+    );
 
     const {
       data,
@@ -311,12 +556,12 @@ Deno.serve(async (req: Request) => {
       await admin.auth.admin
         .inviteUserByEmail(
           email,
-          {
-            ...(redirectTo ? { redirectTo: String(redirectTo) } : {}),
-            data: { nome, username, empresa }
-          }
+          inviteOptions
         );
 
+    // -------------------------------------------------------
+    // INVITE ERROR
+    // -------------------------------------------------------
     if (error) {
       console.error(
         "INVITE ERROR",
@@ -332,52 +577,190 @@ Deno.serve(async (req: Request) => {
 
       const status =
         Number(
-          authError.status || 500
+          authError.status ||
+            500
         );
 
+      // -----------------------------------------------------
+      // EXISTING USER
+      // -----------------------------------------------------
+      //
+      // Do NOT report success.
+      //
+      // The email was not sent through inviteUserByEmail()
+      // if Auth rejects the operation because the account
+      // already exists.
+      //
+      if (
+        authError.code ===
+          "email_exists" ||
+        status === 422
+      ) {
+        return logAndRespond(
+          "invite_existing_user_rejected",
+          409,
+          {
+            success: false,
+
+            alreadyExists:
+              true,
+
+            emailConfirmed,
+
+            inviteSent:
+              false,
+
+            error:
+              "existing_user",
+
+            message:
+              "O utilizador já existe no Supabase Auth e o convite não foi enviado.",
+
+            data: {
+              user:
+                existingUser
+                  ? {
+                      id:
+                        existingUser.id,
+
+                      email:
+                        existingUser.email,
+
+                      email_confirmed_at:
+                        existingUser.email_confirmed_at ||
+                        null
+                    }
+                  : null
+            }
+          }
+        );
+      }
+
+      // -----------------------------------------------------
+      // OTHER AUTH ERROR
+      // -----------------------------------------------------
       return logAndRespond(
         "invite_error",
         status,
         {
           success: false,
+
+          alreadyExists:
+            Boolean(
+              existingUser
+            ),
+
+          emailConfirmed,
+
+          inviteSent:
+            false,
+
           error:
-            authError.message,
-          details: authError
+            authError.message ||
+            "invite_error",
+
+          details:
+            authError
         }
       );
     }
 
-    const invitedUserId = (data as any)?.user?.id;
-    if (invitedUserId && (nome || username || empresa)) {
-      const { error: updateError } = await admin.auth.admin.updateUserById(invitedUserId, {
-        user_metadata: { nome, username, empresa }
-      });
-      if (updateError) {
-        console.error("[send-user-invite] metadata_update_failed", {
-          userId: invitedUserId,
-          error: updateError.message
-        });
+    // -------------------------------------------------------
+    // UPDATE METADATA FOR NEWLY CREATED USER
+    // -------------------------------------------------------
+    const invitedUserId =
+      (data as any)
+        ?.user?.id;
+
+    if (
+      invitedUserId &&
+      (
+        nome ||
+        username ||
+        empresa
+      )
+    ) {
+      const {
+        error:
+          updateError
+      } =
+        await admin.auth.admin
+          .updateUserById(
+            invitedUserId,
+            {
+              user_metadata: {
+                nome,
+                username,
+                empresa
+              }
+            }
+          );
+
+      if (
+        updateError
+      ) {
+        console.error(
+          "[send-user-invite] metadata_update_failed",
+          {
+            userId:
+              invitedUserId,
+
+            error:
+              updateError.message
+          }
+        );
       }
     }
 
-    return logAndRespond("invite_success", 200, {
-      success: true,
-      alreadyExists: false,
-      emailConfirmed: false,
-      inviteSent: true,
-      data
-    });
+    // -------------------------------------------------------
+    // SUCCESS
+    // -------------------------------------------------------
+    return logAndRespond(
+      existingUser
+        ? "invite_resent"
+        : "invite_success",
+      200,
+      {
+        success: true,
+
+        alreadyExists:
+          Boolean(
+            existingUser
+          ),
+
+        emailConfirmed:
+          false,
+
+        inviteSent:
+          true,
+
+        data
+      }
+    );
 
   } catch (e) {
-    console.error("UNHANDLED ERROR", e);
+    console.error(
+      "UNHANDLED ERROR",
+      e
+    );
 
-    return logAndRespond("unhandled_exception", 500, {
-      success: false,
-      error:
-        e instanceof Error
-          ? e.message
-          : "unexpected_error",
-      details: e
-    });
+    return logAndRespond(
+      "unhandled_exception",
+      500,
+      {
+        success: false,
+
+        inviteSent:
+          false,
+
+        error:
+          e instanceof Error
+            ? e.message
+            : "unexpected_error",
+
+        details:
+          e
+      }
+    );
   }
 });

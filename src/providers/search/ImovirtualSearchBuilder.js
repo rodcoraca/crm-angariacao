@@ -45,6 +45,9 @@ function normalizeDistrictSlug(district) {
  */
 export function buildImovirtualSearchUrls({
   districts = [],
+  tipologia = "",
+  minPrice,
+  maxPrice,
   includePrivateOwners = true,
   includeProfessionalOwners = true
 } = {}) {
@@ -67,6 +70,16 @@ export function buildImovirtualSearchUrls({
         url.searchParams.set("ownerTypeSingleSelect", OWNER_TYPES.PRIVATE);
       } else if (!includePrivateOwners && includeProfessionalOwners) {
         url.searchParams.set("ownerTypeSingleSelect", OWNER_TYPES.PROFESSIONAL);
+      }
+
+      if (tipologia) {
+        url.searchParams.set("tipologia", String(tipologia));
+      }
+      if (minPrice !== undefined && minPrice !== null && minPrice !== "") {
+        url.searchParams.set("minPrice", String(minPrice));
+      }
+      if (maxPrice !== undefined && maxPrice !== null && maxPrice !== "") {
+        url.searchParams.set("maxPrice", String(maxPrice));
       }
 
       urls.push(url.toString());

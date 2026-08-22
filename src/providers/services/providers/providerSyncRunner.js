@@ -2,19 +2,27 @@ import { supabase } from "../../../supabase";
 import { resolveEmpresaId, warnMissingEmpresaId } from "../../../utils/empresaScope";
 import { providerSyncEngine, SyncState } from "../../../shared/provider-engine/sync/ProviderSyncEngine";
 
-const PROVIDER = "imovirtual";
+const DEFAULT_PROVIDER = "imovirtual";
 
 /**
- * Runner intermediário para sincronização manual do Imovirtual.
+ * Runner intermediário para sincronização manual do provider selecionado.
  * Toda a comunicação de progresso é emitida através do PSE (ADR-003).
  */
 export async function runImovirtualSync(config = {}) {
+  const provider = String(config?.provider || DEFAULT_PROVIDER).trim().toLowerCase();
+  const validProviders = new Set(["imovirtual", "custojusto"]);
+
+  if (!validProviders.has(provider)) {
+    throw new Error("Provider selecionado não é válido.");
+  }
+
   const startedAt = new Date().toISOString();
 
-  providerSyncEngine.emit(SyncState.PREPARING, PROVIDER, { startedAt, ...config });
+  providerSyncEngine.emit(SyncState.PREPARING, provider, { startedAt, ...config });
 
   console.log("[SYNC]", {
     phase: "runImovirtualSync_start",
+    provider,
     timestamp: startedAt
   });
 
@@ -22,12 +30,13 @@ export async function runImovirtualSync(config = {}) {
     const empresaId = await resolveEmpresaId();
     console.log("[SYNC]", {
       phase: "runImovirtualSync_empresa",
+      provider,
       empresaId: empresaId || null,
       timestamp: new Date().toISOString()
     });
     if (!empresaId) {
       warnMissingEmpresaId();
-      providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
+      providerSyncEngine.emit(SyncState.FAILED, provider, {
         startedAt,
         finishedAt: new Date().toISOString(),
         error: "Operacao sem empresa_id"
@@ -35,11 +44,11 @@ export async function runImovirtualSync(config = {}) {
       throw new Error("Operacao sem empresa_id");
     }
 
-    providerSyncEngine.emit(SyncState.CONNECTING, PROVIDER, { startedAt });
-    providerSyncEngine.emit(SyncState.FETCHING, PROVIDER, { startedAt });
+    providerSyncEngine.emit(SyncState.CONNECTING, provider, { startedAt });
+    providerSyncEngine.emit(SyncState.FETCHING, provider, { startedAt });
 
     console.log("[ProviderSync][SEARCH]", {
-      provider: PROVIDER,
+      provider,
       districts: config.districts,
       includePrivateOwners: config.includePrivateOwners,
       includeProfessionalOwners: config.includeProfessionalOwners
@@ -47,14 +56,14 @@ export async function runImovirtualSync(config = {}) {
 
     const { data, error } = await supabase.functions.invoke("provider-sync", {
       body: {
-        provider: PROVIDER,
-        empresaId,
-        ...config
+        ...config,
+        provider,
+        empresaId
       }
     });
 
     if (error) {
-      providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
+      providerSyncEngine.emit(SyncState.FAILED, provider, {
         startedAt,
         finishedAt: new Date().toISOString(),
         error: error.message
@@ -63,7 +72,7 @@ export async function runImovirtualSync(config = {}) {
     }
 
     if (!data || data.success !== true) {
-      providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
+      providerSyncEngine.emit(SyncState.FAILED, provider, {
         startedAt,
         finishedAt: new Date().toISOString(),
         error: data?.message || "Provider Sync indisponível."
@@ -88,15 +97,16 @@ export async function runImovirtualSync(config = {}) {
       elapsedTime: result.executionSeconds || 0
     };
 
-    providerSyncEngine.emit(SyncState.PROCESSING, PROVIDER, stats);
-    providerSyncEngine.emit(SyncState.FINALIZING, PROVIDER, { ...stats, result });
+    providerSyncEngine.emit(SyncState.PROCESSING, provider, stats);
+    providerSyncEngine.emit(SyncState.FINALIZING, provider, { ...stats, result });
 
     console.log("[SYNC]", {
       phase: "runImovirtualSync_success",
+      provider,
       timestamp: new Date().toISOString()
     });
 
-    providerSyncEngine.emit(SyncState.COMPLETED, PROVIDER, {
+    providerSyncEngine.emit(SyncState.COMPLETED, provider, {
       ...stats,
       finishedAt: new Date().toISOString(),
       result
@@ -104,7 +114,7 @@ export async function runImovirtualSync(config = {}) {
     return result;
   } catch (error) {
     if (providerSyncEngine.state !== SyncState.FAILED) {
-      providerSyncEngine.emit(SyncState.FAILED, PROVIDER, {
+      providerSyncEngine.emit(SyncState.FAILED, provider, {
         startedAt,
         finishedAt: new Date().toISOString(),
         error: error?.message || "Erro desconhecido"
@@ -113,6 +123,7 @@ export async function runImovirtualSync(config = {}) {
 
     console.log("[SYNC]", {
       phase: "runImovirtualSync_error",
+      provider,
       error: error?.message || "Erro desconhecido",
       timestamp: new Date().toISOString()
     });

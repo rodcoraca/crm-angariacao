@@ -16,10 +16,10 @@ export function formatPrice(value) {
 }
 
 export function formatPublishedDate(value) {
-  if (!value) return "N/A";
+  if (!value) return "—";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "N/A";
+  if (Number.isNaN(date.getTime())) return "—";
 
   const datePart = date.toLocaleDateString("pt-PT", {
     day: "2-digit",
