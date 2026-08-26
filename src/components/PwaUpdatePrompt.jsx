@@ -29,13 +29,20 @@ export default function PwaUpdatePrompt({ registration }) {
         return;
       }
 
-      if (current !== remote.buildId) {
+      if (current !== remote.buildId || registration?.waiting) {
         setUpdate(remote);
       }
     } catch (error) {
+      if (registration?.waiting) {
+        setUpdate({
+          app: "OSFlow",
+          buildId: "pending-service-worker-update",
+          forceUpdate: false
+        });
+      }
       console.warn("[OSFlow PWA] Version check unavailable", error);
     }
-  }, []);
+  }, [registration]);
 
   useEffect(() => {
     checkVersion();
@@ -63,18 +70,40 @@ export default function PwaUpdatePrompt({ registration }) {
       window.location.reload();
     };
 
+    const onUpdateFound = () => {
+      const worker = registration.installing;
+      if (!worker) return;
+
+      worker.addEventListener("statechange", () => {
+        if (worker.state === "installed" && navigator.serviceWorker.controller) {
+          checkVersion();
+        }
+      });
+    };
+
     navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
-    return () => navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
-  }, [registration]);
+    registration.addEventListener("updatefound", onUpdateFound);
+
+    if (registration.waiting) {
+      checkVersion();
+    }
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+      registration.removeEventListener("updatefound", onUpdateFound);
+    };
+  }, [registration, checkVersion]);
 
   if (!update) return null;
 
   const applyUpdate = () => {
-    window.localStorage.setItem(LOCAL_VERSION_KEY, update.buildId);
-
     if (registration?.waiting) {
       registration.waiting.postMessage({ type: "SKIP_WAITING" });
       return;
+    }
+
+    if (update.buildId !== "pending-service-worker-update") {
+      window.localStorage.setItem(LOCAL_VERSION_KEY, update.buildId);
     }
 
     window.location.reload();
