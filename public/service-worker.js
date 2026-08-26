@@ -4,7 +4,7 @@
  * The application version check + HTTP revalidation keep installed shortcuts
  * on the current release without requiring the user to reinstall the PWA.
  */
-const CACHE_NAME = "osflow-runtime-v1";
+const CACHE_NAME = "osflow-runtime-v2";
 
 self.addEventListener("install", () => {
   // Take control immediately only on the first installation. For subsequent
