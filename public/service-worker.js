@@ -7,7 +7,11 @@
 const CACHE_NAME = "osflow-runtime-v1";
 
 self.addEventListener("install", () => {
-  self.skipWaiting();
+  // Take control immediately only on the first installation. For subsequent
+  // releases, keep the new worker waiting until the user chooses to update.
+  if (!self.registration.active) {
+    self.skipWaiting();
+  }
 });
 
 self.addEventListener("activate", (event) => {
