@@ -6,3 +6,4 @@ deployment:
     - npm run build
     - export DEPLOYPATH=/home/osflowpt/public_html/
     - /bin/cp -R build/. $DEPLOYPATH
+    - /bin/cp public/.htaccess $DEPLOYPATH/.htaccess
