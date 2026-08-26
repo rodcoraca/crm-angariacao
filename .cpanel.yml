@@ -1,5 +1,8 @@
 ---
 deployment:
   tasks:
+    - source /home/osflowpt/nodevenv/public_html/18/bin/activate
+    - npm ci
+    - npm run build
     - export DEPLOYPATH=/home/osflowpt/public_html/
     - /bin/cp -R build/* $DEPLOYPATH
