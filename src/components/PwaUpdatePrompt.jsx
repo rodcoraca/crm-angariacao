@@ -69,7 +69,7 @@ export default function PwaUpdatePrompt({ registration }) {
 
   if (!update) return null;
 
-  const applyUpdate = async () => {
+  const applyUpdate = () => {
     window.localStorage.setItem(LOCAL_VERSION_KEY, update.buildId);
 
     if (registration?.waiting) {
@@ -84,49 +84,51 @@ export default function PwaUpdatePrompt({ registration }) {
 
   return (
     <div
-      role={forceUpdate ? "alert" : "status"}
+      role={forceUpdate ? "alertdialog" : "status"}
+      aria-modal={forceUpdate ? "true" : undefined}
       style={{
         position: "fixed",
-        left: "50%",
-        bottom: "20px",
-        transform: "translateX(-50%)",
+        inset: forceUpdate ? 0 : "auto 12px 20px",
+        left: forceUpdate ? 0 : "50%",
+        transform: forceUpdate ? "none" : "translateX(-50%)",
         zIndex: 3000,
-        width: "min(560px, calc(100vw - 24px))",
-        padding: "14px 16px",
-        borderRadius: "12px",
-        background: "#0d2c4d",
+        width: forceUpdate ? "100%" : "min(560px, calc(100vw - 24px))",
+        minHeight: forceUpdate ? "100%" : "auto",
+        padding: forceUpdate ? "24px" : "14px 16px",
+        boxSizing: "border-box",
+        background: forceUpdate ? "rgba(13,44,77,.98)" : "#0d2c4d",
         color: "#ffffff",
         boxShadow: "0 12px 32px rgba(0,0,0,.22)",
         display: "flex",
         alignItems: "center",
-        justifyContent: "space-between",
+        justifyContent: forceUpdate ? "center" : "space-between",
         gap: "16px"
       }}
     >
-      <div>
-        <div style={{ fontWeight: 700, marginBottom: "4px" }}>
-          {forceUpdate ? "Atualização necessária" : "Nova versão do OSFlow disponível"}
+      <div style={{ maxWidth: forceUpdate ? "520px" : "none", textAlign: forceUpdate ? "center" : "left" }}>
+        <div style={{ fontWeight: 700, fontSize: forceUpdate ? "22px" : "16px", marginBottom: "6px" }}>
+          {forceUpdate ? "Atualização obrigatória" : "Nova versão do OSFlow disponível"}
         </div>
-        <div style={{ fontSize: "13px", opacity: 0.9 }}>
+        <div style={{ fontSize: "13px", opacity: 0.9, marginBottom: forceUpdate ? "20px" : 0 }}>
           {forceUpdate
-            ? "Atualize para continuar a utilizar o OSFlow."
+            ? "Foi publicada uma atualização necessária. Atualize agora para continuar a utilizar o OSFlow."
             : "A aplicação foi atualizada. Pode aplicar a nova versão agora."}
         </div>
+        <button
+          type="button"
+          onClick={applyUpdate}
+          style={{
+            border: 0,
+            borderRadius: "8px",
+            padding: "9px 14px",
+            fontWeight: 700,
+            cursor: "pointer",
+            whiteSpace: "nowrap"
+          }}
+        >
+          Atualizar agora
+        </button>
       </div>
-      <button
-        type="button"
-        onClick={applyUpdate}
-        style={{
-          border: 0,
-          borderRadius: "8px",
-          padding: "9px 14px",
-          fontWeight: 700,
-          cursor: "pointer",
-          whiteSpace: "nowrap"
-        }}
-      >
-        Atualizar agora
-      </button>
     </div>
   );
 }
