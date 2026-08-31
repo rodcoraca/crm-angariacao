@@ -24,7 +24,7 @@ import SyncPreparationModal from "../components/radar/SyncPreparationModal";
 import { getProviderSyncStatus } from "../providers/services/providers/providerSyncService";
 import { providerSyncEngine, SyncState } from "../shared/provider-engine/sync/ProviderSyncEngine";
 import { useNavigationGuard } from "../shared/navigation";
-import { formatPublishedDate } from "../modules/radar/utils/radarUtils";
+import { formatDateTime, formatPublishedDate } from "../modules/radar/utils/radarUtils";
 
 const PROVIDER_LOGOS = {
   imovirtual: imovirtualLogo,
@@ -230,8 +230,19 @@ export default function Radar() {
 
   const TIMELINE_PAGE_SIZE = 5;
   const styles = useMemo(() => createRadarStyles(theme), [theme]);
-  const nowrapButtonStyle = useMemo(() => ({ whiteSpace: "nowrap", minWidth: "120px" }), []);
-  const nowrapBadgeStyle = useMemo(() => ({ whiteSpace: "nowrap" }), []);
+  const nowrapButtonStyle = useMemo(() => ({
+    whiteSpace: "nowrap",
+    minWidth: "110px",
+    padding: "6px 10px",
+    fontSize: "0.8rem",
+    lineHeight: 1.2
+  }), []);
+  const nowrapBadgeStyle = useMemo(() => ({
+    whiteSpace: "nowrap",
+    padding: "4px 8px",
+    fontSize: "0.78rem",
+    lineHeight: 1.2
+  }), []);
 
   const waitForRenderCommit = useCallback(async () => {
   if (typeof window === "undefined" || typeof window.requestAnimationFrame !== "function") {
@@ -709,36 +720,119 @@ export default function Radar() {
     {
       key: "imovel",
       title: "Imóvel",
+      width: "28%",
       render: (row) => (
-            <button
-              type="button"
+        <button
+          type="button"
           onClick={() => openOpportunityDetail(row.rawOpportunity || null)}
-          style={styles.linkButton}
+          style={{
+            ...styles.linkButton,
+            display: "block",
+            width: "100%",
+            maxWidth: "100%",
+            lineHeight: 1.4,
+            whiteSpace: "normal",
+            textAlign: "left",
+            overflowWrap: "anywhere",
+            wordBreak: "break-word"
+          }}
         >
-              {row.rawOpportunity?.titulo || row.imovel}
+          {row.rawOpportunity?.titulo || row.imovel}
         </button>
       )
     },
-    { key: "proprietario", title: "Proprietário", render: (row) => row.rawOpportunity?.owner_name || "N/A" }, // Novo
-    { key: "localizacao", title: "Localização" },
-    { key: "preco", title: "Preço" },
+    { key: "proprietario", title: "Proprietário", width: "8%", render: (row) => row.rawOpportunity?.owner_name || "N/A" },
     {
-      key: "importado_em",
-      title: "Importado em",
+      key: "localizacao",
+      title: "Localização",
+      width: "13%",
       render: (row) => {
         const raw = row?.rawOpportunity || {};
-        return formatPublishedDate(raw?.created_at || null);
+        const primary = row?.localizacao || raw?.cidade || raw?.distrito || raw?.morada || "Sem localização";
+        const secondary = raw?.morada || raw?.location || raw?.localizacao || "";
+        const tooltipText = [raw?.cidade, raw?.distrito, raw?.morada || raw?.location].filter(Boolean).join(" · ") || primary;
+
+        return (
+          <div
+            title={tooltipText}
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-start",
+              gap: 2,
+              width: "100%",
+              maxWidth: "100%",
+              lineHeight: 1.2,
+              minWidth: 0,
+              overflow: "hidden"
+            }}
+          >
+            <span
+              style={{
+                display: "block",
+                width: "100%",
+                maxWidth: "100%",
+                lineHeight: 1.35,
+                whiteSpace: "normal",
+                overflowWrap: "anywhere",
+                wordBreak: "break-word",
+                fontSize: "0.86rem",
+                fontWeight: 600,
+                color: theme.colors.text
+              }}
+            >
+              {primary}
+            </span>
+            {secondary ? (
+              <span
+                style={{
+                  display: "block",
+                  width: "100%",
+                  maxWidth: "100%",
+                  lineHeight: 1.35,
+                  whiteSpace: "normal",
+                  overflowWrap: "anywhere",
+                  wordBreak: "break-word",
+                  fontSize: "0.76rem",
+                  color: theme.colors.muted
+                }}
+              >
+                {secondary}
+              </span>
+            ) : null}
+          </div>
+        );
+      }
+    },
+    { key: "preco", title: "Preço", width: "9%" },
+    {
+      key: "publicado",
+      title: "Publicado em",
+      width: "9%",
+      render: (row) => {
+        const raw = row?.rawOpportunity || {};
+        return formatPublishedDate(raw?.published_at ?? null);
       },
       sortAccessor: (row) => {
         const raw = row?.rawOpportunity || {};
-        const sourceDate = raw?.created_at || null;
+        const sourceDate = raw?.published_at ?? null;
         const parsed = sourceDate ? new Date(sourceDate) : null;
         return parsed && !Number.isNaN(parsed.getTime()) ? parsed.getTime() : 0;
       }
     },
     {
+      key: "importado",
+      title: "Importado em",
+      width: "9%",
+      render: (row) => {
+        const raw = row?.rawOpportunity || {};
+        return formatDateTime(raw?.created_at ?? null);
+      }
+    },
+    {
       key: "estado",
       title: "Estado",
+      width: "6%",
       render: (row) => {
         const estado = String(row.estado || "").toLowerCase();
               const variant =
@@ -762,6 +856,7 @@ export default function Radar() {
     {
       key: "provider",
       title: "Origem",
+      width: "6%",
       render: (row) => {
         const providerValue =
         row?.provider ||
@@ -775,17 +870,19 @@ export default function Radar() {
 
         if (logoUrl) {
           return (
-            <img
-              src={logoUrl}
-              alt={providerName}
-              title={providerName}
-              style={{ width: 75, height: 75, objectFit: "contain", display: "block", margin: "0 auto", borderRadius: 4 }}
-            />
+            <div style={{ display: "flex", justifyContent: "center", alignItems: "center", width: "100%" }}>
+              <img
+                src={logoUrl}
+                alt={providerName}
+                title={providerName}
+                style={{ width: 46, height: 46, objectFit: "contain", display: "block", borderRadius: 4 }}
+              />
+            </div>
           );
         }
 
         return (
-          <span title={providerName} style={{ whiteSpace: "nowrap", fontSize: "0.8rem", color: theme.colors.muted }}>
+          <span title={providerName} style={{ display: "block", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", fontSize: "0.74rem", color: theme.colors.muted }}>
             {providerName}
           </span>
         );
@@ -794,6 +891,7 @@ export default function Radar() {
     {
       key: "acoes",
       title: "Ações",
+      width: "12%",
       render: (row) => {
         const isImported = isImportedOpportunity(row.rawOpportunity || row);
         const isIgnored = isIgnoredOpportunity(row.rawOpportunity || row);
@@ -947,7 +1045,9 @@ export default function Radar() {
               <input
                 type="text"
                 value={filtroCidade}
-                placeholder="Pesquisar concelho..."
+                placeholder="Digite o concelho"
+                aria-label="Filtro de concelho"
+                title="Filtro de concelho"
                 style={styles.filterControl}
                 onChange={(event) => { const v = event.target.value; setFiltroCidade(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade: v, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData, filtroTipologia, filtroPrecoMin, filtroPrecoMax }) }); }}
               />
@@ -1162,7 +1262,10 @@ export default function Radar() {
           <Table
             columns={colunasTabela}
             rows={tableRows}
+            compact={true}
             emptyMessage="Sem oportunidades disponíveis"
+            style={{ overflowX: "hidden" }}
+            tableStyle={{ tableLayout: "fixed" }}
             rowProps={(row, _index, computedKey) => {
               const opportunityId = String(row?.rawOpportunity?.id || row?.id || computedKey || "").trim();
               const isSelected = Boolean(opportunityId && opportunityId === selectedOpportunityId);

@@ -201,6 +201,22 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
           })()
         ) : null}
 
+        {podeVerRota('comissoes') ? (
+          (() => {
+            const menuStyles = getMenuStyles(activeView === "comissoes");
+            return (
+              <SidebarItem
+                collapsed={collapsed}
+                onClick={() => handleSelectView("comissoes")}
+                style={menuStyles.style}
+                collapsedStyle={menuStyles.collapsedStyle}
+              >
+                {collapsed ? "C" : "Comissões"}
+              </SidebarItem>
+            );
+          })()
+        ) : null}
+
         {podeVerAdministracao ? (
           <>
             {(() => {

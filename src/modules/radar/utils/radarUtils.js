@@ -16,10 +16,10 @@ export function formatPrice(value) {
 }
 
 export function formatPublishedDate(value) {
-  if (!value) return "—";
+  if (!value) return "â€”";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
+  if (Number.isNaN(date.getTime())) return "â€”";
 
   const datePart = date.toLocaleDateString("pt-PT", {
     day: "2-digit",
@@ -36,6 +36,28 @@ export function formatPublishedDate(value) {
   return `${datePart} ${timePart}`;
 }
 
+
+export function formatDateTime(value) {
+  if (!value) return "—";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+
+  const datePart = date.toLocaleDateString("pt-PT", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  });
+
+  const timePart = date.toLocaleTimeString("pt-PT", {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false
+  });
+
+  return `${datePart} ${timePart}`;
+}
 export function calculateAverageScore(opportunities) {
   const values = (opportunities || [])
     .map((item) => Number(item?.score))

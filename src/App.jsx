@@ -11,6 +11,7 @@ import Fluxo from "./pages/Fluxo";
 import Dashboard from "./pages/Dashboard";
 import LeadsPorTipo from "./pages/LeadsPorTipo";
 import MensagensPadrao from "./pages/MensagensPadrao";
+import CalculadoraComissoes from "./pages/CalculadoraComissoes";
 import EstoqueNaoPublicitado from "./EstoqueNaoPublicitado";
 import FichaLead from "./FichaLead";
 import Usuarios from "./pages/Usuarios";
@@ -644,6 +645,7 @@ export default function App() {
       admin_documentacao: "Documentos",
       empresas_admin: "Administração",
       mensagens: "Mensagens",
+      comissoes: "Comissões",
       usuarios: "Administração",
       logs: "Auditoria",
       forbidden: "Acesso"
@@ -968,6 +970,7 @@ export default function App() {
     morno: canAccessView("morno") ? <LeadsPorTipo tipo="morno" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="morno" requiredPermission={getRequiredPermission("morno")} />,
     frio: canAccessView("frio") ? <LeadsPorTipo tipo="frio" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="frio" requiredPermission={getRequiredPermission("frio")} />,
     mensagens: canAccessView("mensagens") ? <MensagensPadrao /> : <Forbidden requestedView="mensagens" requiredPermission={getRequiredPermission("mensagens")} />,
+    comissoes: canAccessView("comissoes") ? <CalculadoraComissoes /> : <Forbidden requestedView="comissoes" requiredPermission={getRequiredPermission("comissoes")} />,
     estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
     usuarios: canAccessView("usuarios") ? <Usuarios currentUser={user} selectionRequest={userSelectionRequest} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
     logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={user} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,

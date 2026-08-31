@@ -75,7 +75,7 @@ export default function DataTable({
   return (
     <div
       style={{
-        overflowX: "auto",
+        overflowX: "hidden",
         borderRadius: theme.borderRadius.md,
         border: `1px solid ${theme.colors.border}`,
         background: theme.colors.surface,
@@ -83,7 +83,7 @@ export default function DataTable({
         ...style
       }}
     >
-      <table style={{ width: "100%", borderCollapse: "collapse", fontFamily: theme.typography.fontFamily, ...tableStyle }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", tableLayout: "fixed", fontFamily: theme.typography.fontFamily, ...tableStyle }}>
         <thead>
           <tr style={{ background: theme.colors.surfaceSoft }}>
             {columns.map((column) => {
@@ -99,13 +99,16 @@ export default function DataTable({
                   style={{
                     textAlign: column.align || "left",
                     padding: rowPadding,
+                    width: column.width,
+                    minWidth: column.minWidth,
+                    maxWidth: column.maxWidth,
                     color: theme.colors.muted,
-                    fontSize: theme.typography.caption.fontSize,
+                    fontSize: "0.8rem",
                     fontWeight: theme.typography.cardTitle.fontWeight,
                     borderBottom: `1px solid ${theme.colors.border}`,
                     userSelect: "none",
                     cursor: canSort ? "pointer" : "default",
-                    whiteSpace: "nowrap",
+                    whiteSpace: "normal",
                     background: canSort && hoveredHeaderKey === (column.key || column.title) ? theme.colors.surface : theme.colors.surfaceSoft,
                     transition: "background-color 200ms ease, color 200ms ease"
                   }}
@@ -156,10 +159,17 @@ export default function DataTable({
                       key={`${computedKey}_${column.key || column.title}`}
                       style={{
                         padding: rowPadding,
+                        width: column.width,
+                        minWidth: column.minWidth,
+                        maxWidth: column.maxWidth,
                         color: theme.colors.text,
-                        fontSize: theme.typography.body.fontSize,
+                        fontSize: "0.9rem",
                         fontWeight: theme.typography.body.fontWeight,
-                        verticalAlign: "top"
+                        verticalAlign: "top",
+                        lineHeight: 1.45,
+                        whiteSpace: "normal",
+                        overflowWrap: "anywhere",
+                        wordBreak: "break-word"
                       }}
                     >
                       {typeof column.render === "function" ? column.render(row) : row[column.key]}
