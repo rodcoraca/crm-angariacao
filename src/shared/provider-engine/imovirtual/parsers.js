@@ -1,3 +1,5 @@
+import { normalizePortugalLocalIsoToUtc } from "../providerLocalTime.js";
+
 const LISTING_SELECTORS = [
   '[data-cy="search.listing"]',
   '[data-testid="listing"]',
@@ -131,7 +133,7 @@ export function mapNextDataItemToListing(item) {
     ownerName: item.advertOwner?.name?.trim() || null,
     url: buildImovirtualPublicUrl(item.href),
     isPrivateOwner: Boolean(item.isPrivateOwner),
-    createdAtFirst: item.createdAtFirst || null,
+    createdAtFirst: normalizePortugalLocalIsoToUtc(item.createdAtFirst),
     modifiedAt: null,
     shortDescription: item.shortDescription || null,
     source: item.source || null

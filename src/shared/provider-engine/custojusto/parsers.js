@@ -14,6 +14,8 @@
  * - alterar providers existentes.
  */
 
+import { normalizePortugalLocalIsoToUtc } from "../providerLocalTime.js";
+
 const CUSTOJUSTO_BASE_URL = "https://www.custojusto.pt";
 
 /**
@@ -263,7 +265,7 @@ export function normalizeCustoJustoListing(item) {
           ? true
           : null,
 
-    createdAtFirst: item.listTime || null,
+    createdAtFirst: normalizePortugalLocalIsoToUtc(item.listTime),
     modifiedAt: null,
 
     district: locationNames.district
