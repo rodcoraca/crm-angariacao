@@ -546,14 +546,63 @@
 }
 
 .cockpit-agenda-item {
-  grid-template-columns: 58px 28px minmax(0, 1fr) auto;
+  grid-template-columns: 58px 118px minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.cockpit-agenda-item--lembrete {
+  grid-template-columns: 58px 118px minmax(0, 1fr) minmax(0, 1fr) auto;
+}
+
+.cockpit-agenda-item__actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  min-width: max-content;
+}
+
+.cockpit-agenda-action {
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--cockpit-border);
+  border-radius: 8px;
+  background: var(--cockpit-surface-soft);
+  color: var(--cockpit-text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cockpit-agenda-action:disabled {
+  cursor: default;
+  opacity: 0.62;
+}
+
+.cockpit-agenda-item:disabled {
+  cursor: default;
 }
 
 .cockpit-agenda-item__time {
   font-size: 14px;
   font-weight: 600;
   color: var(--cockpit-text);
+}
+
+.cockpit-agenda-item__type,
+.cockpit-agenda-item__client,
+.cockpit-agenda-item__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .cockpit-token,
@@ -810,6 +859,15 @@
 
   .cockpit-agenda-item {
     grid-template-columns: 56px 28px minmax(0, 1fr);
+  }
+
+  .cockpit-agenda-item--lembrete {
+    grid-template-columns: 52px minmax(0, 1fr) auto;
+  }
+
+  .cockpit-agenda-item--lembrete .cockpit-agenda-item__type,
+  .cockpit-agenda-item--lembrete .cockpit-agenda-item__client {
+    display: none;
   }
 
   .cockpit-funnel-row {

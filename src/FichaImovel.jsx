@@ -17,6 +17,7 @@ export default function FichaImovel(props) {
     onUpload,
     onDownload,
     onDelete,
+    onExcluirImovel,
     onSelectFicheiro,
     ficheiroSelecionado,
     setFicheiroSelecionado,
@@ -44,6 +45,13 @@ export default function FichaImovel(props) {
         <strong>{imovel.proprietario}</strong>
         <div>
           <button style={{ marginRight: 10, padding: 8, borderRadius: 8, border: `1px solid ${theme.colors.border}`, background: theme.colors.surfaceSoft, color: theme.colors.text, cursor: "pointer" }} onClick={onEditar}>✎ Editar</button>
+          <button
+            type="button"
+            style={{ marginRight: 10, padding: "8px 12px", borderRadius: 8, border: `1px solid #fca5a5`, background: "#fff1f2", color: "#b91c1c", cursor: "pointer", fontWeight: 600 }}
+            onClick={() => onExcluirImovel?.(imovel)}
+          >
+            Excluir
+          </button>
           <button style={{ border: "none", background: "transparent", cursor: "pointer" }} onClick={() => setImovelSelecionado(null)}>✖</button>
         </div>
       </div>

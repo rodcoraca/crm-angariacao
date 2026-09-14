@@ -4,6 +4,8 @@ import { useLeadsPorTipo } from "../modules/leads/hooks";
 import { emojiTipoLead, formatarDataLeadCard } from "../modules/leads/viewmodels";
 import { notifyError } from "../components/ui/feedbackBus";
 import EmptyState from "../components/ui/EmptyState";
+import Badge from "../components/ui/Badge";
+import { getLeadStatusLabel, getLeadStatusVariant } from "../modules/leads/statusCatalog";
 
 export default function LeadsPorTipo({ tipo, user, onAbrirLead, onVoltarLead }) {
   const theme = useTheme();
@@ -102,6 +104,10 @@ export default function LeadsPorTipo({ tipo, user, onAbrirLead, onVoltarLead }) 
 
               <p style={agenteStyle}>
                 <strong>Agente:</strong> {nomeAgente(lead.agente_id)}
+              </p>
+
+              <p style={{ margin: "8px 0" }}>
+                <Badge variant={getLeadStatusVariant(lead.status)}>{getLeadStatusLabel(lead.status)}</Badge>
               </p>
 
               <textarea

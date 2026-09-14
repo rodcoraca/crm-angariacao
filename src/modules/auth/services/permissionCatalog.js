@@ -30,6 +30,16 @@ const MODULE_GROUPS = [
         key: "mensagens",
         label: "Mensagens",
         base: "messages"
+      },
+      {
+        key: "servicos",
+        label: "Serviços",
+        base: "servico"
+      },
+      {
+        key: "plantoes",
+        label: "Plantões",
+        base: "plantao"
       }
     ]
   },
@@ -53,6 +63,28 @@ const MODULE_GROUPS = [
         key: "estoque",
         label: "Estoque",
         base: "inventory"
+      },
+      {
+        key: "estoque_nao_publicitado",
+        label: "Estoque Não Publicitado",
+        base: "estoque_nao_publicitado",
+        extras: [
+          "view_private_data",
+          "create_client",
+          "create_development",
+          "create_unit",
+          "edit_client",
+          "edit_development",
+          "edit_unit",
+          "delete_client",
+          "delete_development",
+          "delete_unit"
+        ]
+      },
+      {
+        key: "empreendimentos",
+        label: "Empreendimentos",
+        base: "empreendimentos"
       }
     ]
   },

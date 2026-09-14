@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import { useTheme } from "../../theme/ThemeContext";
 
 export default function Tooltip({
@@ -13,21 +13,48 @@ export default function Tooltip({
 }) {
   const theme = useTheme();
   const tooltipId = useId();
+  const triggerRef = useRef(null);
   const [visible, setVisible] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
 
   if (!content) return children || null;
 
-  const placementStyles = {
-    top: { bottom: `calc(100% + ${theme.spacing.xs})`, left: "50%", transform: "translateX(-50%)" },
-    bottom: { top: `calc(100% + ${theme.spacing.xs})`, left: "50%", transform: "translateX(-50%)" },
-    left: { right: `calc(100% + ${theme.spacing.xs})`, top: "50%", transform: "translateY(-50%)" },
-    right: { left: `calc(100% + ${theme.spacing.xs})`, top: "50%", transform: "translateY(-50%)" }
-  };
+  const computePosition = () => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
 
-  const placementStyle = placementStyles[placement] || placementStyles.top;
+    const rect = trigger.getBoundingClientRect();
+    const tooltipWidth = Math.min(Number(maxWidth) || 420, window.innerWidth - 24);
+    const tooltipHeight = 120;
+
+    let top = rect.top;
+    let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+
+    if (placement === "bottom") {
+      top = rect.bottom + 10;
+      left = rect.left + rect.width / 2 - tooltipWidth / 2;
+    } else if (placement === "left") {
+      left = rect.left - tooltipWidth - 10;
+      top = rect.top + rect.height / 2 - tooltipHeight / 2;
+    } else if (placement === "right") {
+      left = rect.right + 10;
+      top = rect.top + rect.height / 2 - tooltipHeight / 2;
+    } else {
+      top = rect.top - tooltipHeight - 10;
+      left = rect.left + rect.width / 2 - tooltipWidth / 2;
+    }
+
+    if (left < 12) left = 12;
+    if (left + tooltipWidth > window.innerWidth - 12) left = window.innerWidth - tooltipWidth - 12;
+    if (top < 12) top = 12;
+    if (top + tooltipHeight > window.innerHeight - 12) top = window.innerHeight - tooltipHeight - 12;
+
+    setPosition({ top, left });
+  };
 
   const show = () => {
     if (disabled) return;
+    computePosition();
     window.setTimeout(() => setVisible(true), delay);
   };
 
@@ -35,7 +62,8 @@ export default function Tooltip({
 
   return (
     <span
-      style={{ position: "relative", display: "inline-flex", ...style }}
+      ref={triggerRef}
+      style={{ position: "relative", display: "inline-flex", zIndex: 2147483647, isolation: "isolate", ...style }}
       onMouseEnter={show}
       onMouseLeave={hide}
       onFocus={show}
@@ -49,9 +77,13 @@ export default function Tooltip({
           id={tooltipId}
           role="tooltip"
           style={{
-            position: "absolute",
-            zIndex: 1400,
-            maxWidth: maxWidth || "280px",
+            position: "fixed",
+            top: `${position.top}px`,
+            left: `${position.left}px`,
+            zIndex: 2147483647,
+            display: "block",
+            minWidth: "260px",
+            maxWidth: maxWidth || "520px",
             padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
             borderRadius: theme.borderRadius.sm,
             background: theme.colors.text,
@@ -61,7 +93,8 @@ export default function Tooltip({
             lineHeight: theme.typography.caption.lineHeight,
             boxShadow: theme.elevation[2],
             pointerEvents: "none",
-            ...placementStyle,
+            whiteSpace: "normal",
+            wordBreak: "break-word",
             ...tooltipStyle
           }}
         >

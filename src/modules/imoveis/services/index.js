@@ -6,6 +6,8 @@ export {
   carregarImoveisService,
   construirPayloadImovel,
   downloadFicheiroService,
+  excluirImovelService,
+  mapFicheiroParaAuditoria,
   mapImovelParaFormulario,
   salvarImovelService,
   toNumberOrNull,

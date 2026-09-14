@@ -10,7 +10,7 @@ const DEFAULT_PROVIDER = "imovirtual";
  */
 export async function runImovirtualSync(config = {}) {
   const provider = String(config?.provider || DEFAULT_PROVIDER).trim().toLowerCase();
-  const validProviders = new Set(["imovirtual", "custojusto"]);
+  const validProviders = new Set(["imovirtual", "custojusto", "idealista", "olx"]);
 
   if (!validProviders.has(provider)) {
     throw new Error("Provider selecionado não é válido.");
@@ -47,16 +47,33 @@ export async function runImovirtualSync(config = {}) {
     providerSyncEngine.emit(SyncState.CONNECTING, provider, { startedAt });
     providerSyncEngine.emit(SyncState.FETCHING, provider, { startedAt });
 
+    const rawMaxPages = config?.maxPages;
+    const normalizedMaxPages = (() => {
+      if (rawMaxPages === undefined || rawMaxPages === null || rawMaxPages === "") {
+        return 20;
+      }
+
+      const numericValue = Number(rawMaxPages);
+      if (!Number.isInteger(numericValue) || numericValue < 1 || numericValue > 20) {
+        return 20;
+      }
+
+      return numericValue;
+    })();
+
     console.log("[ProviderSync][SEARCH]", {
       provider,
       districts: config.districts,
       includePrivateOwners: config.includePrivateOwners,
-      includeProfessionalOwners: config.includeProfessionalOwners
+      includeProfessionalOwners: config.includeProfessionalOwners,
+      rawMaxPages,
+      normalizedMaxPages
     });
 
     const { data, error } = await supabase.functions.invoke("provider-sync", {
       body: {
         ...config,
+        maxPages: normalizedMaxPages,
         provider,
         empresaId
       }

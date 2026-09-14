@@ -169,23 +169,39 @@ select:disabled,
 }
 
 .radar-indicator-card {
-  min-height: 68px !important;
-  padding: 8px 10px !important;
-  gap: 4px !important;
+  min-height: 90px !important;
+  padding: 10px 12px !important;
+  gap: 6px !important;
+  min-width: 220px !important;
 }
 
 .radar-indicator-card header {
-  gap: 6px !important;
+  gap: 8px !important;
+  align-items: center !important;
+}
+
+.radar-indicator-card header > div {
+  gap: 3px !important;
 }
 
 .radar-indicator-card header strong {
-  font-size: 1.05rem !important;
-  line-height: 1.15 !important;
+  font-size: 1.55rem !important;
+  line-height: 1.1 !important;
+}
+
+.radar-indicator-card header span:first-child {
+  font-size: 0.78rem !important;
 }
 
 .radar-indicator-card footer {
   display: flex !important;
   align-items: center;
+  gap: 6px !important;
+}
+
+.radar-indicator-card footer span {
+  font-size: 0.72rem !important;
+  padding: 3px 8px !important;
 }
 
 .radar-indicator-card footer small {

@@ -18,10 +18,14 @@ export function formatarHoraAgenda(value) {
 
 export function labelEstadoAgenda(status) {
   if (!status) return "Sem estado";
-  if (status === "agendado") return "Agendado";
-  if (status === "contactado") return "Contactado";
+  if (status === "agendamento") return "Agendamento";
+  if (status === "em_contacto") return "Em contacto";
+  if (status === "em_acompanhamento") return "Em acompanhamento";
+  if (status === "proposta") return "Proposta";
+  if (status === "convertido") return "Convertido";
+  if (status === "nao_evoluiu") return "Não evoluiu";
+  if (status === "migrado") return "Migrado";
   if (status === "novo") return "Novo";
-  if (status === "fechado") return "Fechado";
   return status;
 }
 

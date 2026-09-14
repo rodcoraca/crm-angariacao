@@ -14,11 +14,12 @@ export interface JobProgress {
 export class ProviderJobService {
   static async createJob(
     client: SupabaseAdminClient,
-    { provider, empresaId }: { provider: string; empresaId: string }
+    { provider, empresaId, jobId }: { provider: string; empresaId: string; jobId: string }
   ): Promise<string | null> {
     const { data, error } = await client
       .from("provider_sync_jobs")
       .insert({
+        id: jobId,
         empresa_id: empresaId,
         provider,
         status: "running",
@@ -42,7 +43,8 @@ export class ProviderJobService {
     const { error } = await client
       .from("provider_sync_jobs")
       .update({ progress, updated_at: new Date().toISOString() })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .eq("status", "running");
 
     if (error) {
       console.error("[ProviderJobService] updateJob failed", error.message);
@@ -53,47 +55,56 @@ export class ProviderJobService {
     client: SupabaseAdminClient,
     jobId: string,
     result: Record<string, unknown>
-  ): Promise<void> {
+  ): Promise<boolean> {
     const now = new Date().toISOString();
     const { error } = await client
       .from("provider_sync_jobs")
       .update({ status: "completed", finished_at: now, result, updated_at: now })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .eq("status", "running");
 
     if (error) {
       console.error("[ProviderJobService] completeJob failed", error.message);
+      return false;
     }
+    return true;
   }
 
   static async failJob(
     client: SupabaseAdminClient,
     jobId: string,
     errorMessage: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     const now = new Date().toISOString();
     const { error } = await client
       .from("provider_sync_jobs")
       .update({ status: "failed", finished_at: now, error_message: errorMessage, updated_at: now })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .eq("status", "running");
 
     if (error) {
       console.error("[ProviderJobService] failJob failed", error.message);
+      return false;
     }
+    return true;
   }
 
   static async cancelJob(
     client: SupabaseAdminClient,
     jobId: string
-  ): Promise<void> {
+  ): Promise<boolean> {
     const now = new Date().toISOString();
     const { error } = await client
       .from("provider_sync_jobs")
       .update({ status: "cancelled", finished_at: now, updated_at: now })
-      .eq("id", jobId);
+      .eq("id", jobId)
+      .eq("status", "running");
 
     if (error) {
       console.error("[ProviderJobService] cancelJob failed", error.message);
+      return false;
     }
+    return true;
   }
 
   static async getJob(

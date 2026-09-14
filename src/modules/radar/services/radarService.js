@@ -7,8 +7,8 @@ import {
   buildRadarLeadMetadata
 } from "../contracts/radarLeadMetadata";
 import { supabase } from "../../../supabase";
+import { auditMutation } from "../../audit/services";
 import {
-  applyEmpresaScope,
   buildMissingEmpresaError,
   hasEmpresaId,
   resolveEmpresaId,
@@ -106,13 +106,6 @@ export class RadarService {
     this.repository.setProvider(provider);
   }
 
-  async loadOpportunities() {
-    // Forçar carregamento dos dados reais ignorando a cache da sessão
-    const loaded = await this.repository.listOpportunities();
-    this.sessionOpportunities = loaded;
-    return loaded || [];
-  }
-
   classifyOpportunities(opportunities = []) {
     return opportunities.map((item) => normalizeOpportunity(item));
   }
@@ -130,7 +123,8 @@ export class RadarService {
 
     const { data, error } = await supabase
       .from("provider_registry")
-      .select("provider_code,last_execution,next_execution,last_error,sync_running,enabled");
+      .select("provider_code,last_execution,next_execution,last_error,sync_running,enabled")
+      .eq("empresa_id", empresaId);
 
     if (error) {
       console.warn("[Radar] Falha ao carregar provider_registry:", error);
@@ -190,54 +184,124 @@ export class RadarService {
     };
   }
 
-  async updateOpportunityState(opportunityId, nextState) {
+  async updateProfessionalClassification(opportunityId, user = null, reason = "") {
     const targetId = String(opportunityId || "").trim();
-    const normalizedState = String(nextState || "").toLowerCase();
 
-    if (!targetId) {
-      return {
-        ok: false,
-        message: "Oportunidade inválida."
-      };
+    if (!targetId) return { ok: false, message: "Oportunidade inválida." };
+    if (!String(reason || "").trim()) return { ok: false, message: "Indique o motivo da alteração." };
+
+    const empresaId = await resolveEmpresaId(user);
+    if (!hasEmpresaId(empresaId)) {
+      warnMissingEmpresaId();
+      return { ok: false, message: "Operação sem empresa_id" };
     }
 
-    const supportedStates = ["novo", "importado", "ignorado"];
-    if (!supportedStates.includes(normalizedState)) {
-      return {
-        ok: false,
-        message: "Estado operacional inválido."
-      };
+    const auditContext = {
+      userId: user?.perfil_id || user?.id || null,
+      empresaId,
+      modulo: "radar",
+      entidade: "provider_leads",
+      entidadeId: targetId,
+      metadata: {
+        action: "alterar_anunciante_para_profissional",
+        field: "is_private_owner",
+        storageField: "empresa_provider_listings.is_private_owner_override",
+        previousValue: true,
+        newValue: false,
+        reason: String(reason).trim(),
+        origin: "manual"
+      }
+    };
+
+    let updateResult;
+    try {
+      updateResult = await auditMutation(
+        "update",
+        async () => {
+          const result = await this.repository.updateProfessionalClassification(targetId, empresaId);
+          if (result?.error) throw result.error;
+          return result;
+        },
+        auditContext
+      );
+    } catch (error) {
+      return { ok: false, message: error.message || "Falha ao atualizar o estado.", error };
     }
 
-    const loaded = await this.loadOpportunities();
-    const now = new Date().toISOString();
-    const updated = loaded.map((item) => {
-      if (String(item?.id) !== targetId) return item;
+    if (updateResult?.error) {
+      return { ok: false, message: updateResult.error.message || "Falha ao atualizar o estado." };
+    }
 
-      const base = {
-        ...item,
-        estado: normalizedState
-      };
+    const updatedOpportunity = this.updateLocalOpportunity(targetId, { is_private_owner: false, is_private: false });
 
-      if (normalizedState === "importado") {
-        base.importado_em = now;
+    return { ok: true, opportunity: updatedOpportunity };
+  }
+
+  async deactivateOpportunity(opportunityId, user = null, reason = "") {
+    const targetId = String(opportunityId || "").trim();
+    if (!targetId) return { ok: false, message: "Oportunidade inválida." };
+    if (!String(reason || "").trim()) return { ok: false, message: "Indique o motivo da inativação." };
+
+    const empresaId = await resolveEmpresaId(user);
+    if (!hasEmpresaId(empresaId)) {
+      warnMissingEmpresaId();
+      return { ok: false, message: "Operação sem empresa_id" };
+    }
+
+    const auditContext = {
+      userId: user?.perfil_id || user?.id || null,
+      empresaId,
+      modulo: "radar",
+      entidade: "provider_leads",
+      entidadeId: targetId,
+      metadata: {
+        action: "inativar_oportunidade",
+        field: "empresa_provider_listings.is_active",
+        previousValue: true,
+        newValue: false,
+        reason: String(reason).trim(),
+        origin: "manual"
       }
+    };
 
-      if (normalizedState === "ignorado") {
-        base.ignorado_em = now;
-      }
+    try {
+      await auditMutation(
+        "update",
+        async () => {
+          const result = await this.repository.deactivateOpportunity(
+            targetId,
+            String(reason).trim(),
+            user?.perfil_id || user?.id || null,
+            empresaId
+          );
+          if (result?.error) throw result.error;
+          if (!result?.data) throw new Error("Oportunidade não pertence à empresa atual.");
+          return result;
+        },
+        auditContext
+      );
+    } catch (error) {
+      return { ok: false, message: error.message || "Falha ao inativar a oportunidade.", error };
+    }
 
-      return base;
+    const updatedOpportunity = this.updateLocalOpportunity(targetId, {
+      is_inactive: true,
+      estado: "inativo"
     });
 
-    const classified = this.classifyOpportunities(updated);
-    const providerRegistry = await this.loadProviderRegistryState();
-    const snapshot = this.createSnapshotFromOpportunities(classified, providerRegistry);
+    return { ok: true, opportunity: updatedOpportunity };
+  }
 
-    return {
-      ok: true,
-      snapshot
-    };
+  updateLocalOpportunity(opportunityId, patch) {
+    const targetId = String(opportunityId || "").trim();
+    const current = (this.sessionOpportunities || []).find((item) => String(item?.id) === targetId);
+    if (!current) return null;
+
+    const updated = { ...current, ...patch };
+    this.sessionOpportunities = this.sessionOpportunities.map((item) => (
+      String(item?.id) === targetId ? updated : item
+    ));
+    return updated;
   }
 
   async importOpportunityToLeads(opportunity, user) {
@@ -253,10 +317,51 @@ export class RadarService {
       source: opportunity?.source || opportunity?.origem || null
     });
 
+    const opportunitySource = String(opportunity?.origem || opportunity?.source || "").toLowerCase();
+    const isProviderOpportunity = ["imovirtual", "custojusto"].includes(opportunitySource);
+    const empresaId = isProviderOpportunity ? await resolveEmpresaId(user) : null;
+    const importedBy = user?.perfil_id || user?.id || null;
+
+    if (isProviderOpportunity) {
+      if (!hasEmpresaId(empresaId)) {
+        warnMissingEmpresaId();
+        return { ok: false, message: "Operação sem empresa_id", error: buildMissingEmpresaError() };
+      }
+
+      const { data: claim, error: claimError } = await supabase.rpc("radar_claim_lead_import", {
+        p_empresa_id: empresaId,
+        p_provider_lead_id: opportunity.id,
+        p_user_id: importedBy
+      });
+
+      if (claimError) {
+        return { ok: false, message: "Não foi possível iniciar a importação.", error: claimError };
+      }
+
+      if (claim?.status === "already_imported") {
+        return { ok: false, duplicate: true, message: "Este Lead já foi importado." };
+      }
+
+      if (claim?.status === "processing") {
+        return { ok: false, processing: true, message: "Este Lead já está a ser processado." };
+      }
+
+      if (claim?.status !== "claimed") {
+        return { ok: false, message: "Não foi possível iniciar a importação." };
+      }
+    }
+
     const payload = mapOpportunityToLeadPayload(opportunity, user);
     const result = await salvarLeadFluxo(payload);
 
     if (result?.error) {
+      if (isProviderOpportunity) {
+        await supabase.rpc("radar_fail_lead_import", {
+          p_empresa_id: empresaId,
+          p_provider_lead_id: opportunity.id,
+          p_error: "Falha ao criar o Lead CRM"
+        });
+      }
       return {
         ok: false,
         message: result.error.message || "Falha ao importar oportunidade para Leads.",
@@ -265,6 +370,13 @@ export class RadarService {
     }
 
     if (result?.duplicateLead) {
+      if (isProviderOpportunity) {
+        await supabase.rpc("radar_fail_lead_import", {
+          p_empresa_id: empresaId,
+          p_provider_lead_id: opportunity.id,
+          p_error: "Lead CRM já existente"
+        });
+      }
       return {
         ok: false,
         duplicate: true,
@@ -273,42 +385,50 @@ export class RadarService {
       };
     }
 
-    const opportunitySource = String(opportunity?.origem || opportunity?.source || "").toLowerCase();
-    if (opportunitySource === "imovirtual") {
-      const importedBy = user?.perfil_id || user?.id || null;
-      const empresaId = await resolveEmpresaId(user);
-      if (!hasEmpresaId(empresaId)) {
-        warnMissingEmpresaId();
-        return {
-          ok: false,
-          message: "Operacao sem empresa_id",
-          error: buildMissingEmpresaError()
-        };
+    if (!result?.id) {
+      if (isProviderOpportunity) {
+        await supabase.rpc("radar_fail_lead_import", {
+          p_empresa_id: empresaId,
+          p_provider_lead_id: opportunity.id,
+          p_error: "Lead CRM criada sem ID"
+        });
       }
+      return {
+        ok: false,
+        message: "Falha ao obter o ID da Lead criada.",
+        error: new Error("A Lead CRM foi criada, mas o ID não foi devolvido.")
+      };
+    }
 
-      const scopedUpdate = applyEmpresaScope(supabase
-        .from("provider_leads")
-        .update({
-          imported: true,
-          empresa_id: empresaId,
-          crm_lead_id: result?.id || null,
-          imported_at: new Date().toISOString(),
-          imported_by: importedBy
-        })
-        .eq("id", opportunity.id), empresaId);
+    if (isProviderOpportunity) {
+      const { data: completion, error: completionError } = await supabase.rpc("radar_complete_lead_import", {
+        p_empresa_id: empresaId,
+        p_provider_lead_id: opportunity.id,
+        p_crm_lead_id: result.id,
+        p_user_id: importedBy
+      });
 
-      const { error: providerLeadUpdateError } = await scopedUpdate;
-
-      if (providerLeadUpdateError) {
+      if (completionError || completion?.status !== "completed") {
+        await supabase.rpc("radar_fail_lead_import", {
+          p_empresa_id: empresaId,
+          p_provider_lead_id: opportunity.id,
+          p_error: "Falha ao concluir a importação"
+        });
         return {
           ok: false,
-          message: providerLeadUpdateError.message || "Falha ao atualizar provider_leads após importação.",
-          error: providerLeadUpdateError
+          message: "Falha ao concluir a importação do Lead.",
+          error: completionError
         };
       }
     }
 
-    await this.updateOpportunityState(opportunity?.id, "importado");
+    this.updateLocalOpportunity(opportunity?.id, {
+      imported: true,
+      estado: "importado",
+      imported_at: new Date().toISOString(),
+      importado_em: new Date().toISOString(),
+      crm_lead_id: result.id
+    });
 
     console.info("[Radar Import] concluido", {
       opportunityId: opportunity?.id || null,

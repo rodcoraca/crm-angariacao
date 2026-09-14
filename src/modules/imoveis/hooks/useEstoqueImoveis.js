@@ -6,16 +6,21 @@ import {
   carregarFicheirosService,
   carregarImoveisService,
   downloadFicheiroService,
+  excluirImovelService,
+  mapFicheiroParaAuditoria,
   mapImovelParaFormulario,
   salvarImovelService,
   uploadFicheiroService,
   validarTelefoneFormulario
 } from "../services";
+import { auditMutation } from "../../audit/services/auditService";
+import { useAuthContext } from "../../auth/context";
 import { filtrarImoveisPorProprietario } from "../viewmodels";
 import { TELEFONE_ERROR_MESSAGE } from "../utils";
 import { askConfirmation, notifyError, notifySuccess } from "../../../components/ui/feedbackBus";
 
 export function useEstoqueImoveis({ selectionRequest = null } = {}) {
+  const { user } = useAuthContext();
   const [imoveis, setImoveis] = useState([]);
   const [busca, setBusca] = useState("");
   const [moduloAtual, setModuloAtual] = useState("lista");
@@ -167,6 +172,60 @@ export function useEstoqueImoveis({ selectionRequest = null } = {}) {
     }
   }
 
+  async function excluirImovel(imovel) {
+    if (!imovel?.id) return;
+
+    const confirmado = await askConfirmation({
+      title: "Excluir imóvel",
+      message: "Esta ação é definitiva. Vai apagar o imóvel, o histórico associado e todos os ficheiros/imagens relacionados.",
+      confirmLabel: "Excluir definitivamente",
+      cancelLabel: "Cancelar"
+    });
+
+    if (!confirmado) {
+      return;
+    }
+
+    try {
+      const { data: ficheirosDoImovel = [] } = await carregarFicheirosService(imovel.id);
+      const ficheirosParaAuditoria = (ficheirosDoImovel || []).map(mapFicheiroParaAuditoria);
+
+      await auditMutation(
+        "delete",
+        async () => {
+          const result = await excluirImovelService({
+            imovelId: imovel.id,
+            ficheiros: ficheirosDoImovel || []
+          });
+
+          return result;
+        },
+        {
+          userId: user?.id || user?.perfil_id || null,
+          empresaId: user?.empresa_id || null,
+          modulo: "estoque_nao_publicitado",
+          entidade: "Estoque Não Publicitado",
+          entidadeId: imovel.id,
+          metadata: {
+            action: "Exclusão de imóvel",
+            imovel_id: imovel.id,
+            registro: String(imovel.id),
+            ficheiros: ficheirosParaAuditoria,
+            descricao: `Imóvel: ${imovel.id}`
+          }
+        }
+      );
+
+      setImoveis((prev) => prev.filter((item) => String(item.id) !== String(imovel.id)));
+      setFicheiros([]);
+      setImovelSelecionado(null);
+      notifySuccess("Imóvel excluído com sucesso.");
+      await carregarImoveis();
+    } catch (error) {
+      notifyError(error?.message || "Não foi possível excluir o imóvel.");
+    }
+  }
+
   async function uploadFicheiro(imovelId) {
     if (!file) return;
 
@@ -248,6 +307,7 @@ export function useEstoqueImoveis({ selectionRequest = null } = {}) {
     handleTelefoneChange,
     salvarImovel,
     apagarFicheiro,
+    excluirImovel,
     uploadFicheiro,
     downloadFicheiro,
     selecionarImovel

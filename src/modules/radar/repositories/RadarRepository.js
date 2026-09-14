@@ -40,39 +40,22 @@ function normalizeOpportunitySource(value) {
 }
 
 function normalizeProviderEstado(lead) {
+  if (lead?.is_inactive === true) return "inativo";
   if (lead?.imported === true) return "importado";
-
-  const normalizedStatus = String(lead?.status || "").trim().toLowerCase();
-  if (normalizedStatus === "ignored") return "ignorado";
-
-  return "novo";
+  if (lead?.is_new === true) return "novo";
+  return "Ativa";
 }
 
-async function fetchAllProviderLeads(baseQuery, pageSize = 1000) {
-  const records = [];
-  let offset = 0;
+function isOlxPromotionReference(lead) {
+  const provider = String(lead?.provider || lead?.source || "").trim().toLowerCase();
+  if (provider !== "olx") return false;
 
-  while (true) {
-    const { data, error } = await baseQuery
-      .order("created_at", { ascending: true })
-      .range(offset, offset + pageSize - 1);
-
-    if (error) {
-      return { data: records, error };
-    }
-
-    const batch = data || [];
-    records.push(...batch);
-
-    if (batch.length < pageSize) {
-      return { data: records, error: null };
-    }
-
-    offset += pageSize;
-  }
+  const raw = lead?.raw_data || {};
+  return raw?.publishedAtSource === "promotion"
+    || /^Para o topo\b/i.test(String(raw?.publishedAt || "").trim());
 }
 
-function mapProviderLeadToOpportunity(lead) {
+export function mapProviderLeadToOpportunity(lead) {
   const raw = lead?.raw_data || {};
   const title = lead?.title || raw?.title || "";
   const tipo = inferPropertyType(title, lead);
@@ -91,6 +74,8 @@ function mapProviderLeadToOpportunity(lead) {
   const locationLabel = lead?.location || raw?.locationLabel || [city, district].filter(Boolean).join(", ") || "N/A";
   const estado = normalizeProviderEstado(lead);
   const persistedScore = toScore(lead?.score ?? raw?.score ?? 0);
+  const publishedAt = lead?.published_at || null;
+  const publishedAtSource = isOlxPromotionReference(lead) ? "promotion" : null;
 
   return {
     ...lead,
@@ -114,7 +99,8 @@ function mapProviderLeadToOpportunity(lead) {
     preco: toNullableNumber(lead?.price ?? raw?.price ?? raw?.totalPrice?.value),
     publicado: lead?.created_at_first || null,
     publicado_em: lead?.created_at_first || null,
-    published_at: lead?.created_at_first || null,
+    published_at: publishedAt,
+    published_at_source: publishedAtSource,
     encontrado_em: lead?.detected_at || dataReferencia,
     detected_at: lead?.detected_at || null,
     created_at_first: lead?.created_at_first || raw?.createdAtFirst || null,
@@ -122,6 +108,9 @@ function mapProviderLeadToOpportunity(lead) {
     crm_lead_id: lead?.crm_lead_id || null,
     is_private_owner: lead?.is_private_owner === true,
     is_private: lead?.is_private_owner === true,
+    is_inactive: lead?.is_inactive === true,
+    is_new: lead?.is_new === true,
+    provider_last_execution: lead?.provider_last_execution || null,
     score: persistedScore,
     estado,
     origem: providerOrigin || "imovirtual",
@@ -137,56 +126,6 @@ function mapProviderLeadToOpportunity(lead) {
       status: lead?.status || null
     }
   };
-}
-
-// Single filter application point — used by both getPage() and getSummary()
-function applyRadarFilters(query, filters = {}) {
-  const city = filters.city != null ? String(filters.city).trim() : "";
-  if (city !== "") query = query.ilike("city", `%${city}%`);
-
-  if (filters.district != null && filters.district !== "todos" && String(filters.district).trim() !== "")
-    query = query.eq("district", filters.district);
-
-  if (filters.provider != null && filters.provider !== "todos" && String(filters.provider).trim() !== "")
-    query = query.eq("provider", filters.provider);
-
-  if (filters.is_private_owner === true) query = query.eq("is_private_owner", true);
-  else if (filters.is_private_owner === false) query = query.eq("is_private_owner", false);
-
-  // Date uses created_at_first — the reference date in mapProviderLeadToOpportunity
-  // Falls back to detected_at when created_at_first IS NULL
-  if (filters.date_after != null) {
-    query = query.or(
-      `created_at_first.gte.${filters.date_after},and(created_at_first.is.null,detected_at.gte.${filters.date_after})`
-    );
-  }
-  if (filters.date_before != null) {
-    query = query.or(
-      `created_at_first.lte.${filters.date_before},and(created_at_first.is.null,detected_at.lte.${filters.date_before})`
-    );
-  }
-
-  // Estado → physical column mapping (normalizeProviderEstado logic):
-  //   imported=true       → "importado"
-  //   status='ignored'    → "ignorado"
-  //   else                → "novo"
-  if (filters.estado === "importado") {
-    query = query.eq("imported", true);
-  } else if (filters.estado === "novo") {
-    query = query.or(
-      "and(imported.is.null,status.is.null)," +
-      "and(imported.is.null,status.neq.ignored)," +
-      "and(imported.eq.false,status.is.null)," +
-      "and(imported.eq.false,status.neq.ignored)"
-    );
-  } else if (filters.estado === "ignorado") {
-    query = query.eq("status", "ignored");
-  } else {
-    // Default: exclude ignored, show novo + importado
-    query = query.or("status.is.null,status.neq.ignored");
-  }
-
-  return query;
 }
 
 export class RadarRepository {
@@ -219,8 +158,9 @@ export class RadarRepository {
     try {
       const { data: providerLeads, error: providerError } = await supabase
         .from("provider_leads")
-        .select("*, empresa_provider_listings!inner(empresa_id)")
+        .select("*, empresa_provider_listings!inner(empresa_id,is_active)")
         .eq("empresa_provider_listings.empresa_id", empresaId)
+        .eq("empresa_provider_listings.is_active", true)
         .eq("provider_active", true);
 
       if (providerError) {
@@ -250,35 +190,22 @@ export class RadarRepository {
     const empresaId = await resolveEmpresaId();
     if (!empresaId) return null;
 
-    // KPIs always show full breakdown — remove estado so scope is not pre-narrowed
-    const { estado: _removed, ...scopeFilters } = filters;
+    const { data, error } = await supabase.rpc("radar_get_summary", {
+      p_empresa_id: empresaId,
+      p_filters: filters || {}
+    });
 
-    const mkBase = () =>
-      supabase
-        .from("provider_leads")
-        .select("*, empresa_provider_listings!inner(empresa_id)", { count: "exact", head: true })
-        .eq("empresa_provider_listings.empresa_id", empresaId)
-        .eq("provider_active", true);
-
-    const [
-      { count: monitorizadas, error: errMon },
-      { count: novas, error: errNovas },
-      { count: importadas, error: errImportadas }
-    ] = await Promise.all([
-      applyRadarFilters(mkBase(), scopeFilters),
-      applyRadarFilters(mkBase(), { ...scopeFilters, estado: "novo" }),
-      applyRadarFilters(mkBase(), { ...scopeFilters, estado: "importado" })
-    ]);
-
-    if (errMon || errNovas || errImportadas) {
-      console.warn("[Radar] getSummary error:", errMon || errNovas || errImportadas);
+    if (error) {
+      console.warn("[Radar] getSummary error:", error);
       return null;
     }
 
+    const summary = Array.isArray(data) ? data[0] : data;
+
     return {
-      monitorizadas: monitorizadas ?? 0,
-      novas: novas ?? 0,
-      importadas: importadas ?? 0
+      monitorizadas: summary?.monitorizadas ?? 0,
+      novas: summary?.novas ?? 0,
+      importadas: summary?.importadas ?? 0
     };
   }
 
@@ -331,6 +258,41 @@ export class RadarRepository {
       cities:    data?.cities    || [],
       providers: data?.providers || []
     };
+  }
+
+  async updateProfessionalClassification(opportunityId, empresaId) {
+    return applyEmpresaScope(
+      supabase
+        .from("empresa_provider_listings")
+        .update({ is_private_owner_override: false, updated_at: new Date().toISOString() })
+        .eq("provider_lead_id", opportunityId)
+        .select("provider_lead_id")
+        .maybeSingle(),
+      empresaId
+    );
+  }
+
+  async deactivateOpportunity(opportunityId, reason, userId, empresaId) {
+    const scopedEmpresaId = empresaId || await resolveEmpresaId();
+    if (!scopedEmpresaId) {
+      return { data: null, error: new Error("Operação sem empresa_id") };
+    }
+
+    return applyEmpresaScope(
+      supabase
+        .from("empresa_provider_listings")
+        .update({
+          is_active: false,
+          inactive_at: new Date().toISOString(),
+          inactive_by: userId || null,
+          inactive_reason: reason,
+          updated_at: new Date().toISOString()
+        })
+        .eq("provider_lead_id", opportunityId)
+        .select("provider_lead_id")
+        .maybeSingle(),
+      scopedEmpresaId
+    );
   }
 }
 

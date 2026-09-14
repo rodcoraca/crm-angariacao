@@ -4,6 +4,8 @@ import { useTheme } from "../../theme/ThemeContext";
 export default function Toast({
   message,
   variant = "neutral",
+  actionLabel,
+  onAction,
   onClose,
   style
 }) {
@@ -71,6 +73,11 @@ export default function Toast({
         </strong>
         <span>{message}</span>
       </span>
+      {actionLabel && onAction ? (
+        <button type="button" onClick={onAction} style={{ border: "none", background: "transparent", color: palette.text, fontWeight: 600, cursor: "pointer" }}>
+          {actionLabel}
+        </button>
+      ) : null}
       {onClose ? (
         <button
           type="button"

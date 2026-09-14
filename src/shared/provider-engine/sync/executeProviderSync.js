@@ -1,9 +1,24 @@
 import { requireEmpresaId, warnMissingEmpresaId } from "../tenant/empresaContext.js";
+import { normalizePortugalLocalIsoToUtc } from "../providerLocalTime.js";
 
 const PRIVATE_OWNER_WINDOW_DAYS = 30;
 const AGENCY_WINDOW_DAYS = 7;
 const DAY_IN_MS = 24 * 60 * 60 * 1000;
 const CONCURRENCY_LIMIT = 10;
+const PORTUGUESE_MONTHS = new Map([
+  ["janeiro", 0],
+  ["fevereiro", 1],
+  ["março", 2],
+  ["abril", 3],
+  ["maio", 4],
+  ["junho", 5],
+  ["julho", 6],
+  ["agosto", 7],
+  ["setembro", 8],
+  ["outubro", 9],
+  ["novembro", 10],
+  ["dezembro", 11]
+]);
 
 function toDateOrNull(value) {
   if (!value) return null;
@@ -15,6 +30,53 @@ function toIsoOrNull(value) {
   if (!value) return null;
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
+}
+
+function toPublishedAtIsoOrNull(value, referenceDate) {
+  if (!value || !(referenceDate instanceof Date) || Number.isNaN(referenceDate.getTime())) return null;
+
+  const directValue = toIsoOrNull(value);
+  if (directValue) return directValue;
+
+  const text = String(value).trim().toLowerCase().replace(/\s+/g, " ")
+    .replace(/^para o topo\s+(?:a\s+)?/i, "");
+  const relativeMatch = text.match(/^(hoje|ontem) às (\d{1,2}):(\d{2})$/u);
+  if (relativeMatch) {
+    const [, day, hourText, minuteText] = relativeMatch;
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Europe/Lisbon",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).formatToParts(referenceDate);
+    const values = Object.fromEntries(parts.map(({ type, value: partValue }) => [type, partValue]));
+    const localDate = new Date(Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day),
+      Number(hourText),
+      Number(minuteText)
+    ));
+    if (day === "ontem") localDate.setUTCDate(localDate.getUTCDate() - 1);
+    const localIso = localDate.toISOString().replace("Z", "");
+    return normalizePortugalLocalIsoToUtc(localIso);
+  }
+
+  const absoluteMatch = text.match(/^(\d{1,2}) de ([a-zç]+) de (\d{4})(?: às (\d{1,2}):(\d{2}))?$/u);
+  if (!absoluteMatch) return null;
+
+  const [, dayText, monthName, yearText, hourText = "0", minuteText = "0"] = absoluteMatch;
+  const month = PORTUGUESE_MONTHS.get(monthName);
+  if (month === undefined) return null;
+
+  const localIso = new Date(Date.UTC(
+    Number(yearText),
+    month,
+    Number(dayText),
+    Number(hourText),
+    Number(minuteText)
+  )).toISOString().replace("Z", "");
+  return normalizePortugalLocalIsoToUtc(localIso);
 }
 
 // Estrategia Beta:
@@ -70,15 +132,21 @@ export async function executeProviderSync({
   supabaseClient,
   scoreCalculator,
   detectedAtFallbackNow = false,
+  allowListingsWithoutCreatedAtFirst = false,
+  existingProviderLeadIds = null,
   syncStartedAtMs = Date.now()
 }) {
   const startedAtMs = Number.isFinite(syncStartedAtMs) ? syncStartedAtMs : Date.now();
   const syncStartedAtIso = new Date(startedAtMs).toISOString();
   const referenceDate = toDateOrNull(fetchedAt) || new Date();
   const receivedListings = Array.isArray(listings) ? listings : [];
-  const eligibleListings = receivedListings.filter((listing) => isListingWithinWindow(listing, referenceDate));
+  const eligibleListings = receivedListings.filter((listing) =>
+    allowListingsWithoutCreatedAtFirst && !listing?.createdAtFirst
+      ? true
+      : isListingWithinWindow(listing, referenceDate)
+  );
   const analyzedPrivateOwners = eligibleListings.filter((listing) => listing?.isPrivateOwner === true).length;
-  const analyzedAgencies = eligibleListings.length - analyzedPrivateOwners;
+  const analyzedAgencies = eligibleListings.filter((listing) => listing?.isPrivateOwner === false).length;
 
   let created = 0;
   let skipped = 0;
@@ -125,7 +193,15 @@ export async function executeProviderSync({
     listingByExtId.set(externalId, listing);
   }
 
-  const validExternalIds = [...listingByExtId.keys()];
+  const knownExistingIds = existingProviderLeadIds instanceof Map
+    ? existingProviderLeadIds
+    : new Map();
+  for (const [externalId, listing] of listingByExtId) {
+    const providerLeadId = listing?.existingProviderLeadId || knownExistingIds.get(externalId);
+    if (providerLeadId) existingMap.set(externalId, providerLeadId);
+  }
+
+  const validExternalIds = [...listingByExtId.keys()].filter((externalId) => !existingMap.has(externalId));
 
   // trivially ok when there is nothing to look up
   let lookupOk = validExternalIds.length === 0;
@@ -135,6 +211,7 @@ export async function executeProviderSync({
       .from("provider_leads")
       .select("id, external_id")
       .eq("provider", providerName)
+      .eq("empresa_id", scopedEmpresaId)
       .in("external_id", validExternalIds);
 
     if (lookupError) {
@@ -185,13 +262,14 @@ export async function executeProviderSync({
   if (newEntries.length > 0) {
     const insertTasks = newEntries.map(({ externalId, listing }) => async () => {
       const score = typeof scoreCalculator === "function" ? scoreCalculator(listing) : undefined;
+      const structuredLocation = [listing.city, listing.district].filter(Boolean).join(", ");
       const payload = {
         provider: providerName,
         empresa_id: scopedEmpresaId,
         external_id: externalId,
         title: listing.title || null,
         price: listing.price ?? null,
-        location: [listing.city, listing.district].filter(Boolean).join(", ") || null,
+        location: listing.location || structuredLocation || null,
         url: listing.url || null,
         area: listing.area ?? null,
         rooms: listing.rooms ?? null,
@@ -200,9 +278,11 @@ export async function executeProviderSync({
         freguesia: listing.freguesia ?? null,
         district: listing.district || null,
         owner_name: listing.ownerName || null,
-        is_private_owner: Boolean(listing.isPrivateOwner),
+        is_private_owner: listing.isPrivateOwner === null || listing.isPrivateOwner === undefined
+          ? null
+          : Boolean(listing.isPrivateOwner),
         created_at_first: toIsoOrNull(listing.createdAtFirst),
-        published_at: toIsoOrNull(listing.createdAtFirst),
+        published_at: toPublishedAtIsoOrNull(listing.publishedAt, referenceDate),
         modified_at: toIsoOrNull(listing.modifiedAt),
         short_description: listing.shortDescription || null,
         source: listing.source || null,

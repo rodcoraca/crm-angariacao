@@ -55,7 +55,7 @@ function computeMatchScore(searchTerm, fields = []) {
 
 function buildLeadTypeLabel(status) {
   const normalizedStatus = String(status || "").trim().toLowerCase();
-  if (normalizedStatus === "fechado") return "Cliente";
+  if (normalizedStatus === "convertido") return "Cliente";
   if (normalizedStatus && normalizedStatus !== "novo") return "Negócio";
   return "Lead";
 }

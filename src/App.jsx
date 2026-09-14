@@ -11,6 +11,9 @@ import Fluxo from "./pages/Fluxo";
 import Dashboard from "./pages/Dashboard";
 import LeadsPorTipo from "./pages/LeadsPorTipo";
 import MensagensPadrao from "./pages/MensagensPadrao";
+import Servicos from "./pages/Servicos";
+import RelatoriosEscalasServico from "./pages/RelatoriosEscalasServico";
+import Plantoes from "./pages/Plantoes";
 import CalculadoraComissoes from "./pages/CalculadoraComissoes";
 import EstoqueNaoPublicitado from "./EstoqueNaoPublicitado";
 import FichaLead from "./FichaLead";
@@ -20,6 +23,7 @@ import EmpresasAdmin from "./pages/EmpresasAdmin";
 
 import Sidebar from "./components/Sidebar";
 import Layout from "./components/Layout";
+import Card from "./components/ui/Card";
 import {
   authorizeProtectedView,
   isProtectedView,
@@ -39,6 +43,7 @@ import { registrarAcessoNegado, registrarLogout, registrarNavegacao } from "./mo
 import FeedbackHost from "./components/ui/FeedbackHost";
 import { notifyError, notifyInfo } from "./components/ui/feedbackBus";
 import { NavigationGuard } from "./shared/navigation";
+import useVersionUpdateChecker from "./modules/version/useVersionUpdateChecker";
 
 /*Pauground Test*/
 //import WorkspacePlayground from "./pages/WorkspacePlayground";
@@ -61,6 +66,9 @@ const RESTORABLE_VIEWS = new Set([
   "morno",
   "frio",
   "mensagens",
+  "servicos",
+  "plantoes",
+  "relatorios",
   "estoque_np",
   "usuarios",
   "logs"
@@ -80,6 +88,8 @@ function detectPasswordRecoveryHash() {
 }
 
 export default function App() {
+  useVersionUpdateChecker();
+
   const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(detectPasswordRecoveryHash);
   const [user, setUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
@@ -89,6 +99,7 @@ export default function App() {
   //const [view, setView] = useState("workspace_playground");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [leadSelecionadoId, setLeadSelecionadoId] = useState(null);
+  const [radarSelectionRequest, setRadarSelectionRequest] = useState(null);
   const [viewAnteriorFicha, setViewAnteriorFicha] = useState("fluxo");
   const [logsModo, setLogsModo] = useState("geral");
   const [docSelecionado, setDocSelecionado] = useState("arquitetura");
@@ -204,17 +215,6 @@ export default function App() {
     } catch (_error) {
       return "{}";
     }
-  }, []);
-
-  const withTimeout = useCallback((promise, timeoutMs, code) => {
-    return Promise.race([
-      promise,
-      new Promise((_, reject) => {
-        window.setTimeout(() => {
-          reject(new Error(code || "auth_timeout"));
-        }, timeoutMs);
-      })
-    ]);
   }, []);
 
   const isSameUserSession = useCallback((a, b) => {
@@ -447,7 +447,7 @@ export default function App() {
     } finally {
       setAuthzReady(true);
     }
-  }, [isSameProfile, isSameUserSession, montarUsuarioSessao, withTimeout]);
+  }, [isSameProfile, isSameUserSession, montarUsuarioSessao]);
 
   useEffect(() => {
     let isMounted = true;
@@ -645,6 +645,9 @@ export default function App() {
       admin_documentacao: "Documentos",
       empresas_admin: "Administração",
       mensagens: "Mensagens",
+      servicos: "Serviços",
+      plantoes: "Plantões",
+      relatorios: "Relatórios",
       comissoes: "Comissões",
       usuarios: "Administração",
       logs: "Auditoria",
@@ -697,6 +700,7 @@ export default function App() {
   function abrirFichaLead(id) {
     requestNavigation(() => {
       setLeadSelecionadoId(id);
+      setRadarSelectionRequest(null);
       setViewAnteriorFicha(view);
     }, "abrirFichaLead");
   }
@@ -747,6 +751,7 @@ export default function App() {
 
   function executarMudancaView(nextView) {
     setLeadSelecionadoId(null);
+    setRadarSelectionRequest(null);
 
     if (nextView === "forbidden") {
       setView("forbidden");
@@ -876,6 +881,7 @@ export default function App() {
   function voltarDaFicha() {
     requestNavigation(() => {
       setLeadSelecionadoId(null);
+      setRadarSelectionRequest(null);
       setView(viewAnteriorFicha);
     }, "voltar da ficha");
   }
@@ -957,21 +963,37 @@ export default function App() {
     );
   }
 
+  function RelatoriosOperacao() {
+    return (
+      <div style={{ display: "grid", gap: "16px" }}>
+        <div style={{ display: "grid", gap: "4px" }}>
+          <h2 style={{ margin: 0 }}>Relatórios — Serviço e Plantão</h2>
+          <p style={{ margin: 0, color: "var(--os-color-text-light)" }}>Histórico operacional das semanas e distribuição por comercial.</p>
+        </div>
+        <RelatoriosEscalasServico />
+      </div>
+    );
+  }
+
   const screens = {
-    home: canAccessView("home") ? <Home user={user} onOpenSearchResult={abrirResultadoPesquisaCockpit} /> : <Forbidden requestedView="home" requiredPermission={getRequiredPermission("home")} />,
-    radar: canAccessView("radar") ? <Radar /> : <Forbidden requestedView="radar" requiredPermission={getRequiredPermission("radar")} />,
+    home: canAccessView("home") ? <Home user={user} onOpenSearchResult={abrirResultadoPesquisaCockpit} onOpenLead={abrirFichaLead} /> : <Forbidden requestedView="home" requiredPermission={getRequiredPermission("home")} />,
+    radar: canAccessView("radar") ? <Radar selectionRequest={radarSelectionRequest} /> : <Forbidden requestedView="radar" requiredPermission={getRequiredPermission("radar")} />,
     radar_imovirtual: canAccessView("radar_imovirtual") ? <RadarImovirtual /> : <Forbidden requestedView="radar_imovirtual" requiredPermission={getRequiredPermission("radar_imovirtual")} />,
     admin_documentacao: canAccessView("admin_documentacao") ? <AdministracaoDocumentacao selectedDoc={docSelecionado} /> : <Forbidden requestedView="admin_documentacao" requiredPermission={getRequiredPermission("admin_documentacao")} />,
     empresas_admin: canAccessView("empresas_admin") ? <EmpresasAdmin /> : <Forbidden requestedView="empresas_admin" requiredPermission={getRequiredPermission("empresas_admin")} />,
     forbidden: <Forbidden requestedView={forbiddenState.requestedView} requiredPermission={forbiddenState.requiredPermission} />,
     fluxo: canAccessView("fluxo") ? <Fluxo user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="fluxo" requiredPermission={getRequiredPermission("fluxo")} />,
-    dashboard: canAccessView("dashboard") ? <Dashboard onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="dashboard" requiredPermission={getRequiredPermission("dashboard")} />,
+    dashboard: canAccessView("dashboard") ? <Dashboard user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="dashboard" requiredPermission={getRequiredPermission("dashboard")} />,
     quente: canAccessView("quente") ? <LeadsPorTipo tipo="quente" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="quente" requiredPermission={getRequiredPermission("quente")} />,
     morno: canAccessView("morno") ? <LeadsPorTipo tipo="morno" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="morno" requiredPermission={getRequiredPermission("morno")} />,
     frio: canAccessView("frio") ? <LeadsPorTipo tipo="frio" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="frio" requiredPermission={getRequiredPermission("frio")} />,
     mensagens: canAccessView("mensagens") ? <MensagensPadrao /> : <Forbidden requestedView="mensagens" requiredPermission={getRequiredPermission("mensagens")} />,
+    servicos: canAccessView("servicos") ? <Servicos /> : <Forbidden requestedView="servicos" requiredPermission={getRequiredPermission("servicos")} />,
+    plantoes: canAccessView("plantoes") ? <Plantoes /> : <Forbidden requestedView="plantoes" requiredPermission={getRequiredPermission("plantoes")} />,
+    relatorios: canAccessView("servicos") || canAccessView("plantoes") ? <RelatoriosOperacao /> : <Forbidden requestedView="relatorios" requiredPermission={getRequiredPermission("servicos")} />,
     comissoes: canAccessView("comissoes") ? <CalculadoraComissoes /> : <Forbidden requestedView="comissoes" requiredPermission={getRequiredPermission("comissoes")} />,
-    estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
+    estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} defaultSection="imoveis" /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
+    estoque_np_empreendimentos: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} defaultSection="clientes" /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
     usuarios: canAccessView("usuarios") ? <Usuarios currentUser={user} selectionRequest={userSelectionRequest} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
     logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={user} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
   

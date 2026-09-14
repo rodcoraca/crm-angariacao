@@ -10,6 +10,8 @@ export const PROTECTED_VIEW_RULES = {
   morno: { permission: "leads.warm.view" },
   frio: { permission: "leads.cold.view" },
   mensagens: { permission: "messages.view" },
+  servicos: { permission: "servico.view" },
+  plantoes: { permission: "plantao.view" },
   estoque_np: { permission: "inventory.view" },
   usuarios: { permission: "users.view" },
   logs: { permission: "logs.view" },

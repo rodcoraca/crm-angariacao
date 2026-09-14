@@ -2,11 +2,12 @@ export function createRadarStyles(theme) {
   return {
     page: {
       display: "grid",
-      gap: theme.spacing.xl
+      gap: "12px"
     },
     hero: {
       display: "grid",
-      gap: theme.spacing.md,
+      gap: "8px",
+      padding: "12px 16px",
       background: `linear-gradient(135deg, ${theme.colors.surface} 0%, ${theme.colors.surfaceSoft} 100%)`
     },
     heroBadge: {
@@ -15,24 +16,31 @@ export function createRadarStyles(theme) {
     title: {
       margin: 0,
       color: theme.colors.text,
-      fontSize: "2rem",
-      lineHeight: 1.1
+      fontSize: "1.55rem",
+      lineHeight: 1.1,
+      letterSpacing: "-0.02em",
+      whiteSpace: "nowrap"
     },
     subtitle: {
       margin: 0,
       color: theme.colors.primary,
-      fontSize: "1.05rem",
-      fontWeight: theme.typography.cardTitle.fontWeight
+      fontSize: "0.9rem",
+      fontWeight: theme.typography.cardTitle.fontWeight,
+      lineHeight: 1.2,
+      whiteSpace: "nowrap",
+      overflow: "hidden",
+      textOverflow: "ellipsis"
     },
     description: {
       margin: 0,
       color: theme.colors.muted,
       maxWidth: "72ch",
-      lineHeight: 1.6
+      lineHeight: 1.35,
+      fontSize: "0.88rem"
     },
     section: {
       display: "grid",
-      gap: theme.spacing.md
+      gap: "10px"
     },
     sectionTitle: {
       margin: 0,
@@ -143,6 +151,15 @@ export function createRadarStyles(theme) {
       borderRadius: theme.borderRadius.sm,
       padding: "8px 10px",
       maxWidth: "240px"
+    },
+    detailTextarea: {
+      border: `1px solid ${theme.colors.border}`,
+      borderRadius: theme.borderRadius.sm,
+      padding: "8px 10px",
+      background: theme.colors.inputBackground,
+      color: theme.colors.text,
+      resize: "vertical",
+      font: "inherit"
     },
     detailActions: {
       display: "flex",

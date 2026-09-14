@@ -1,6 +1,6 @@
 import {
   formatPrice,
-  formatPublishedDate,
+  formatPublishedDateLabel,
   normalizeText
 } from "../utils/radarUtils";
 
@@ -30,11 +30,14 @@ function normalizePrice(item) {
 }
 
 function normalizePublished(item) {
-  return formatPublishedDate(null);
+  return formatPublishedDateLabel(item?.published_at ?? null, item?.published_at_source === "promotion");
 }
 
 function normalizeStatus(item) {
-  return normalizeText(item?.estado, "Novo");
+  if (item?.is_inactive === true) return "Anúncio Inativo";
+  if (item?.is_new === true && item?.imported !== true) return "Nova";
+  if (item?.imported === true) return "Importada";
+  return normalizeText(item?.estado, "Ativa");
 }
 
 function normalizeKpiValue(value, fallback) {
@@ -154,7 +157,7 @@ export class RadarViewModel {
         cidade: item.cidade || ""
       }),
       preco: normalizePrice(item),
-      publicado: normalizePublished({}),
+      publicado: normalizePublished(item),
       estado: normalizeStatus(item),
       // Adicionamos os campos extra para consumo na UI
       tipo: item.tipo,
@@ -180,7 +183,10 @@ export class RadarViewModel {
       : null;
     const duplicados = opportunities.length ? countDuplicateOpportunities(opportunities) : null;
     const erros = registryRows
-      ? registryRows.filter((row) => String(row?.last_error || "").trim().length > 0).length
+      ? registryRows.filter((row) => {
+        const lastError = String(row?.last_error || "").trim();
+        return lastError.length > 0 && !lastError.startsWith("__lock_owner:");
+      }).length
       : null;
     const sincronizacoesRealizadas = registryRows
       ? registryRows.filter((row) => Boolean(row?.last_execution)).length

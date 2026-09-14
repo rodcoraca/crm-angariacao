@@ -279,6 +279,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
     if (!usuario) return;
 
     setModoEdicao(true);
+    setEtapaAtiva('ficha');
     setUsuarioSelecionadoId(usuario.id);
     setUsuarioSelecionadoMeta(usuario);
     setPerfilOrganizacional(usuario?.permissoes?.__perfil || '');
@@ -857,8 +858,24 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
       marginTop: theme.spacing.md,
       paddingTop: theme.spacing.sm,
       borderTop: `1px solid ${theme.colors.border}`,
+      paddingBottom: '64px',
     },
-    stepNav: { display: 'flex', gap: theme.spacing.xs, flexWrap: 'wrap' },
+    stepNav: {
+      display: 'flex',
+      gap: theme.spacing.xs,
+      flexWrap: 'wrap',
+      position: 'fixed',
+      top: '70px',
+      left: '230px',
+      right: 0,
+      zIndex: 100,
+      background: theme.colors.surface,
+      padding: `${theme.spacing.xs} var(--os-page-padding)`,
+      boxSizing: 'border-box',
+      minHeight: '48px',
+      alignItems: 'center',
+      boxShadow: theme.shadow.sm,
+    },
     stepButton: {
       border: `1px solid ${theme.colors.border}`,
       background: theme.colors.surface,
@@ -1089,7 +1106,26 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
 
             <div style={styles.list}>
               {usuariosFiltrados.map((usuario) => (
-                <div key={usuario.id} style={styles.userRow}>
+                <div
+                  key={usuario.id}
+                  style={{
+                    ...styles.userRow,
+                    cursor: 'pointer',
+                    background: String(usuarioSelecionadoId || '') === String(usuario.id)
+                      ? `${theme.colors.primary}12`
+                      : styles.userRow.background,
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => iniciarEdicao(usuario)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      iniciarEdicao(usuario);
+                    }
+                  }}
+                  aria-pressed={String(usuarioSelecionadoId || '') === String(usuario.id)}
+                >
                   <div>
                     <strong>{usuario.nome} {usuario.apelido}</strong>
                     <div style={styles.muted}>{usuario.email}</div>
@@ -1162,13 +1198,26 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
 
           {etapaAtiva === 'ficha' ? (
             <div style={styles.formActionsFooter}>
-              <button style={styles.actionButton} onClick={guardarUsuario} disabled={isPasswordInvalid}>Atualizar utilizador</button>
               <button style={styles.actionButtonSecondary} onClick={resetForm}>Cancelar</button>
             </div>
           ) : (
             <button style={styles.button} onClick={guardarUsuario} disabled={isPasswordInvalid}>{modoEdicao ? 'Atualizar utilizador' : 'Guardar utilizador'}</button>
           )}
         </div>
+      ) : null}
+
+      {modoEdicao && usuarioSelecionadoMeta ? (
+        <button
+          style={{
+            ...styles.actionButton,
+            position: 'fixed',
+            right: theme.spacing.md,
+            bottom: theme.spacing.md,
+            zIndex: 20,
+          }}
+          onClick={guardarUsuario}
+          disabled={isPasswordInvalid}
+        >Atualizar utilizador</button>
       ) : null}
 
       {etapaAtiva === 'sessoes' ? (

@@ -13,26 +13,30 @@ import PageLayout from "../components/ui/primitives/PageLayout";
 import Select from "../components/ui/Select";
 import { useDashboardLeads } from "../modules/leads/hooks";
 import { createDashboardStyles } from "./dashboardStyles";
+import { LEAD_STATUSES, getLeadStatusLabel, getLeadStatusVariant } from "../modules/leads/statusCatalog";
 
-export default function Dashboard({ onAbrirLead }) {
+export default function Dashboard({ onAbrirLead, user }) {
   const theme = useTheme();
   const styles = useMemo(() => createDashboardStyles(theme), [theme]);
 
   const {
     filtroTipo,
-    filtroOrigem,
+    filtroStatus,
+    filtroUtilizador,
     busca,
     leadSelecionado,
     dados,
-    opcoesFiltroOrigem,
+    opcoesUtilizador,
     setFiltroTipo,
-    setFiltroOrigem,
+    setFiltroStatus,
+    setFiltroUtilizador,
     setBusca,
     setLeadSelecionado,
     exportarCSV,
     getInteractiveCellProps,
+    nomeAgente,
     formatarData
-  } = useDashboardLeads({ onAbrirLead, theme });
+  } = useDashboardLeads({ onAbrirLead, theme, user });
 
   const isLoading = false;
   const emptyStateMessage = useMemo(() => (
@@ -95,6 +99,15 @@ export default function Dashboard({ onAbrirLead }) {
       )
     },
     {
+      key: "status",
+      title: "Estado",
+      render: (lead) => (
+        <span style={{ ...styles.td, ...styles.clickableCell }} {...getInteractiveCellProps(lead)}>
+          <Badge variant={getLeadStatusVariant(lead.status)}>{getLeadStatusLabel(lead.status)}</Badge>
+        </span>
+      )
+    },
+    {
       key: "updated_at",
       title: "Data",
       render: (lead) => (
@@ -105,8 +118,20 @@ export default function Dashboard({ onAbrirLead }) {
           {formatarData(lead.updated_at)}
         </span>
       )
+    },
+    {
+      key: "agente_id",
+      title: "Agente",
+      render: (lead) => (
+        <span
+          style={{ ...styles.td, ...styles.clickableCell }}
+          {...getInteractiveCellProps(lead)}
+        >
+          {nomeAgente(lead.agente_id)}
+        </span>
+      )
     }
-  ], [formatarData, getInteractiveCellProps, renderTipo, styles]);
+  ], [formatarData, getInteractiveCellProps, nomeAgente, renderTipo, styles]);
 
   return (
     <PageLayout style={styles.page}>
@@ -123,13 +148,15 @@ export default function Dashboard({ onAbrirLead }) {
       <Section>
         <div style={styles.filtros}>
           <Input
-            placeholder="Buscar por nome ou telefone"
+            label="Nome ou telefone"
+            placeholder="Nome ou telefone"
             style={styles.input}
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
           />
 
           <Select
+            label="Tipo"
             style={styles.select}
             selectStyle={styles.select}
             options={[
@@ -143,16 +170,24 @@ export default function Dashboard({ onAbrirLead }) {
           />
 
           <Select
+            label="Estado"
+            style={styles.select}
+            selectStyle={styles.select}
+            options={[{ label: "Todos", value: "" }, ...LEAD_STATUSES]}
+            value={filtroStatus}
+            onChange={(e) => setFiltroStatus(e.target.value)}
+          />
+
+          <Select
+            label="Utilizador"
             style={styles.select}
             selectStyle={styles.select}
             options={[
-              { label: "Todas as origens", value: "" },
-              ...opcoesFiltroOrigem
-                .filter((option) => option.value)
-                .map((option) => ({ label: option.label, value: option.value }))
+              { label: "Todos os utilizadores", value: "" },
+              ...opcoesUtilizador.map((option) => ({ label: option.label, value: option.value }))
             ]}
-            value={filtroOrigem}
-            onChange={(e) => setFiltroOrigem(e.target.value)}
+            value={filtroUtilizador}
+            onChange={(e) => setFiltroUtilizador(e.target.value)}
           />
         </div>
       </Section>
@@ -168,6 +203,7 @@ export default function Dashboard({ onAbrirLead }) {
 
           <p><strong>Telefone:</strong> {leadSelecionado.telefone}</p>
           <p><strong>Tipo:</strong> {renderTipo(leadSelecionado.tipo)}</p>
+          <p><strong>Estado:</strong> <Badge variant={getLeadStatusVariant(leadSelecionado.status)}>{getLeadStatusLabel(leadSelecionado.status)}</Badge></p>
           <p><strong>Origem:</strong> {leadSelecionado.origem}</p>
           <p><strong>Data:</strong> {formatarData(leadSelecionado.updated_at)}</p>
 

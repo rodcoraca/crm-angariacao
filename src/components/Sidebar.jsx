@@ -12,6 +12,7 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
   const [activeView, setActiveView] = useState(initialActiveView);
   const [menuLeadsAberto, setMenuLeadsAberto] = useState(true);
   const [menuEstoqueAberto, setMenuEstoqueAberto] = useState(true);
+  const [menuOperacaoAberto, setMenuOperacaoAberto] = useState(true);
   const [menuGestaoAberto, setMenuGestaoAberto] = useState(true);
   const [menuLogsAberto, setMenuLogsAberto] = useState(true);
   const [menuAdministracaoAberto, setMenuAdministracaoAberto] = useState(true);
@@ -26,7 +27,6 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
     return hasPermission(perfil, requiredPermission);
   };
 
-  const podeVer = (permissionCode) => hasPermission(perfil, permissionCode);
   const podeVerAdministracao = [
     "empresas_admin",
     "admin_docs_arquitetura",
@@ -165,7 +165,8 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
         {podeVerRota('estoque_np') ? (
           <>
             {(() => {
-              const menuStyles = getMenuStyles(activeView === "estoque_np");
+              const isEstoqueActive = ["estoque_np", "estoque_np_empreendimentos"].includes(activeView);
+              const menuStyles = getMenuStyles(isEstoqueActive);
               return (
                 <SidebarItem
                   collapsed={collapsed}
@@ -173,13 +174,14 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
                   style={menuStyles.style}
                   collapsedStyle={menuStyles.collapsedStyle}
                 >
-                  {collapsed ? "E" : `Estoque ${menuEstoqueAberto ? "▾" : "▸"}`}
+                  {collapsed ? "N" : `Não Publicitados ${menuEstoqueAberto ? "▾" : "▸"}`}
                 </SidebarItem>
               );
             })()}
             {menuEstoqueAberto && !collapsed && (
               <div style={subMenu}>
-                <SidebarItem style={getSubMenuStyle(activeView === "estoque_np")} onClick={() => handleSelectView("estoque_np")}>Cadastrados</SidebarItem>
+                <SidebarItem style={getSubMenuStyle(activeView === "estoque_np")} onClick={() => handleSelectView("estoque_np")}>Imóveis</SidebarItem>
+                <SidebarItem style={getSubMenuStyle(activeView === "estoque_np_empreendimentos")} onClick={() => handleSelectView("estoque_np_empreendimentos")}>Empreendimentos</SidebarItem>
               </div>
             )}
           </>
@@ -199,6 +201,32 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
               </SidebarItem>
             );
           })()
+        ) : null}
+
+        {(podeVerRota('servicos') || podeVerRota('plantoes') || podeVerRota('relatorios')) ? (
+          <>
+            {(() => {
+              const isOperacoesAtiva = ["servicos", "plantoes", "relatorios"].includes(activeView);
+              const menuStyles = getMenuStyles(isOperacoesAtiva);
+              return (
+                <SidebarItem
+                  collapsed={collapsed}
+                  onClick={() => setMenuOperacaoAberto((v) => !v)}
+                  style={menuStyles.style}
+                  collapsedStyle={menuStyles.collapsedStyle}
+                >
+                  {collapsed ? "O" : `Operação ${menuOperacaoAberto ? "▾" : "▸"}`}
+                </SidebarItem>
+              );
+            })()}
+            {menuOperacaoAberto && !collapsed && (
+              <div style={subMenu}>
+                {podeVerRota('servicos') ? <SidebarItem style={getSubMenuStyle(activeView === "servicos")} onClick={() => handleSelectView("servicos")}>Serviços</SidebarItem> : null}
+                {podeVerRota('plantoes') ? <SidebarItem style={getSubMenuStyle(activeView === "plantoes")} onClick={() => handleSelectView("plantoes")}>Plantões</SidebarItem> : null}
+                {podeVerRota('relatorios') ? <SidebarItem style={getSubMenuStyle(activeView === "relatorios")} onClick={() => handleSelectView("relatorios")}>Relatórios</SidebarItem> : null}
+              </div>
+            )}
+          </>
         ) : null}
 
         {podeVerRota('comissoes') ? (

@@ -8,10 +8,12 @@ import {
 import { runImovirtualSync } from "../../providers/services/providers/providerSyncRunner";
 import imovirtualLogo from "../../assets/imovirtual.jpg";
 import custojustoLogo from "../../assets/custojusto.jpg";
+import idealistaLogo from "../../assets/idealista.jpg";
 
 const PROVIDER_LOGOS = {
   imovirtual: imovirtualLogo,
-  custojusto: custojustoLogo
+  custojusto: custojustoLogo,
+  idealista: idealistaLogo
 };
 
 const WORKFLOW_STEPS = [
@@ -87,6 +89,7 @@ function getProviderLabel(providerValue) {
   const normalized = String(providerValue || "").trim().toLowerCase();
   if (normalized.includes("imovirtual")) return "Imovirtual";
   if (normalized.includes("custojusto")) return "CustoJusto";
+  if (normalized.includes("idealista")) return "Idealista";
   const text = String(providerValue || "").trim();
   return text || "Provider";
 }

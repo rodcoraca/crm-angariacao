@@ -3,6 +3,10 @@ export {
 } from "./imovirtual/fetchSearchPage.js";
 
 export {
+  fetchIdealistaSearchPage
+} from "./idealista/fetchSearchPage.js";
+
+export {
   normalizeEmpresaId,
   hasEmpresaId,
   requireEmpresaId,
@@ -19,6 +23,9 @@ export {
 } from "./imovirtual/parsers.js";
 
 export { collectImovirtualPaginatedListings } from "./imovirtual/collectPaginatedListings.js";
+export { collectIdealistaPaginatedListings } from "./idealista/collectPaginatedListings.js";
+
+export { parseIdealistaSearchPage, normalizeIdealistaListing } from "./idealista/parsers.js";
 
 export { executeProviderSync } from "./sync/executeProviderSync.js";
 

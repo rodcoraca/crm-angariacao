@@ -6,10 +6,25 @@ import {
   warnMissingEmpresaId
 } from "../../../src/shared/provider-engine/index.js";
 import { collectCustoJustoPaginatedListings } from "../../../src/shared/provider-engine/custojusto/collectPaginatedListings.js";
+import { collectIdealistaPaginatedListings } from "../../../src/shared/provider-engine/idealista/collectPaginatedListings.js";
+import {
+  createOlxCollectionSession,
+  collectOlxPaginatedListings,
+  discoverOlxCategoriesForSync,
+  getOlxCollectionSessionStatus
+} from "../../../src/shared/provider-engine/olx/providerAdapter.js";
 import { ProviderSearchBuilder } from "../../../src/providers/search/ProviderSearchBuilder.js";
 import "../../../src/providers/search/ImovirtualSearchBuilder.js";
 import "../../../src/providers/search/CustoJustoSearchBuilder.js";
+import "../../../src/providers/search/IdealistaSearchBuilder.js";
+import "../../../src/providers/search/OlxSearchBuilder.js";
 import { ProviderJobService } from "../_shared/ProviderJobService.ts";
+import {
+  acquireProviderLock,
+  createLockOwnerId,
+  parseLockOwnerMarker,
+  releaseProviderLock
+} from "./lockOwner.js";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,7 +34,7 @@ const corsHeaders = {
 
 const FALLBACK_MESSAGE = "Provider Sync indisponível.";
 const MAX_PAGES = 20;
-const STALE_LOCK_WINDOW_MS = 30 * 60 * 1000;
+const STALE_LOCK_WINDOW_MS = 4 * 60 * 1000;
 const SYNC_INTERVAL_MINUTES = 240;
 
 function resolveMaxPages(rawValue: unknown): { ok: true; value: number } | { ok: false; message: string } {
@@ -78,6 +93,12 @@ function computeNextExecution(success: boolean, now = new Date()) {
   return new Date(now.getTime() + SYNC_INTERVAL_MINUTES * 60 * 1000).toISOString();
 }
 
+function hasRadarPermission(permissoes: unknown) {
+  if (!permissoes || typeof permissoes !== "object") return false;
+  const permissions = permissoes as Record<string, unknown>;
+  return permissions["radar.view"] === true || permissions.radar === true;
+}
+
 async function loadRegistryRow(
   supabaseAdmin: ReturnType<typeof createClient>,
   empresaId: string,
@@ -96,19 +117,17 @@ async function loadRegistryRow(
 async function lockProvider(
   supabaseAdmin: ReturnType<typeof createClient>,
   empresaId: string,
-  provider: string
+  provider: string,
+  ownerId: string
 ) {
   const nowIso = new Date().toISOString();
 
-  const { error } = await supabaseAdmin
-    .from("provider_registry")
-    .update({
-      sync_running: true,
-      last_execution: nowIso,
-      last_error: null
-    })
-    .eq("empresa_id", empresaId)
-    .eq("provider_code", provider);
+  const { data, error } = await acquireProviderLock(supabaseAdmin, {
+    empresaId,
+    provider,
+    ownerId,
+    nowIso
+  });
 
   if (error) {
     console.error("[LOCK] lock_failed", {
@@ -119,24 +138,36 @@ async function lockProvider(
     return { ok: false, error };
   }
 
+  if (!data) {
+    console.log("[LOCK] lock_not_acquired", {
+      provider,
+      reason: "already_running",
+      timestamp: nowIso
+    });
+    return { ok: false, error: new Error("Provider já está em execução.") };
+  }
+
   console.log("[LOCK] lock_acquired", {
     provider,
+    ownerId,
     timestamp: nowIso
   });
 
-  return { ok: true };
+  return { ok: true, ownerId };
 }
 
 async function unlockProvider({
   supabaseAdmin,
   empresaId,
   provider,
+  ownerId,
   success,
   errorMessage
 }: {
   supabaseAdmin: ReturnType<typeof createClient>;
   empresaId: string;
   provider: string;
+  ownerId: string;
   success: boolean;
   errorMessage?: string | null;
 }) {
@@ -144,16 +175,15 @@ async function unlockProvider({
   const nowIso = now.toISOString();
   const nextExecutionIso = computeNextExecution(success, now);
 
-  const { error } = await supabaseAdmin
-    .from("provider_registry")
-    .update({
-      sync_running: false,
-      last_execution: nowIso,
-      next_execution: nextExecutionIso,
-      last_error: success ? null : (errorMessage || "Provider Sync indisponível.")
-    })
-    .eq("empresa_id", empresaId)
-    .eq("provider_code", provider);
+  const { data, error } = await releaseProviderLock(supabaseAdmin, {
+    empresaId,
+    provider,
+    ownerId,
+    nextExecutionIso,
+    success,
+    errorMessage,
+    nowIso
+  });
 
   if (error) {
     console.error("[UNLOCK] unlock_failed", {
@@ -162,7 +192,16 @@ async function unlockProvider({
       error: error.message,
       timestamp: nowIso
     });
-    return;
+    return { owned: false, error };
+  }
+
+  if (!data) {
+    console.warn("[UNLOCK] fencing_lost", {
+      provider,
+      ownerId,
+      timestamp: nowIso
+    });
+    return { owned: false, error: null };
   }
 
   console.log("[UNLOCK] unlock_applied", {
@@ -171,6 +210,8 @@ async function unlockProvider({
     nextExecution: nextExecutionIso,
     timestamp: nowIso
   });
+
+  return { owned: true, error: null };
 }
 
 async function unlockStaleLockIfNeeded(
@@ -178,7 +219,20 @@ async function unlockStaleLockIfNeeded(
   empresaId: string,
   provider: string
 ) {
+  console.log("[provider-sync] STEP_START", {
+    step: "loadRegistryRow",
+    provider,
+    empresaId
+  });
   const { data: registryRow, error } = await loadRegistryRow(supabaseAdmin, empresaId, provider);
+  console.log("[provider-sync] STEP_END", {
+    step: "loadRegistryRow",
+    provider,
+    empresaId,
+    ok: !error,
+    found: Boolean(registryRow),
+    error: error?.message || null
+  });
 
   if (error) {
     console.error("[LOCK] watchdog_read_failed", {
@@ -201,13 +255,45 @@ async function unlockStaleLockIfNeeded(
     return { ok: true, blocked: false };
   }
 
+  const ownerId = parseLockOwnerMarker(registryRow.last_error);
+  if (!ownerId) {
+    console.error("[LOCK] owner_marker_missing", {
+      provider,
+      timestamp: new Date().toISOString()
+    });
+    return { ok: true, blocked: true, reason: "owner_marker_missing" };
+  }
+
   const nowMs = Date.now();
   const lastExecution = toDateOrNull(registryRow.last_execution);
-  const isStale = !lastExecution || (nowMs - lastExecution.getTime()) > STALE_LOCK_WINDOW_MS;
+  const lockAgeMs = lastExecution ? nowMs - lastExecution.getTime() : 0;
+  const job = await ProviderJobService.getJob(supabaseAdmin, ownerId);
+  const jobMatchesLock = Boolean(
+    job &&
+    String(job.id) === ownerId &&
+    String(job.empresa_id) === empresaId &&
+    String(job.provider) === provider
+  );
+  const jobUpdatedAt = toDateOrNull(job?.updated_at);
+  const jobIsStale = Boolean(
+    jobMatchesLock &&
+    job?.status === "running" &&
+    !job?.finished_at &&
+    jobUpdatedAt &&
+    nowMs - jobUpdatedAt.getTime() > STALE_LOCK_WINDOW_MS
+  );
+  const jobAlreadyFinalized = Boolean(
+    jobMatchesLock &&
+    ["completed", "failed", "cancelled"].includes(String(job?.status)) &&
+    job?.finished_at &&
+    lockAgeMs > STALE_LOCK_WINDOW_MS
+  );
+  const preJobOrphanIsStale = !job && Boolean(lastExecution) && lockAgeMs > STALE_LOCK_WINDOW_MS;
 
-  if (!isStale) {
+  if (!jobIsStale && !jobAlreadyFinalized && !preJobOrphanIsStale) {
     console.log("[LOCK] running_active", {
       provider,
+      ownerId,
       lastExecution: registryRow.last_execution || null,
       timestamp: new Date().toISOString()
     });
@@ -216,19 +302,42 @@ async function unlockStaleLockIfNeeded(
 
   console.log("[UNLOCK] watchdog_triggered", {
     provider,
+    ownerId,
+    jobId: job?.id || null,
     lastExecution: registryRow.last_execution || null,
     timestamp: new Date().toISOString()
   });
 
-  await unlockProvider({
+  if (jobIsStale) {
+    const failed = await ProviderJobService.failJob(
+      supabaseAdmin,
+      ownerId,
+      "Watchdog marcou job órfão após ausência de progresso."
+    );
+
+    if (!failed) {
+      const currentJob = await ProviderJobService.getJob(supabaseAdmin, ownerId);
+      if (!currentJob || currentJob.status === "running") {
+        console.error("[LOCK] stale_job_recovery_failed", { provider, ownerId });
+        return { ok: false, blocked: true, reason: "stale_job_recovery_failed" };
+      }
+    }
+  }
+
+  const unlockResult = await unlockProvider({
     supabaseAdmin,
     empresaId,
     provider,
+    ownerId,
     success: false,
     errorMessage: "Watchdog desbloqueou lock órfão"
   });
 
-  return { ok: true, blocked: false, watchdogUnlocked: true };
+  if (!unlockResult.owned) {
+    console.warn("[UNLOCK] watchdog_fencing_lost", { provider, ownerId });
+  }
+
+  return { ok: true, blocked: false, watchdogUnlocked: unlockResult.owned };
 }
 
 Deno.serve(async (request: Request) => {
@@ -267,6 +376,7 @@ Deno.serve(async (request: Request) => {
       });
     }
     const effectiveMaxPages = maxPagesValidation.value;
+    const ownerId = createLockOwnerId();
     let lockAcquired = false;
     let syncSucceeded = false;
     let syncErrorMessage: string | null = null;
@@ -283,6 +393,7 @@ Deno.serve(async (request: Request) => {
           supabaseAdmin,
           empresaId,
           provider,
+          ownerId,
           success: syncSucceeded,
           errorMessage: syncErrorMessage
         });
@@ -301,7 +412,7 @@ Deno.serve(async (request: Request) => {
       timestamp: new Date().toISOString()
     });
 
-    if (provider !== "imovirtual" && provider !== "custojusto") {
+    if (provider !== "imovirtual" && provider !== "custojusto" && provider !== "idealista" && provider !== "olx") {
       return jsonResponse(400, {
         success: false,
         fallback: true,
@@ -328,7 +439,157 @@ Deno.serve(async (request: Request) => {
       }
     });
 
+    const authorization = request.headers.get("Authorization") || "";
+    const token = authorization.replace(/^Bearer\s+/i, "").trim();
+    if (!token) {
+      return jsonResponse(401, {
+        success: false,
+        fallback: true,
+        message: "Authorization Bearer token obrigatório."
+      });
+    }
+
+    console.log("[provider-sync] STEP_START", {
+      step: "auth.getUser",
+      provider,
+      empresaId
+    });
+    const { data: callerData, error: callerError } = await supabaseAdmin.auth.getUser(token);
+    console.log("[provider-sync] STEP_END", {
+      step: "auth.getUser",
+      provider,
+      empresaId,
+      ok: !callerError && Boolean(callerData?.user),
+      error: callerError?.message || null
+    });
+    if (callerError || !callerData?.user) {
+      return jsonResponse(401, {
+        success: false,
+        fallback: true,
+        message: "Token inválido."
+      });
+    }
+
+    console.log("[provider-sync] STEP_START", {
+      step: "usuarios.query",
+      provider,
+      empresaId
+    });
+    const { data: callerProfile, error: callerProfileError } = await supabaseAdmin
+      .from("usuarios")
+      .select("empresa_id,ativo,account_status,permissoes")
+      .eq("auth_user_id", callerData.user.id)
+      .maybeSingle();
+    console.log("[provider-sync] STEP_END", {
+      step: "usuarios.query",
+      provider,
+      empresaId,
+      ok: !callerProfileError && Boolean(callerProfile),
+      error: callerProfileError?.message || null
+    });
+
+    if (
+      callerProfileError ||
+      !callerProfile ||
+      callerProfile.ativo === false ||
+      ["disabled", "inactive"].includes(String(callerProfile.account_status || "").trim().toLowerCase())
+    ) {
+      return jsonResponse(403, {
+        success: false,
+        fallback: true,
+        message: "Perfil não autorizado."
+      });
+    }
+
+    console.log("[provider-sync] STEP_START", {
+      step: "user_roles.query",
+      provider,
+      empresaId
+    });
+    const { data: callerRoles, error: callerRolesError } = await supabaseAdmin
+      .from("user_roles")
+      .select("empresa_id,is_primary,roles(code)")
+      .eq("user_id", callerData.user.id)
+      .eq("is_primary", true);
+    console.log("[provider-sync] STEP_END", {
+      step: "user_roles.query",
+      provider,
+      empresaId,
+      ok: !callerRolesError,
+      error: callerRolesError?.message || null
+    });
+
+    if (callerRolesError) {
+      return jsonResponse(403, {
+        success: false,
+        fallback: true,
+        message: "Perfil sem autorização RBAC válida."
+      });
+    }
+
+    const hasGlobalAdminRole = (callerRoles || []).some((role) =>
+      role?.roles?.code &&
+      String(role.roles.code).trim().toUpperCase() === "ADMIN" &&
+      !role.empresa_id
+    );
+    const hasCompanyAdminRole = (callerRoles || []).some((role) =>
+      role?.roles?.code &&
+      String(role.roles.code).trim().toUpperCase() === "ADMIN" &&
+      String(role.empresa_id || "") === empresaId
+    );
+    const hasOwnTenantPermission = (hasRadarPermission(callerProfile.permissoes) || hasCompanyAdminRole) &&
+      String(callerProfile.empresa_id || "") === empresaId;
+
+    if (!hasGlobalAdminRole && !hasOwnTenantPermission) {
+      return jsonResponse(403, {
+        success: false,
+        fallback: true,
+        message: "Empresa não autorizada."
+      });
+    }
+
+    if (hasGlobalAdminRole) {
+      console.log("[provider-sync] STEP_START", {
+        step: "empresas.query",
+        provider,
+        empresaId
+      });
+      const { data: targetEmpresa, error: targetEmpresaError } = await supabaseAdmin
+        .from("empresas")
+        .select("id")
+        .eq("id", empresaId)
+        .maybeSingle();
+      console.log("[provider-sync] STEP_END", {
+        step: "empresas.query",
+        provider,
+        empresaId,
+        ok: !targetEmpresaError && Boolean(targetEmpresa),
+        error: targetEmpresaError?.message || null
+      });
+
+      if (targetEmpresaError || !targetEmpresa) {
+        return jsonResponse(403, {
+          success: false,
+          fallback: true,
+          message: "Empresa não autorizada."
+        });
+      }
+    }
+
+    console.log("[provider-sync] STEP_START", {
+      step: "loadRegistryRow.watchdog",
+      provider,
+      empresaId
+    });
     const watchdog = await unlockStaleLockIfNeeded(supabaseAdmin, empresaId, provider);
+    console.log("[provider-sync] STEP_END", {
+      step: "loadRegistryRow.watchdog",
+      provider,
+      empresaId,
+      ok: watchdog.ok,
+      blocked: watchdog.blocked,
+      reason: watchdog.reason || null
+    });
     if (!watchdog.ok) {
       return fallbackResponse(`Watchdog falhou: ${watchdog.reason || "erro desconhecido"}`);
     }
@@ -337,19 +598,49 @@ Deno.serve(async (request: Request) => {
       return fallbackResponse("Sincronização já em execução.");
     }
 
+    console.log("[provider-sync] STEP_START", {
+      step: "provider_registry.previous_read",
+      provider,
+      empresaId
+    });
     const previousRegistryRow = await loadRegistryRow(supabaseAdmin, empresaId, provider);
+    console.log("[provider-sync] STEP_END", {
+      step: "provider_registry.previous_read",
+      provider,
+      empresaId,
+      ok: !previousRegistryRow.error,
+      found: Boolean(previousRegistryRow.data),
+      error: previousRegistryRow.error?.message || null
+    });
     const previousLastExecution = toDateOrNull(previousRegistryRow?.data?.last_execution);
     const checkpoint = previousLastExecution ? previousLastExecution.getTime() - (5 * 60 * 1000) : null;
 
-    const lockResult = await lockProvider(supabaseAdmin, empresaId, provider);
+    console.log("[provider-sync] STEP_START", {
+      step: "lockProvider",
+      provider,
+      empresaId
+    });
+    const lockResult = await lockProvider(supabaseAdmin, empresaId, provider, ownerId);
+    console.log("[provider-sync] STEP_END", {
+      step: "lockProvider",
+      provider,
+      empresaId,
+      ok: lockResult.ok,
+      error: "error" in lockResult ? lockResult.error?.message || null : null
+    });
     if (!lockResult.ok) {
       return fallbackResponse("Falha ao adquirir lock de sincronização.");
     }
     lockAcquired = true;
+    const olxCollectionSession = provider === "olx" ? createOlxCollectionSession() : null;
     let jobId: string | null = null;
+    let executionStatus = "completed";
 
     try {
-      jobId = await ProviderJobService.createJob(supabaseAdmin, { provider, empresaId });
+      jobId = await ProviderJobService.createJob(supabaseAdmin, { provider, empresaId, jobId: ownerId });
+      if (!jobId) {
+        throw new Error("Não foi possível criar o job da sincronização.");
+      }
       const aggregatedResult = {
         provider,
         empresaId,
@@ -372,14 +663,26 @@ Deno.serve(async (request: Request) => {
         effectiveMaxPages
       });
 
-      const searchUrls = ProviderSearchBuilder.build(provider, {
-        districts,
-        tipologia,
-        minPrice,
-        maxPrice,
-        includePrivateOwners,
-        includeProfessionalOwners
-      });
+      let searchUrls;
+      if (provider === "olx") {
+        const discovery = await discoverOlxCategoriesForSync({ fetchImpl: globalThis.fetch });
+        searchUrls = ProviderSearchBuilder.build(provider, {
+          categories: discovery.categories
+        });
+        console.log("[OLX][DISCOVERY] categories", {
+          categoriesFound: discovery.metrics.categoriesFound,
+          fetchedAt: discovery.fetchedAt
+        });
+      } else {
+        searchUrls = ProviderSearchBuilder.build(provider, {
+          districts,
+          tipologia,
+          minPrice,
+          maxPrice,
+          includePrivateOwners,
+          includeProfessionalOwners
+        });
+      }
 
       console.log("[DEBUG URLS]", searchUrls);
 
@@ -387,42 +690,75 @@ Deno.serve(async (request: Request) => {
         const categoryLabel = getCategoryLabel(searchUrl);
 
         let paginated;
-        if (provider === "imovirtual") {
-          paginated = await collectImovirtualPaginatedListings({
-            maxPages: effectiveMaxPages,
-            checkpoint,
-            fetchPage: (page: number) => {
-              return fetchImovirtualSearchPage({
-                searchUrl,
-                page,
-                fetchImpl: globalThis.fetch
-              });
-            }
-          });
-        } else if (provider === "custojusto") {
-          paginated = await collectCustoJustoPaginatedListings(searchUrl, {
-            maxPages: effectiveMaxPages
-          });
-        } else {
-          return fallbackResponse("Provider não suportado.");
+        try {
+          if (provider === "imovirtual") {
+            paginated = await collectImovirtualPaginatedListings({
+              maxPages: effectiveMaxPages,
+              checkpoint,
+              fetchPage: (page: number) => {
+                return fetchImovirtualSearchPage({
+                  searchUrl,
+                  page,
+                  fetchImpl: globalThis.fetch
+                });
+              }
+            });
+          } else if (provider === "custojusto") {
+            paginated = await collectCustoJustoPaginatedListings(searchUrl, {
+              maxPages: effectiveMaxPages
+            });
+          } else if (provider === "idealista") {
+            paginated = await collectIdealistaPaginatedListings(searchUrl, {
+              maxPages: effectiveMaxPages,
+              includePrivateOwners,
+              includeProfessionalOwners
+            });
+          } else if (provider === "olx") {
+            paginated = await collectOlxPaginatedListings({
+              searchUrl,
+              districts,
+              collectionSession: olxCollectionSession
+            });
+          } else {
+            return fallbackResponse("Provider não suportado.");
+          }
+        } catch (error) {
+          if (provider !== "olx") throw error;
+          const message = error instanceof Error ? error.message : String(error);
+          aggregatedResult.errors.push({ category: categoryLabel, externalId: "*", error: message });
+          aggregatedResult.categories.push({ category: categoryLabel, analyzed: 0, created: 0, skipped: 0 });
+          continue;
         }
 
         console.log(`[ProviderSync][RC1.0.2][${categoryLabel}] pagination_end`, {
           pagesProcessed: paginated.pagesProcessed ?? paginated.pagesFetched ?? 0,
           stopReason: paginated.stopReason ?? "collector_result",
-          maxPages: effectiveMaxPages,
+          maxPages: provider === "olx"
+            ? paginated.maxPages ?? null
+            : effectiveMaxPages,
           lastPageKnown: paginated.lastPageKnown ?? null
         });
 
-        const categoryResult = await executeProviderSync({
-          providerName: provider,
-          empresaId,
-          listings: paginated.listings,
-          fetchedAt: paginated.fetchedAt ?? new Date().toISOString(),
-          supabaseClient: supabaseAdmin,
-          detectedAtFallbackNow: true,
-          syncStartedAtMs
-        });
+        let categoryResult;
+        try {
+          categoryResult = await executeProviderSync({
+            providerName: provider,
+            empresaId,
+            listings: paginated.listings,
+            fetchedAt: paginated.fetchedAt ?? new Date().toISOString(),
+            supabaseClient: supabaseAdmin,
+            detectedAtFallbackNow: true,
+            // OLX currently has no reliable createdAtFirst; do not synthesize one.
+            allowListingsWithoutCreatedAtFirst: provider === "olx",
+            syncStartedAtMs
+          });
+        } catch (error) {
+          if (provider !== "olx") throw error;
+          const message = error instanceof Error ? error.message : String(error);
+          aggregatedResult.errors.push({ category: categoryLabel, externalId: "*", error: message });
+          aggregatedResult.categories.push({ category: categoryLabel, analyzed: 0, created: 0, skipped: 0 });
+          continue;
+        }
 
         aggregatedResult.discovered += categoryResult.discovered;
         aggregatedResult.privateOwners += categoryResult.privateOwners;
@@ -462,10 +798,21 @@ Deno.serve(async (request: Request) => {
           novos: categoryResult.created,
           duplicados: categoryResult.skipped
         });
+
+        if (paginated.budget?.scope === "global") {
+          executionStatus = "budget_exhausted";
+          break;
+        }
+      }
+
+      if (olxCollectionSession?.budget?.exhausted) {
+        executionStatus = "budget_exhausted";
       }
 
       const result = {
         ...aggregatedResult,
+        status: executionStatus,
+        budget: olxCollectionSession ? getOlxCollectionSessionStatus(olxCollectionSession) : null,
         executionSeconds: Number(((Date.now() - syncStartedAtMs) / 1000).toFixed(2))
       };
 
@@ -487,14 +834,26 @@ Deno.serve(async (request: Request) => {
       });
 
       console.log("[ProviderSync][Diagnostics] executor_result", result);
-      console.log("[SYNC] completed", {
-        provider,
-        discovered: result.discovered,
-        created: result.created,
-        skipped: result.skipped,
-        executionSeconds: result.executionSeconds,
-        timestamp: new Date().toISOString()
-      });
+      if (executionStatus === "budget_exhausted") {
+        console.log("[SYNC] budget_exhausted", {
+          provider,
+          discovered: result.discovered,
+          created: result.created,
+          skipped: result.skipped,
+          budget: result.budget,
+          executionSeconds: result.executionSeconds,
+          timestamp: new Date().toISOString()
+        });
+      } else {
+        console.log("[SYNC] completed", {
+          provider,
+          discovered: result.discovered,
+          created: result.created,
+          skipped: result.skipped,
+          executionSeconds: result.executionSeconds,
+          timestamp: new Date().toISOString()
+        });
+      }
 
       syncSucceeded = true;
 
@@ -504,6 +863,7 @@ Deno.serve(async (request: Request) => {
 
       return jsonResponse(200, {
         success: true,
+        status: executionStatus,
         message: "Provider Sync executado com sucesso.",
         ...result,
         job_id: jobId ?? null,

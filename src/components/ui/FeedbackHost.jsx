@@ -17,7 +17,9 @@ export default function FeedbackHost() {
       const next = {
         id,
         message: detail.message,
-        variant: detail.variant || "neutral"
+          variant: detail.variant || "neutral",
+          actionLabel: detail.actionLabel,
+          onAction: detail.onAction
       };
 
       setToasts((prev) => [...prev, next]);
@@ -74,6 +76,8 @@ export default function FeedbackHost() {
               key={toast.id}
               message={toast.message}
               variant={toast.variant}
+              actionLabel={toast.actionLabel}
+              onAction={toast.onAction}
               onClose={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
             />
           );

@@ -9,14 +9,35 @@ import {
   insertLead,
   updateLeadById
 } from "../repositories/leadsRepository";
+import { fetchLeadLembreteAtivo } from "../repositories/leadLembretesRepository";
 import { resolverContratoIdentidade } from "../utils/identityContract";
 import { canManageLead, canTransferLead } from "./leadPermissionService";
+import {
+  alterarLeadLembrete,
+  carregarHistoricoLeadLembretes,
+  concluirLeadLembrete,
+  criarLeadLembrete
+} from "./leadLembretesService";
 import {
   buildMissingEmpresaError,
   hasEmpresaId,
   resolveEmpresaId,
   warnMissingEmpresaId
 } from "../../../utils/empresaScope.js";
+import { removeRadarLeadMetadataFromObservation } from "../../radar/contracts/radarLeadMetadata";
+
+export function calcularDataLembrete(opcao, dataPersonalizada, hoje = new Date()) {
+  if (opcao === "personalizada") return dataPersonalizada || "";
+
+  const dias = Number(opcao);
+  if (!Number.isInteger(dias) || dias < 0) return "";
+
+  const data = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + dias);
+  const ano = data.getFullYear();
+  const mes = String(data.getMonth() + 1).padStart(2, "0");
+  const dia = String(data.getDate()).padStart(2, "0");
+  return `${ano}-${mes}-${dia}`;
+}
 
 async function executarMutacaoComErro(mutationHandler) {
   const result = await mutationHandler();
@@ -171,6 +192,9 @@ export async function carregarFichaLead(leadId) {
   const { data, error } = await fetchLeadById(leadId, empresaId);
   if (error) return { lead: null, form: null, error };
 
+  const { data: lembreteAtivo, error: erroLembrete } = await fetchLeadLembreteAtivo(leadId, empresaId);
+  if (erroLembrete) return { lead: null, form: null, error: erroLembrete };
+
   return {
     lead: data,
     form: {
@@ -178,9 +202,17 @@ export async function carregarFichaLead(leadId) {
       telefone: data.telefone || "",
       tipo: data.tipo || "morno",
       origem: data.origem || "",
-      observacoes: data.observacoes || "",
+      observacoes: removeRadarLeadMetadataFromObservation(data.observacoes),
       status: data.status || "novo",
-      agente_id: data.agente_id || ""
+      agente_id: data.agente_id || "",
+      data_visita: data.data_visita || "",
+      hora_visita: data.hora_visita || "",
+      local_visita: data.local_visita || "",
+      status_visita: data.status_visita || "",
+      lembrete_ativo: Boolean(lembreteAtivo),
+      data_lembrete: lembreteAtivo?.data_lembrete || "",
+      hora_lembrete: lembreteAtivo?.hora_lembrete || "",
+      lembrete_opcao: lembreteAtivo ? "personalizada" : "0"
     },
     error: null
   };
@@ -249,6 +281,7 @@ export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao
     tipo,
     origem,
     observacoes: observacao,
+    status: "novo",
     agente_id: contrato.responsavelId,
     empresa_id: empresaId,
     created_at: new Date().toISOString(),
@@ -270,12 +303,16 @@ export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao
       }
     });
 
-    await auditMutation("create", () => executarMutacaoComErro(() => insertLead(payload)), contexto);
+    const mutationResult = await auditMutation(
+      "create",
+      () => executarMutacaoComErro(() => insertLead(payload)),
+      contexto
+    );
+
+    return { error: null, duplicateLead: null, id: mutationResult?.data?.id || null };
   } catch (error) {
     return { error };
   }
-
-  return { error: null, duplicateLead: null };
 }
 
 export async function salvarFichaLead({ leadId, form, user }) {
@@ -311,6 +348,19 @@ export async function salvarFichaLead({ leadId, form, user }) {
     };
   }
 
+  const { data: lembreteAtivoAtual, error: erroLembreteAtual } = await fetchLeadLembreteAtivo(leadId, empresaId);
+  if (erroLembreteAtual) {
+    return { error: erroLembreteAtual };
+  }
+
+  const dataLembrete = form.lembrete_ativo
+    ? calcularDataLembrete(form.lembrete_opcao, form.data_lembrete) || null
+    : null;
+
+  if (form.lembrete_ativo && (!dataLembrete || !form.hora_lembrete)) {
+    return { error: { message: "Escolha a data e a hora do lembrete." } };
+  }
+
   const updatePayload = {
     nome: form.nome,
     telefone: telefoneNormalizado,
@@ -318,6 +368,10 @@ export async function salvarFichaLead({ leadId, form, user }) {
     origem: form.origem,
     observacoes: form.observacoes,
     status: form.status,
+    data_visita: form.status === "agendamento" ? (form.data_visita || null) : null,
+    hora_visita: form.status === "agendamento" ? (form.hora_visita || null) : null,
+    local_visita: form.status === "agendamento" ? (form.local_visita || null) : null,
+    status_visita: form.status === "agendamento" ? (form.status_visita || null) : null,
     updated_at: new Date().toISOString()
   };
 
@@ -332,21 +386,94 @@ export async function salvarFichaLead({ leadId, form, user }) {
         statusChanged: (leadAtual?.status || null) !== (form.status || null),
         before: {
           status: leadAtual?.status || null,
-          tipo: leadAtual?.tipo || null
+          tipo: leadAtual?.tipo || null,
+          nome: leadAtual?.nome || null,
+          telefone: leadAtual?.telefone || null,
+          origem: leadAtual?.origem || null,
+          observacoes: leadAtual?.observacoes || null,
+          agente_id: leadAtual?.agente_id || null,
+          data_visita: leadAtual?.data_visita || null,
+          hora_visita: leadAtual?.hora_visita || null,
+          local_visita: leadAtual?.local_visita || null,
+          status_visita: leadAtual?.status_visita || null
         },
         after: {
           status: form.status || null,
-          tipo: form.tipo || null
+          tipo: form.tipo || null,
+          nome: form.nome || null,
+          telefone: telefoneNormalizado || null,
+          origem: form.origem || null,
+          observacoes: form.observacoes || null,
+          agente_id: leadAtual?.agente_id || null,
+          data_visita: updatePayload.data_visita,
+          hora_visita: updatePayload.hora_visita,
+          local_visita: updatePayload.local_visita,
+          status_visita: updatePayload.status_visita
         }
       }
     });
 
     await auditMutation("update", () => executarMutacaoComErro(() => updateLeadById(leadId, updatePayload, empresaId)), contexto);
+
+    if (form.lembrete_ativo) {
+      if (lembreteAtivoAtual) {
+        await alterarLeadLembrete({
+          lembreteId: lembreteAtivoAtual.id,
+          user,
+          dataLembrete: dataLembrete,
+          horaLembrete: form.hora_lembrete
+        });
+      } else {
+        await criarLeadLembrete({
+          leadId,
+          user,
+          dataLembrete: dataLembrete,
+          horaLembrete: form.hora_lembrete
+        });
+      }
+    } else if (lembreteAtivoAtual) {
+      await concluirLeadLembrete({
+        lembreteId: lembreteAtivoAtual.id,
+        user
+      });
+    }
   } catch (error) {
     return { error };
   }
 
   return { error: null };
+}
+
+export async function carregarHistoricoLembretesLead({ leadId, user }) {
+  return carregarHistoricoLeadLembretes({ leadId, user });
+}
+
+export async function concluirLembreteLead({ leadId, user }) {
+  const empresaId = await resolveEmpresaId(user);
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { error: buildMissingEmpresaError() };
+  }
+
+  try {
+    await carregarLeadAutorizada(leadId, empresaId, user, canManageLead);
+
+    const { data: lembreteAtivo, error: erroLembrete } = await fetchLeadLembreteAtivo(leadId, empresaId);
+    if (erroLembrete) {
+      return { error: erroLembrete };
+    }
+
+    if (!lembreteAtivo) {
+      return { error: null };
+    }
+
+    return concluirLeadLembrete({
+      lembreteId: lembreteAtivo.id,
+      user
+    });
+  } catch (error) {
+    return { error };
+  }
 }
 
 export async function transferirLead({ leadId, agenteId, user }) {

@@ -1,16 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
+import { supabase } from "../../../supabase";
+import { applyEmpresaScope, resolveEmpresaId } from "../../../utils/empresaScope";
 import { carregarLeadsDashboard } from "../services/leadsService";
 import {
   construirCsvLeads,
   filtrarLeadsDashboard,
   formatarDataDashboard
 } from "../viewmodels/leadsViewModel";
-import { criarOpcoesFiltroOrigemLead } from "../utils";
+import { resolverNomeAgente } from "../services/agentService";
 
-export function useDashboardLeads({ onAbrirLead, theme }) {
+export function useDashboardLeads({ onAbrirLead, theme, user }) {
   const [leads, setLeads] = useState([]);
   const [filtroTipo, setFiltroTipo] = useState("");
-  const [filtroOrigem, setFiltroOrigem] = useState("");
+  const [filtroStatus, setFiltroStatus] = useState("");
+  const [filtroUtilizador, setFiltroUtilizador] = useState("");
+  const [opcoesUtilizador, setOpcoesUtilizador] = useState([]);
+  const [agentes, setAgentes] = useState([]);
   const [busca, setBusca] = useState("");
   const [leadSelecionado, setLeadSelecionado] = useState(null);
 
@@ -20,17 +25,50 @@ export function useDashboardLeads({ onAbrirLead, theme }) {
       setLeads(result.data || []);
     }
 
+    async function carregarUtilizadores() {
+      const empresaId = await resolveEmpresaId(user);
+      if (!empresaId) {
+        setOpcoesUtilizador([]);
+        setAgentes([]);
+        return;
+      }
+
+      const { data, error } = await applyEmpresaScope(
+        supabase
+          .from("usuarios")
+          .select("id, nome, email, empresa_id, ativo")
+          .eq("ativo", true),
+        empresaId
+      ).order("nome", { ascending: true });
+
+      if (error) {
+        setOpcoesUtilizador([]);
+        setAgentes([]);
+        return;
+      }
+
+      const agentesData = (data || []).map((usuario) => ({
+        id: usuario.id,
+        nome: usuario.nome || usuario.email || "Utilizador não encontrado",
+        email: usuario.email || ""
+      }));
+
+      setAgentes(agentesData);
+      setOpcoesUtilizador(
+        agentesData.map((usuario) => ({
+          value: String(usuario.id),
+          label: usuario.nome || "Utilizador"
+        }))
+      );
+    }
+
     carregar();
-  }, []);
+    carregarUtilizadores();
+  }, [user]);
 
   const dados = useMemo(
-    () => filtrarLeadsDashboard(leads, busca, filtroTipo, filtroOrigem),
-    [leads, busca, filtroTipo, filtroOrigem]
-  );
-
-  const opcoesFiltroOrigem = useMemo(
-    () => criarOpcoesFiltroOrigemLead(leads),
-    [leads]
+    () => filtrarLeadsDashboard(leads, busca, filtroTipo, filtroUtilizador, filtroStatus),
+    [leads, busca, filtroTipo, filtroUtilizador, filtroStatus]
   );
 
   function exportarCSV() {
@@ -58,19 +96,26 @@ export function useDashboardLeads({ onAbrirLead, theme }) {
     };
   }
 
+  function nomeAgente(agenteId) {
+    return resolverNomeAgente(agentes, agenteId, user);
+  }
+
   return {
     filtroTipo,
-    filtroOrigem,
+    filtroStatus,
+    filtroUtilizador,
     busca,
     leadSelecionado,
     dados,
-    opcoesFiltroOrigem,
+    opcoesUtilizador,
     setFiltroTipo,
-    setFiltroOrigem,
+    setFiltroStatus,
+    setFiltroUtilizador,
     setBusca,
     setLeadSelecionado,
     exportarCSV,
     getInteractiveCellProps,
+    nomeAgente,
     formatarData: formatarDataDashboard
   };
 }

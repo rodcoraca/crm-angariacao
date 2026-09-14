@@ -40,6 +40,31 @@ export function deleteFicheiro(ficheiroId, empresaId = null) {
     .eq("id", ficheiroId), empresaId);
 }
 
+export function deleteImovelFicheirosByImovelId(imovelId, empresaId = null) {
+  return applyEmpresaScope(supabase
+    .from(FICHEIROS_TABLE)
+    .delete()
+    .eq("imovel_id", imovelId), empresaId);
+}
+
+export function deleteImovel(imovelId, empresaId = null) {
+  return applyEmpresaScope(supabase
+    .from(IMOVEIS_TABLE)
+    .delete()
+    .eq("id", imovelId), empresaId);
+}
+
+export function removeStorageFiles(paths = []) {
+  const normalized = (paths || []).filter(Boolean);
+  if (!normalized.length) {
+    return Promise.resolve({ data: [], error: null });
+  }
+
+  return supabase.storage
+    .from(STORAGE_BUCKET)
+    .remove(normalized);
+}
+
 export function uploadImovelStorageFile(nomeArquivo, file) {
   return supabase.storage
     .from(STORAGE_BUCKET)

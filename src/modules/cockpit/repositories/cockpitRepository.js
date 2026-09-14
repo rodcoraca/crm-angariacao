@@ -1,10 +1,11 @@
 import { supabase } from "../../../supabase";
+import { applyEmpresaScope } from "../../../utils/empresaScope";
 
 export function queryCountLeadsAtivas() {
   return supabase
     .from("leads")
     .select("id", { count: "exact", head: true })
-    .or("status.neq.fechado,status.is.null");
+    .or("status.not.in.(convertido,nao_evoluiu,migrado),status.is.null");
 }
 
 export function queryCountLeadsByStatus(status) {
@@ -53,7 +54,7 @@ export function queryFollowupPendente(camposFollowup, dataLimiteIso, limite) {
   return supabase
     .from("leads")
     .select(camposFollowup)
-    .eq("status", "contactado")
+    .eq("status", "em_contacto")
     .lt("updated_at", dataLimiteIso)
     .order("updated_at", { ascending: true })
     .limit(limite);
@@ -72,7 +73,7 @@ export function queryLeadsConfirmacaoVisitasComData(camposComDataVisita) {
   return supabase
     .from("leads")
     .select(camposComDataVisita)
-    .eq("status", "agendado")
+    .eq("status", "agendamento")
     .order("data_visita", { ascending: true, nullsFirst: false })
     .order("created_at", { ascending: true })
     .limit(50);
@@ -82,40 +83,31 @@ export function queryLeadsConfirmacaoVisitasSemData(camposSemDataVisita) {
   return supabase
     .from("leads")
     .select(camposSemDataVisita)
-    .eq("status", "agendado")
+    .eq("status", "agendamento")
     .order("created_at", { ascending: true })
     .limit(50);
 }
 
-export function queryAgendaVisitasHoje(camposAgenda, inicioHojeIso, inicioAmanhaIso, limite) {
-  return supabase
+export function queryAgendaVisitasHoje(camposAgenda, inicioHojeIso, inicioAmanhaIso, limite, empresaId = null) {
+  return applyEmpresaScope(supabase
     .from("leads")
     .select(camposAgenda)
-    .eq("status", "agendado")
+    .eq("status", "agendamento")
     .gte("data_visita", inicioHojeIso)
     .lt("data_visita", inicioAmanhaIso)
     .order("data_visita", { ascending: true })
-    .limit(limite);
+    .order("hora_visita", { ascending: true, nullsFirst: false })
+    .limit(limite), empresaId);
 }
 
-export function queryAgendaVisitasFuturas(camposAgenda, inicioAmanhaIso, limite) {
-  return supabase
-    .from("leads")
-    .select(camposAgenda)
-    .eq("status", "agendado")
-    .gte("data_visita", inicioAmanhaIso)
-    .order("data_visita", { ascending: true })
-    .limit(limite);
-}
-
-export function queryAgendaAgendadasSemData(camposAgenda, limite) {
-  return supabase
-    .from("leads")
-    .select(camposAgenda)
-    .eq("status", "agendado")
-    .is("data_visita", null)
-    .order("created_at", { ascending: true })
-    .limit(limite);
+export function queryAgendaLembretesHoje(camposLembrete, dataHoje, limite, empresaId = null) {
+  return applyEmpresaScope(supabase
+    .from("lead_lembretes")
+    .select(`${camposLembrete},lead:lead_id (id,nome,telefone)`)
+    .eq("estado", "ativo")
+    .eq("data_lembrete", dataHoje)
+    .order("hora_lembrete", { ascending: true, nullsFirst: false })
+    .limit(limite), empresaId);
 }
 
 export function queryRiscoImoveis() {

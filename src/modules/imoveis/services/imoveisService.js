@@ -1,13 +1,16 @@
 import { normalizarTelefone, validarTelefone } from "../../../telefone";
 import {
+  deleteFicheiro,
+  deleteImovel,
+  deleteImovelFicheirosByImovelId,
   fetchFicheirosByImovelId,
   fetchImoveis,
   getImovelStoragePublicUrl,
   insertImovel,
   insertImovelFicheiro,
+  removeStorageFiles,
   updateImovel,
-  uploadImovelStorageFile,
-  deleteFicheiro
+  uploadImovelStorageFile
 } from "../repositories";
 import { FORM_DEFAULTS, TELEFONE_ERROR_MESSAGE } from "../utils";
 import {
@@ -163,6 +166,29 @@ export async function salvarImovelService({ form, isEditing, imovelEdicao }) {
   return insertImovel(payload);
 }
 
+export function extractStoragePathFromUrl(url) {
+  if (!url) return null;
+
+  try {
+    const pathname = new URL(url).pathname;
+    const marker = "/object/public/crm-imoveis/";
+    const index = pathname.toLowerCase().indexOf(marker.toLowerCase());
+    if (index === -1) return null;
+    return decodeURIComponent(pathname.slice(index + marker.length));
+  } catch (error) {
+    return null;
+  }
+}
+
+export function mapFicheiroParaAuditoria(ficheiro = {}) {
+  return {
+    id: ficheiro.id ?? null,
+    nome: ficheiro.nome ?? null,
+    caminho: extractStoragePathFromUrl(ficheiro.url) || ficheiro.url || null,
+    tipo: ficheiro.tipo ?? null
+  };
+}
+
 export async function apagarFicheiroService(ficheiroId) {
   const empresaId = await resolveEmpresaId();
   if (!hasEmpresaId(empresaId)) {
@@ -171,6 +197,47 @@ export async function apagarFicheiroService(ficheiroId) {
   }
 
   return deleteFicheiro(ficheiroId, empresaId);
+}
+
+export async function excluirImovelService({ imovelId, ficheiros = [] }) {
+  if (!imovelId) {
+    return { deletedFiles: [], error: new Error("Imóvel inválido.") };
+  }
+
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { deletedFiles: [], error: buildMissingEmpresaError() };
+  }
+
+  const ficheirosAtuais = Array.isArray(ficheiros) && ficheiros.length > 0
+    ? ficheiros
+    : ((await fetchFicheirosByImovelId(imovelId, empresaId)).data || []);
+
+  const pathsParaRemover = (ficheirosAtuais || [])
+    .map((ficheiro) => extractStoragePathFromUrl(ficheiro?.url))
+    .filter(Boolean);
+
+  if (pathsParaRemover.length > 0) {
+    const { error: storageError } = await removeStorageFiles(pathsParaRemover);
+    if (storageError) {
+      throw storageError;
+    }
+  }
+
+  const { error: ficheirosError } = await deleteImovelFicheirosByImovelId(imovelId, empresaId);
+  if (ficheirosError) {
+    throw ficheirosError;
+  }
+
+  const { error: imovelError } = await deleteImovel(imovelId, empresaId);
+  if (imovelError) {
+    throw imovelError;
+  }
+
+  return {
+    deletedFiles: (ficheirosAtuais || []).map(mapFicheiroParaAuditoria)
+  };
 }
 
 export async function uploadFicheiroService({ file, imovelId, setProgresso }) {

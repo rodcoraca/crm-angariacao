@@ -4,7 +4,7 @@ import { applyEmpresaScope, resolveEmpresaIdFromContext } from "../../../utils/e
 export function fetchLeadsByTipo(tipo, empresaId = null) {
   return applyEmpresaScope(supabase
     .from("leads")
-    .select("id, nome, telefone, tipo, observacoes, agente_id, created_at, updated_at")
+    .select("id, nome, telefone, tipo, status, observacoes, agente_id, created_at, updated_at")
     .eq("tipo", tipo), empresaId)
     .order("created_at", { ascending: false });
 }
@@ -20,7 +20,7 @@ export function fetchLeadById(leadId, empresaId = null) {
 export function fetchDashboardLeads(empresaId = null) {
   return applyEmpresaScope(supabase
     .from("leads")
-    .select("id, nome, telefone, tipo, created_at, updated_at"), empresaId)
+    .select("id, nome, telefone, tipo, status, origem, observacoes, agente_id, created_at, updated_at"), empresaId)
     .order("created_at", { ascending: false });
 }
 
@@ -62,7 +62,9 @@ export function updateLeadById(leadId, payload, empresaId = null) {
 export function insertLead(payload) {
   return supabase
     .from("leads")
-    .insert([payload]);
+    .insert([payload])
+    .select("id")
+    .single();
 }
 
 export function fetchAgentesAtivos(currentUser) {

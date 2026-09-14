@@ -2,8 +2,11 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "../theme/ThemeContext";
 import { usePermissions } from "../modules/auth/hooks";
 import Badge from "../components/ui/Badge";
+import EmptyState from "../components/ui/EmptyState";
 import Card from "../components/ui/Card";
 import KpiCard from "../components/ui/KpiCard";
+import Tooltip from "../components/ui/Tooltip";
+import { notify } from "../components/ui/feedbackBus";
 import {
   useCockpitActions,
   useCockpitActivity,
@@ -15,6 +18,7 @@ import {
 } from "../modules/cockpit/hooks";
 import { searchCockpitGlobal } from "../modules/cockpit/services";
 import { createCockpitViewModel } from "../modules/cockpit/viewmodels";
+import { concluirLembreteLead } from "../modules/leads/services";
 import {
   formatarResumoSaudeImovel
 } from "../modules/cockpit/utils/formatters";
@@ -64,7 +68,113 @@ function criarSparkline(value, index) {
   });
 }
 
-export default function Home({ user, onOpenSearchResult = null }) {
+function obterDataLocal() {
+  const agora = new Date();
+  return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}`;
+}
+
+const lembretesDisparadosSessao = new Set();
+
+function lembreteDevido(item, agora = new Date()) {
+  if (item.tipoAgenda !== "lembrete" || !item.dataLembrete || !item.horaLembrete) return false;
+  const [ano, mes, dia] = item.dataLembrete.split("-").map(Number);
+  const [hora, minuto] = item.horaLembrete.split(":").map(Number);
+  const dataHora = new Date(ano, mes - 1, dia, hora, minuto || 0, 0, 0);
+  return item.dataLembrete === obterDataLocal() && dataHora <= agora;
+}
+
+function reproduzirSomLembrete() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    const context = new AudioContextClass();
+    const tocar = () => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.frequency.value = 760;
+      gain.gain.setValueAtTime(0.42, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, context.currentTime + 0.28);
+      oscillator.connect(gain);
+      gain.connect(context.destination);
+      oscillator.start();
+      oscillator.stop(context.currentTime + 0.28);
+      oscillator.addEventListener("ended", () => context.close().catch(() => {}), { once: true });
+    };
+
+    if (context.state === "suspended") {
+      context.resume().then(tocar).catch(() => context.close().catch(() => {}));
+      return;
+    }
+
+    tocar();
+  } catch {
+    // O áudio pode ser bloqueado pelo browser sem interação prévia.
+  }
+}
+
+function AgendaItems({ items, onOpenLead, onCompleteReminder, completingReminderIds = new Set(), emptyTitle }) {
+  if (!items.length) return <EmptyState title={emptyTitle} />;
+
+  return (
+    <div className="cockpit-agenda-list">
+      {items.map((item) => {
+        const content = (
+          <>
+            <div className="cockpit-agenda-item__time">{item.hora}</div>
+            <div className="cockpit-agenda-item__type">{item.tipoAgenda === "lembrete" ? "🔔 Lembrete" : "📅 Compromisso"}</div>
+            <strong className="cockpit-agenda-item__title">{item.nome}</strong>
+            <span className="cockpit-agenda-item__client">{item.informacaoCurta}</span>
+          </>
+        );
+
+        if (item.tipoAgenda !== "lembrete") {
+          return (
+            <Tooltip key={item.id} content={item.tooltip} placement="top">
+              <button
+                type="button"
+                className="cockpit-agenda-item"
+                onClick={() => onOpenLead?.(item.leadId)}
+                disabled={!onOpenLead}
+              >
+                {content}
+              </button>
+            </Tooltip>
+          );
+        }
+
+        const isCompleting = completingReminderIds.has(item.leadId);
+
+        return (
+          <Tooltip key={item.id} content={item.tooltip} placement="top">
+            <div className="cockpit-agenda-item cockpit-agenda-item--lembrete">
+              {content}
+              <div className="cockpit-agenda-item__actions">
+                <button
+                  type="button"
+                  className="cockpit-agenda-action"
+                  onClick={() => onCompleteReminder?.(item)}
+                  disabled={isCompleting}
+                >
+                  {isCompleting ? "A concluir" : "Concluir"}
+                </button>
+                <button
+                  type="button"
+                  className="cockpit-agenda-action"
+                  onClick={() => onOpenLead?.(item.leadId)}
+                  disabled={!onOpenLead}
+                >
+                  Alterar
+                </button>
+              </div>
+            </div>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function Home({ user, onOpenSearchResult = null, onOpenLead = null }) {
   const theme = useTheme();
   const { can } = usePermissions();
   const [searchTerm, setSearchTerm] = useState("");
@@ -74,6 +184,8 @@ export default function Home({ user, onOpenSearchResult = null }) {
   const [isSearchLoading, setIsSearchLoading] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [highlightedIndex, setHighlightedIndex] = useState(0);
+  const [lembretesConcluidosIds, setLembretesConcluidosIds] = useState(() => new Set());
+  const [lembretesAConcluirIds, setLembretesAConcluirIds] = useState(() => new Set());
   const searchRef = useRef(null);
   const searchRequestRef = useRef(0);
 
@@ -133,8 +245,52 @@ export default function Home({ user, onOpenSearchResult = null }) {
   const {
     data: agendaItems,
     loading: agendaLoading,
-    error: agendaError
+    error: agendaError,
+    refresh: refreshAgenda
   } = useCockpitAgenda();
+  const permissaoNotificacaoRef = useRef(false);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      refreshAgenda();
+    }, 60000);
+    return () => window.clearInterval(intervalId);
+  }, [refreshAgenda]);
+
+  useEffect(() => {
+    agendaItems.filter((item) => lembreteDevido(item)).forEach((item) => {
+      const key = `${item.leadId}:${item.dataLembrete}:${item.horaLembrete}`;
+      if (lembretesDisparadosSessao.has(key)) return;
+      lembretesDisparadosSessao.add(key);
+
+      notify({
+        message: `🔔 Lembrete: ${item.nome}${item.informacaoCurta ? ` · ${item.informacaoCurta}` : ""}`,
+        variant: "warning",
+        duration: 7000,
+        actionLabel: "Abrir Lead",
+        onAction: () => onOpenLead?.(item.leadId)
+      });
+      reproduzirSomLembrete();
+
+      try {
+        if ("Notification" in window) {
+          const mostrar = () => {
+            if (window.Notification.permission === "granted") {
+              new window.Notification("OSFlow — Lembrete", { body: `${item.nome}${item.informacaoCurta ? ` · ${item.informacaoCurta}` : ""}` });
+            }
+          };
+          if (window.Notification.permission === "default" && !permissaoNotificacaoRef.current) {
+            permissaoNotificacaoRef.current = true;
+            window.Notification.requestPermission().then(mostrar).catch(() => {});
+          } else {
+            mostrar();
+          }
+        }
+      } catch {
+        // A notificação do browser é opcional; o Toast interno já foi emitido.
+      }
+    });
+  }, [agendaItems, onOpenLead]);
   const {
     data: imoveisSaudeItems,
     loading: imoveisSaudeLoading,
@@ -142,6 +298,39 @@ export default function Home({ user, onOpenSearchResult = null }) {
   } = useCockpitRisk();
   const { data: produtividade } = useCockpitProductivity(produtividadeBase);
   const { data: ultimasAtividades } = useCockpitActivity(ultimasAtividadesBase);
+  const agendaItemsVisiveis = useMemo(
+    () => agendaItems.filter((item) => item.tipoAgenda !== "lembrete" || !lembretesConcluidosIds.has(item.leadId)),
+    [agendaItems, lembretesConcluidosIds]
+  );
+
+  async function concluirLembreteAgenda(item) {
+    if (!item?.leadId || lembretesAConcluirIds.has(item.leadId)) return;
+
+    setLembretesAConcluirIds((prev) => new Set(prev).add(item.leadId));
+    const result = await concluirLembreteLead({ leadId: item.leadId, user });
+
+    if (result?.error) {
+      notify({
+        message: result.error.message || "Não foi possível concluir o lembrete.",
+        variant: "danger",
+        duration: 5000
+      });
+      setLembretesAConcluirIds((prev) => {
+        const next = new Set(prev);
+        next.delete(item.leadId);
+        return next;
+      });
+      return;
+    }
+
+    setLembretesConcluidosIds((prev) => new Set(prev).add(item.leadId));
+    setLembretesAConcluirIds((prev) => {
+      const next = new Set(prev);
+      next.delete(item.leadId);
+      return next;
+    });
+    refreshAgenda();
+  }
 
   const pipelineTotal = pipelineComercial.reduce((acc, item) => acc + obterNumeroMetric(item.value), 0);
   const negociosGanhos = pipelineComercial.find((item) => item.id === "pipeline-fechado")?.value || "0";
@@ -152,7 +341,7 @@ export default function Home({ user, onOpenSearchResult = null }) {
   const metasKpi = {
     leads: kpisTopo.find((item) => item.id === "kpi-leads-ativas")?.valor || "--",
     negocios: kpisTopo.find((item) => item.id === "kpi-negocios-fechados")?.valor || "--",
-    visitas: String(agendaItems.length),
+    visitas: String(agendaItemsVisiveis.length),
     conversao: produtividade.find((item) => item.id === "prod-conversao")?.value || `${taxaConversao}%`
   };
   const volumesMeta = [
@@ -487,8 +676,8 @@ export default function Home({ user, onOpenSearchResult = null }) {
             <strong className="cockpit-topbar__meta-value">{dataAtual}</strong>
           </div>
 
-          <button type="button" className="cockpit-icon-button cockpit-icon-button--accent" aria-label="Notificacoes">
-            3
+          <button type="button" className="cockpit-icon-button cockpit-icon-button--accent" aria-label="Lembretes de hoje">
+            🔔 {agendaItemsVisiveis.filter((item) => item.tipoAgenda === "lembrete").length}
           </button>
 
           <div className="cockpit-avatar" title={nomeUtilizador || user?.email || "Utilizador autenticado"}>
@@ -560,32 +749,32 @@ export default function Home({ user, onOpenSearchResult = null }) {
           <div className="cockpit-panel__header">
             <div>
               <h2 className="cockpit-panel__title">Agenda de hoje</h2>
-              <p className="cockpit-panel__subtitle">Compromissos do dia com leitura imediata.</p>
+              <p className="cockpit-panel__subtitle">Compromissos e lembretes do dia com leitura imediata.</p>
             </div>
-            <Badge variant="primary">{agendaItems.length || 0}</Badge>
+            <Badge variant="primary">{agendaItemsVisiveis.length || 0}</Badge>
           </div>
 
           {agendaLoading ? (
             <p className="cockpit-empty-state">A carregar agenda...</p>
           ) : agendaError ? (
             <p className="cockpit-empty-state">Erro ao carregar agenda.</p>
-          ) : !agendaItems.length ? (
-            <p className="cockpit-empty-state">Sem agenda registada para hoje.</p>
           ) : (
-            <div className="cockpit-agenda-list">
-              {agendaItems.map((item) => (
-                <article key={item.id} className="cockpit-agenda-item">
-                  <div className="cockpit-agenda-item__time">{item.hora}</div>
-                  <div className="cockpit-token">{item.icone || "A"}</div>
-                  <div className="cockpit-agenda-item__content">
-                    <strong className="cockpit-agenda-item__title">{item.nome}</strong>
-                    <p className="cockpit-agenda-item__client">{item.telefone}</p>
-                    <small className="cockpit-agenda-item__meta">{item.estado} | {item.data}</small>
-                  </div>
-                  <Badge variant={obterVariantPrioridade(item.prioridade)}>{item.prioridade}</Badge>
-                </article>
-              ))}
-            </div>
+            <>
+              <h3 className="cockpit-panel__title">Compromissos</h3>
+              <AgendaItems items={agendaItemsVisiveis.filter((item) => item.tipoAgenda === "compromisso")} onOpenLead={onOpenLead} emptyTitle="Sem compromissos para hoje." />
+              <h3 className="cockpit-panel__title">Lembretes</h3>
+              {agendaItemsVisiveis.some((item) => item.tipoAgenda === "lembrete") ? (
+                <AgendaItems
+                  items={agendaItemsVisiveis.filter((item) => item.tipoAgenda === "lembrete")}
+                  onOpenLead={onOpenLead}
+                  onCompleteReminder={concluirLembreteAgenda}
+                  completingReminderIds={lembretesAConcluirIds}
+                  emptyTitle="Sem lembretes para hoje."
+                />
+              ) : (
+                <EmptyState title="Sem lembretes para hoje." />
+              )}
+            </>
           )}
         </Card>
 

@@ -1,7 +1,9 @@
 import ImovirtualProvider from "./ImovirtualProvider.js";
 
 export const PROVIDERS = {
-  imovirtual: ImovirtualProvider
+  imovirtual: ImovirtualProvider,
+  idealista: null,
+  olx: null
 };
 
 export function getProvider(providerCode) {

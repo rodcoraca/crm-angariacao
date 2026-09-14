@@ -92,7 +92,9 @@ export default function SidebarMenu({
           </Button>
           {menuEstoqueAberto && (
             <div style={submenu}>
-              <Button color="light" style={submenuButton} onClick={() => onSelectView("estoque_np")}>Não Publicitado</Button>
+              <div style={{ ...sectionLabel, marginBottom: 0, textTransform: "uppercase" }}>ESTOQUE NÃO PUBLICITADO</div>
+              <Button color="light" style={submenuButton} onClick={() => onSelectView("estoque_np")}>Imóveis</Button>
+              <Button color="light" style={submenuButton} onClick={() => onSelectView("estoque_np_empreendimentos")}>Empreendimentos</Button>
             </div>
           )}
 

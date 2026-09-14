@@ -1,7 +1,6 @@
 export {
-  queryAgendaAgendadasSemData,
-  queryAgendaVisitasFuturas,
   queryAgendaVisitasHoje,
+  queryAgendaLembretesHoje,
   queryCountAtividadesHoje,
   queryCountImoveisIncompletos,
   queryCountLeadsAtivas,

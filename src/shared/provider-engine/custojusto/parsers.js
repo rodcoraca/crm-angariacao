@@ -266,6 +266,7 @@ export function normalizeCustoJustoListing(item) {
           : null,
 
     createdAtFirst: normalizePortugalLocalIsoToUtc(item.listTime),
+    publishedAt: normalizePortugalLocalIsoToUtc(item.listTime),
     modifiedAt: null,
 
     district: locationNames.district

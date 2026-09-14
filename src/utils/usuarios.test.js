@@ -15,7 +15,16 @@ describe('utilitários de acesso', () => {
 
   it('devolve a lista de módulos suportados', () => {
     expect(modulosDisponiveis()).toEqual(
-      expect.arrayContaining(['crm.view', 'dashboard.view', 'messages.view', 'inventory.view', 'users.view', 'logs.view'])
+      expect.arrayContaining([
+        'crm.view',
+        'dashboard.view',
+        'messages.view',
+        'inventory.view',
+        'estoque_nao_publicitado.view',
+        'estoque_nao_publicitado.create_client',
+        'users.view',
+        'logs.view'
+      ])
     );
   });
 });

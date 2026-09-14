@@ -1,8 +1,10 @@
 export {
+  calcularDataLembrete,
   alterarTipoLead,
   carregarFichaLead,
   carregarLeadsDashboard,
   carregarLeadsPorTipo,
+  concluirLembreteLead,
   salvarFichaLead,
   salvarLeadFluxo,
   salvarObservacaoLead,
@@ -10,6 +12,13 @@ export {
   validarEntradaTelefone,
   verificarLeadExistente
 } from "./leadsService";
+
+export {
+  criarLeadLembrete,
+  carregarLeadLembreteAtivo,
+  alterarLeadLembrete,
+  concluirLeadLembrete
+} from "./leadLembretesService";
 
 export { canManageLead, canTransferLead } from "./leadPermissionService";
 

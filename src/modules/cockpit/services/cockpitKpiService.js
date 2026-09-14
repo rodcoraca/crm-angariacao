@@ -23,8 +23,8 @@ export async function fetchCockpitKpis() {
   ] = await Promise.all([
     countRows(queryCountLeadsAtivas()),
     countRows(queryCountLeadsByStatus("novo")),
-    countRows(queryCountLeadsByStatus("agendado")),
-    countRows(queryCountLeadsByStatus("fechado")),
+    countRows(queryCountLeadsByStatus("agendamento")),
+    countRows(queryCountLeadsByStatus("convertido")),
     countRows(queryCountImoveisIncompletos()),
     countRows(queryCountAtividadesHoje(inicioHoje.toISOString(), inicioAmanha.toISOString()))
   ]);

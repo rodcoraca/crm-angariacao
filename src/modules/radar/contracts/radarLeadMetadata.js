@@ -113,3 +113,60 @@ export function parseRadarLeadMetadataFromObservation(observation) {
 
   return metadata;
 }
+
+export function removeRadarLeadMetadataFromObservation(observation) {
+  const text = toText(observation, "");
+  if (!text) return "";
+
+  const metadataStart = text.search(/(?:\[RADAR_METADATA\]|Origem:\s*Radar)/i);
+  if (metadataStart < 0) return text;
+
+  return text.slice(0, metadataStart).trimEnd();
+}
+
+function parseImportedAtFromObservation(observation) {
+  const text = toText(observation, "");
+  if (!text) return null;
+
+  const radarImportMatch = text.match(/Importado via Radar\s*\(([^)]+)\)/i);
+  if (radarImportMatch?.[1]) {
+    const parsed = new Date(radarImportMatch[1]);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+
+  const directMatch = text.match(/Importada em:\s*(.+)/i) || text.match(/Importado em:\s*(.+)/i);
+  if (directMatch?.[1]) {
+    const parsed = new Date(directMatch[1]);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString();
+  }
+
+  return null;
+}
+
+export function resolveRadarLeadImportInfo(lead = {}, form = {}) {
+  const observation = toText(lead?.observacoes || form?.observacoes, "");
+  const metadata = parseRadarLeadMetadataFromObservation(observation);
+  const origemText = toText(form?.origem || lead?.origem || metadata?.provider, "");
+  const isRadarImported = Boolean(metadata) || /radar/i.test(origemText);
+
+  if (!isRadarImported) return null;
+
+  const provider = toText(metadata?.provider || form?.provider || lead?.provider || origemText, "Radar");
+  const externalId = toText(
+    metadata?.externalId || lead?.external_id || form?.external_id || lead?.provider_lead_id || lead?.providerLeadId,
+    ""
+  );
+  const importedAt =
+    parseImportedAtFromObservation(observation) ||
+    toIso(lead?.imported_at || lead?.created_at || form?.created_at || null, null) ||
+    null;
+
+  return {
+    isRadarImported: true,
+    provider,
+    externalId,
+    url: toText(metadata?.url || lead?.url_original || lead?.url, ""),
+    importedAt,
+    status: "✓ Importada pelo Radar"
+  };
+}

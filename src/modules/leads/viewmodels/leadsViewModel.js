@@ -33,6 +33,8 @@ export function labelTipoLead(tipo) {
   return "Frio";
 }
 
+export { getLeadStatusLabel, getLeadStatusVariant, LEAD_STATUSES } from "../statusCatalog";
+
 export function badgeTipoFicha(theme, tipo) {
   const palette = {
     quente: { background: "var(--os-status-success-surface)", color: "var(--os-status-success-text)" },
@@ -43,17 +45,23 @@ export function badgeTipoFicha(theme, tipo) {
   return palette[tipo] || { background: theme.colors.surfaceSoft, color: theme.colors.text };
 }
 
-export function filtrarLeadsDashboard(leads, busca, filtroTipo, filtroOrigem) {
-  const termo = (busca || "").trim().toLowerCase();
+export function filtrarLeadsDashboard(leads, busca, filtroTipo, filtroUtilizador, filtroStatus = "") {
+  const termo = (busca || "").trim();
+  const termoNormalizado = termo.toLowerCase();
 
   return (leads || []).filter((lead) => {
-    const nomeMatch = lead.nome?.toLowerCase().includes(termo);
-    const telefoneMatch = String(lead.telefone || "").replace(/\D/g, "").includes(termo.replace(/\D/g, ""));
-    const origemLead = String(lead.origem || "");
+    const nome = String(lead?.nome || "");
+    const telefone = String(lead?.telefone || "");
+    const nomeMatch = nome.toLowerCase().includes(termoNormalizado);
+    const telefoneNormalizado = telefone.replace(/\D/g, "");
+    const termoTelefoneNormalizado = termo.replace(/\D/g, "");
+    const telefoneMatch = Boolean(termoTelefoneNormalizado) && telefoneNormalizado.includes(termoTelefoneNormalizado);
+    const utilizadorMatch = filtroUtilizador ? String(lead?.agente_id || "") === String(filtroUtilizador) : true;
 
     return (
       (filtroTipo ? lead.tipo === filtroTipo : true) &&
-      (filtroOrigem ? origemLead === filtroOrigem : true) &&
+      (filtroStatus ? lead.status === filtroStatus : true) &&
+      utilizadorMatch &&
       (!termo || nomeMatch || telefoneMatch)
     );
   });
@@ -61,11 +69,12 @@ export function filtrarLeadsDashboard(leads, busca, filtroTipo, filtroOrigem) {
 
 export function construirCsvLeads(leads) {
   const linhas = [
-    ["Nome", "Telefone", "Tipo", "Data"],
+    ["Nome", "Telefone", "Tipo", "Estado", "Data"],
     ...(leads || []).map((lead) => [
       lead.nome,
       lead.telefone,
       lead.tipo,
+      lead.status,
       new Date(lead.created_at).toLocaleString()
     ])
   ];

@@ -16,24 +16,33 @@ export function formatPrice(value) {
 }
 
 export function formatPublishedDate(value) {
-  if (!value) return "â€”";
+  if (!value) return "—";
 
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "â€”";
+  if (Number.isNaN(date.getTime())) return "—";
 
   const datePart = date.toLocaleDateString("pt-PT", {
     day: "2-digit",
     month: "2-digit",
-    year: "numeric"
+    year: "numeric",
+    timeZone: "Europe/Lisbon"
   });
 
   const timePart = date.toLocaleTimeString("pt-PT", {
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false
+    hour12: false,
+    timeZone: "Europe/Lisbon"
   });
 
   return `${datePart} ${timePart}`;
+}
+
+export const OLX_PROMOTION_REFERENCE_TOOLTIP = "* Data de referência obtida através da indicação 'Para o topo' do OLX. O OLX não disponibiliza publicamente a data original de publicação deste anúncio.";
+
+export function formatPublishedDateLabel(value, isPromotionReference = false) {
+  const formatted = formatPublishedDate(value);
+  return isPromotionReference && formatted !== "—" ? `${formatted}*` : formatted;
 }
 
 
@@ -46,14 +55,16 @@ export function formatDateTime(value) {
   const datePart = date.toLocaleDateString("pt-PT", {
     day: "2-digit",
     month: "2-digit",
-    year: "numeric"
+    year: "numeric",
+    timeZone: "Europe/Lisbon"
   });
 
   const timePart = date.toLocaleTimeString("pt-PT", {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
-    hour12: false
+    hour12: false,
+    timeZone: "Europe/Lisbon"
   });
 
   return `${datePart} ${timePart}`;

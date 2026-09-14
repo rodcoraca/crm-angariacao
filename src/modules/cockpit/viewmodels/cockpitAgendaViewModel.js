@@ -1,15 +1,10 @@
-import { mapAgendaLead } from "../utils/mappers";
+import { mapAgendaLead, mapLembreteLead } from "../utils/mappers";
 
 export function mapCockpitAgendaData(raw) {
-  const {
-    visitasHoje = [],
-    visitasFuturas = [],
-    agendadasSemData = []
-  } = raw || {};
+  const { visitasHoje = [], lembretesHoje = [] } = raw || {};
 
   return [
-    ...visitasHoje.map((lead) => mapAgendaLead(lead, { tipo: "hoje", prioridade: "Alta", icone: "H" })),
-    ...visitasFuturas.map((lead) => mapAgendaLead(lead, { tipo: "futura", prioridade: "Media", icone: "F" })),
-    ...agendadasSemData.map((lead) => mapAgendaLead(lead, { tipo: "sem-data", prioridade: "Baixa", icone: "S" }))
+    ...visitasHoje.map((lead) => ({ ...mapAgendaLead(lead, { tipo: "hoje", prioridade: "Alta", icone: "H" }), tipoAgenda: "compromisso", leadId: lead.id })),
+    ...lembretesHoje.map(mapLembreteLead)
   ];
 }

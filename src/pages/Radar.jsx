@@ -4,12 +4,15 @@ import { useAuthContext } from "../modules/auth/context";
 import Card from "../components/ui/Card";
 import Badge from "../components/ui/Badge";
 import Button from "../components/ui/Button";
+import Modal from "../components/ui/Modal";
 import KpiCard from "../components/ui/KpiCard";
 import Table from "../components/ui/Table";
 import Loading from "../components/ui/Loading";
 import { notifyError, notifyInfo, notifySuccess } from "../components/ui/feedbackBus";
 import imovirtualLogo from "../assets/imovirtual.jpg";
 import custojustoLogo from "../assets/custojusto.jpg";
+import idealistaLogo from "../assets/idealista.jpg";
+import olxLogo from "../assets/olx.jpg";
 import {
   useRadar,
   mapRadarFlowViewModel,
@@ -21,14 +24,20 @@ import { createRadarStyles } from "./radarStyles";
 import { runImovirtualSync } from "../providers/services/providers/providerSyncRunner";
 import SyncProgressModal from "../components/radar/SyncProgressModal";
 import SyncPreparationModal from "../components/radar/SyncPreparationModal";
-import { getProviderSyncStatus } from "../providers/services/providers/providerSyncService";
+import { getProviderSyncStatuses } from "../providers/services/providers/providerSyncService";
 import { providerSyncEngine, SyncState } from "../shared/provider-engine/sync/ProviderSyncEngine";
 import { useNavigationGuard } from "../shared/navigation";
-import { formatDateTime, formatPublishedDate } from "../modules/radar/utils/radarUtils";
+import {
+  formatDateTime,
+  formatPublishedDate,
+  OLX_PROMOTION_REFERENCE_TOOLTIP
+} from "../modules/radar/utils/radarUtils";
 
 const PROVIDER_LOGOS = {
   imovirtual: imovirtualLogo,
-  custojusto: custojustoLogo
+  custojusto: custojustoLogo,
+  idealista: idealistaLogo,
+  olx: olxLogo
 };
 
 function getProviderLogo(providerValue) {
@@ -40,6 +49,8 @@ function getProviderLabel(providerValue) {
   const normalized = String(providerValue || "").trim().toLowerCase();
   if (normalized.includes("imovirtual")) return "Imovirtual";
   if (normalized.includes("custojusto")) return "CustoJusto";
+  if (normalized.includes("idealista")) return "Idealista";
+  if (normalized.includes("olx")) return "OLX";
   const text = String(providerValue || "").trim();
   return text || "Desconhecido";
 }
@@ -182,7 +193,7 @@ function PaginationControls({ currentPage, totalPages, onPageChange, compact = t
   );
 }
 
-export default function Radar() {
+export default function Radar({ selectionRequest = null }) {
   const tableRef = useRef(null);
   const detailRef = useRef(null);
   const opportunityRowRefs = useRef(new Map());
@@ -202,7 +213,7 @@ export default function Radar() {
     openDetail,
     closeDetail: originalCloseDetail,
     importSelectedToLeads,
-    updateOpportunityState,
+    updateOpportunityMaintenance,
     page,
     pageSize,
     setPage
@@ -219,14 +230,17 @@ export default function Radar() {
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(5);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState(null);
 
-  const [providerSyncStatus, setProviderSyncStatus] = useState(null);
   const [providerSyncStatuses, setProviderSyncStatuses] = useState({});
   const [providerSyncStatusLoading, setProviderSyncStatusLoading] = useState(true);
   const [remainingMs, setRemainingMs] = useState(0);
   const [syncPreparationOpen, setSyncPreparationOpen] = useState(false);
   const [syncActive, setSyncActive] = useState(false);
+  const [adjustmentOpen, setAdjustmentOpen] = useState(false);
+  const [maintenanceAction, setMaintenanceAction] = useState(null);
+  const [maintenanceReason, setMaintenanceReason] = useState("");
+  const [maintenanceSaving, setMaintenanceSaving] = useState(false);
   const syncActiveRef = useRef(false);
-  const AVAILABLE_PROVIDERS = useMemo(() => ["imovirtual", "custojusto"], []);
+  const AVAILABLE_PROVIDERS = useMemo(() => ["imovirtual", "custojusto", "idealista", "olx"], []);
 
   const TIMELINE_PAGE_SIZE = 5;
   const styles = useMemo(() => createRadarStyles(theme), [theme]);
@@ -261,40 +275,12 @@ export default function Radar() {
     setProviderSyncStatusLoading(true);
 
     try {
-      for (const providerCode of AVAILABLE_PROVIDERS) {
-        try {
-          const status = await getProviderSyncStatus(providerCode);
-          nextStatuses[providerCode] = status || {
-            provider_code: providerCode,
-            empresa_id: null,
-            sync_running: false,
-            last_execution: null,
-            next_execution: null,
-            canSync: false,
-            remainingMs: 0,
-            statusLabel: "Estado indisponível"
-          };
-        } catch (error) {
-          console.error(`[Radar] Erro ao obter estado da sincronização para ${providerCode}:`, error);
-          nextStatuses[providerCode] = {
-            provider_code: providerCode,
-            empresa_id: null,
-            sync_running: false,
-            last_execution: null,
-            next_execution: null,
-            canSync: false,
-            remainingMs: 0,
-            statusLabel: "Estado indisponível"
-          };
-        }
-      }
+      Object.assign(nextStatuses, await getProviderSyncStatuses(AVAILABLE_PROVIDERS));
 
       setProviderSyncStatuses(nextStatuses);
-      setProviderSyncStatus(Object.values(nextStatuses).find(Boolean) || null);
     } catch (error) {
       console.error("[Radar] Erro ao obter estado da sincronização:", error);
       setProviderSyncStatuses({});
-      setProviderSyncStatus(null);
     } finally {
       setProviderSyncStatusLoading(false);
     }
@@ -363,6 +349,10 @@ export default function Radar() {
 
   const eligibleProviders = useMemo(
     () => AVAILABLE_PROVIDERS.filter((providerCode) => {
+      if (providerCode === "idealista") {
+        return false;
+      }
+
       const status = providerSyncStatuses[providerCode];
       return Boolean(status?.canSync) && !status?.sync_running;
     }),
@@ -595,6 +585,7 @@ export default function Radar() {
       await waitForRenderCommit();
 
       const results = [];
+      const selectedStatuses = await getProviderSyncStatuses(selectedProviders);
       for (const provider of selectedProviders) {
         const normalizedProvider = String(provider || "").trim().toLowerCase();
         if (!AVAILABLE_PROVIDERS.includes(normalizedProvider)) {
@@ -602,26 +593,11 @@ export default function Radar() {
           continue;
         }
 
-        let status = null;
-        try {
-          status = await getProviderSyncStatus(normalizedProvider);
-          setProviderSyncStatuses((current) => ({
-            ...current,
-            [normalizedProvider]: status || {
-              provider_code: normalizedProvider,
-              empresa_id: null,
-              sync_running: false,
-              last_execution: null,
-              next_execution: null,
-              canSync: false,
-              remainingMs: 0,
-              statusLabel: "Estado indisponível"
-            }
-          }));
-        } catch (error) {
-          console.error(`[Radar] Erro ao revalidar estado da sincronização para ${normalizedProvider}:`, error);
-          status = providerSyncStatuses[normalizedProvider];
-        }
+        const status = selectedStatuses[normalizedProvider] || providerSyncStatuses[normalizedProvider];
+        setProviderSyncStatuses((current) => ({
+          ...current,
+          [normalizedProvider]: status
+        }));
 
         const canSync = Boolean(status?.canSync) && !status?.sync_running;
         if (!canSync) {
@@ -657,25 +633,58 @@ export default function Radar() {
       return;
     }
 
-    notifyError(result?.message || "Não foi possível importar para Leads.");
-  }, [closeDetail, importSelectedToLeads, reload, user]);
-
-  const handleChangeOperationalState = useCallback(async (event) => {
-    const nextState = event.target.value;
-    if (!selectedOpportunity?.id) return;
-
-    const result = await updateOpportunityState({
-      opportunityId: selectedOpportunity.id,
-      nextState
-    });
-
-    if (result?.ok) {
-      notifyInfo("Estado operacional atualizado.");
+    if (result?.duplicate || result?.processing) {
+      notifyInfo(result.message);
       return;
     }
 
-    notifyError(result?.message || "Não foi possível atualizar o estado.");
-  }, [selectedOpportunity?.id, updateOpportunityState]);
+    notifyError(result?.message || "Não foi possível importar para Leads.");
+  }, [closeDetail, importSelectedToLeads, reload, user]);
+
+  const openAdjustment = useCallback(() => {
+    setMaintenanceAction(null);
+    setMaintenanceReason("");
+    setAdjustmentOpen(true);
+  }, []);
+
+  const closeAdjustment = useCallback(() => {
+    if (maintenanceSaving) return;
+    setAdjustmentOpen(false);
+    setMaintenanceAction(null);
+    setMaintenanceReason("");
+  }, [maintenanceSaving]);
+
+  const handleMaintenanceSubmit = useCallback(async () => {
+    if (!selectedOpportunity?.id || !maintenanceAction) return;
+    const reason = maintenanceReason.trim();
+    if (!reason) {
+      notifyError("Indique o motivo da operação.");
+      return;
+    }
+
+    setMaintenanceSaving(true);
+    try {
+      const result = await updateOpportunityMaintenance({
+        opportunityId: selectedOpportunity.id,
+        action: maintenanceAction,
+        user,
+        reason
+      });
+
+      if (!result?.ok) {
+        notifyError(result?.message || "Não foi possível concluir a operação.");
+        return;
+      }
+
+      notifySuccess(maintenanceAction === "professional"
+        ? "Anunciante alterado para profissional."
+        : "Oportunidade inativada.");
+      setMaintenanceSaving(false);
+      closeAdjustment();
+    } finally {
+      setMaintenanceSaving(false);
+    }
+  }, [closeAdjustment, maintenanceAction, maintenanceReason, selectedOpportunity?.id, updateOpportunityMaintenance, user]);
 
   const kpis = useMemo(
     () => mapRadarKpisViewModel(snapshot?.kpis || []),
@@ -706,11 +715,6 @@ export default function Radar() {
 
   const isImportedOpportunity = useCallback(
     (opportunity) => opportunity?.imported === true || String(opportunity?.estado || "").toLowerCase() === "importado",
-    []
-  );
-
-  const isIgnoredOpportunity = useCallback(
-    (opportunity) => String(opportunity?.estado || "").toLowerCase() === "ignorado",
     []
   );
 
@@ -811,7 +815,18 @@ export default function Radar() {
       width: "9%",
       render: (row) => {
         const raw = row?.rawOpportunity || {};
-        return formatPublishedDate(raw?.published_at ?? null);
+        const formatted = formatPublishedDate(raw?.published_at ?? null);
+        if (raw?.published_at_source !== "promotion" || formatted === "—") return formatted;
+
+        return (
+          <span
+            title={OLX_PROMOTION_REFERENCE_TOOLTIP}
+            aria-label={`${formatted} ${OLX_PROMOTION_REFERENCE_TOOLTIP}`}
+            role="img"
+          >
+            {formatted}*
+          </span>
+        );
       },
       sortAccessor: (row) => {
         const raw = row?.rawOpportunity || {};
@@ -826,7 +841,7 @@ export default function Radar() {
       width: "9%",
       render: (row) => {
         const raw = row?.rawOpportunity || {};
-        return formatDateTime(raw?.created_at ?? null);
+        return formatDateTime(raw?.detected_at ?? null);
       }
     },
     {
@@ -835,21 +850,16 @@ export default function Radar() {
       width: "6%",
       render: (row) => {
         const estado = String(row.estado || "").toLowerCase();
-              const variant =
-          estado === "importado"
-                  ? "success"
-            : estado === "analisado"
-                    ? "warning"
-              : estado === "ignorado"
-                      ? "neutral"
-                : estado === "prioritario" || estado === "elevado"
-                  ? "danger"
-                  : "primary";
+        const variant = estado.includes("inativo")
+          ? "danger"
+          : estado === "importada"
+            ? "success"
+            : estado === "ativa"
+              ? "neutral"
+              : "primary";
 
         return (
-          <>
-            {estado !== "importado" ? <Badge variant={variant} style={nowrapBadgeStyle}>{row.estado}</Badge> : null}
-          </>
+          <Badge variant={variant} style={nowrapBadgeStyle}>{row.estado}</Badge>
         );
       }
     },
@@ -875,7 +885,7 @@ export default function Radar() {
                 src={logoUrl}
                 alt={providerName}
                 title={providerName}
-                style={{ width: 46, height: 46, objectFit: "contain", display: "block", borderRadius: 4 }}
+                style={{ width: 53, height: 53, objectFit: "contain", display: "block", borderRadius: 4 }}
               />
             </div>
           );
@@ -894,7 +904,6 @@ export default function Radar() {
       width: "12%",
       render: (row) => {
         const isImported = isImportedOpportunity(row.rawOpportunity || row);
-        const isIgnored = isIgnoredOpportunity(row.rawOpportunity || row);
               return (
           <div style={styles.rowActions}>
             <Button size="sm" variant="ghost" style={nowrapButtonStyle} onClick={() => openOpportunityDetail(row.rawOpportunity || null)}>
@@ -904,7 +913,7 @@ export default function Radar() {
               size="sm"
               variant="secondary"
               style={nowrapButtonStyle}
-              disabled={importingId === row.id || isImported || isIgnored}
+              disabled={importingId === row.id || isImported || row.rawOpportunity?.is_inactive === true}
               onClick={() => handleImportOpportunity(row.rawOpportunity || null)}
             >
               {importingId === row.id ? "A importar..." : isImported ? "IMPORTADO" : "Importar Lead"}
@@ -916,7 +925,6 @@ export default function Radar() {
   ], [
     handleImportOpportunity,
     importingId,
-    isIgnoredOpportunity,
     isImportedOpportunity,
     nowrapBadgeStyle,
     nowrapButtonStyle,
@@ -939,6 +947,10 @@ export default function Radar() {
     }));
     // SQL ORDER BY handles row ordering — no JS sort applied
   }, [snapshot]);
+
+  const hasPromotionReference = tableRows.some(
+    (row) => row?.rawOpportunity?.published_at_source === "promotion"
+  );
 
   const radarRecentTimeline = useMemo(() => {
     const getDiscoveryTimestamp = (row) => {
@@ -988,10 +1000,46 @@ export default function Radar() {
     setTimelineVisibleCount(TIMELINE_PAGE_SIZE);
   }, [radarRecentTimeline.length, TIMELINE_PAGE_SIZE]);
 
+  useEffect(() => {
+    if (!selectionRequest || loading) return;
+
+    const candidateId = String(selectionRequest?.id || "").trim();
+    const candidateExternalId = String(selectionRequest?.externalId || "").trim();
+    const candidateProvider = String(selectionRequest?.provider || "").trim().toLowerCase();
+
+    if (!candidateId && !candidateExternalId) return;
+
+    const target = (snapshot?.rows || []).find((item) => {
+      const rowId = String(item?.id || "").trim();
+      const externalId = String(item?.external_id || item?.id_externo || "").trim();
+      const provider = String(item?.provider || item?.origem || item?.source || "").trim().toLowerCase();
+
+      if (candidateId && rowId === candidateId) return true;
+      if (candidateExternalId && externalId === candidateExternalId) {
+        if (!candidateProvider || provider === candidateProvider) {
+          return true;
+        }
+      }
+      return false;
+    });
+
+    if (!target) {
+      return;
+    }
+
+    const targetOpportunityId = String(target?.id || "").trim();
+    if (!targetOpportunityId) return;
+
+    setSelectedOpportunityId(targetOpportunityId);
+    openDetail(target);
+
+    const rowNode = document.querySelector(`[data-opportunity-id="${CSS.escape(targetOpportunityId)}"]`);
+    rowNode?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [loading, openDetail, selectionRequest, snapshot]);
+
   return (
     <div style={styles.page}>
       <Card style={styles.hero}>
-        <Badge variant="primary" style={{ ...styles.heroBadge, ...nowrapBadgeStyle }}>Radar Beta</Badge>
         <h1 style={styles.title}>🎯 OSFlow Radar</h1>
         <p style={styles.subtitle}>As oportunidades não esperam. O Radar encontra-as primeiro.</p>
         <p style={styles.description}>
@@ -1013,6 +1061,7 @@ export default function Radar() {
               descricao={item.descricao}
               icone={item.icone}
               cor={item.cor}
+              style={{ minHeight: "100px" }}
             />
           ))}
         </div>
@@ -1026,7 +1075,7 @@ export default function Radar() {
         <Card style={styles.filterCard}>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(4, 1fr)',
+            gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
             gap: '10px',
             marginBottom: '10px'
           }}>
@@ -1287,6 +1336,26 @@ export default function Radar() {
               };
             }}
           />
+          {hasPromotionReference ? (
+            <p
+              style={{
+                ...styles.filterInfo,
+                display: "flex",
+                alignItems: "flex-start",
+                gap: theme.spacing.xs,
+                margin: 0,
+                padding: `${theme.spacing.xs} ${theme.spacing.sm}`,
+                color: theme.colors.statusInfoText,
+                background: theme.colors.statusInfoSurface,
+                border: `1px solid ${theme.colors.statusInfoBorder}`,
+                borderRadius: theme.borderRadius.sm,
+                fontWeight: theme.typography.body.fontWeight,
+                lineHeight: theme.typography.body.lineHeight
+              }}
+            >
+              {OLX_PROMOTION_REFERENCE_TOOLTIP}
+            </p>
+          ) : null}
           {tableRows.length > 0 ? (
             <div style={{
               display: "flex",
@@ -1369,11 +1438,17 @@ export default function Radar() {
       {selectedOpportunity ? (
         <section style={styles.section} ref={detailRef}>
           <h2 style={styles.sectionTitle}>Detalhe da oportunidade</h2>
-          <Card style={{ ...styles.detailCard, opacity: String(selectedOpportunity.estado || "").toLowerCase() === "importado" ? 0.6 : 1 }}>
+          <Card style={{ ...styles.detailCard, opacity: selectedOpportunity.is_inactive || String(selectedOpportunity.estado || "").toLowerCase() === "importado" ? 0.6 : 1 }}>
             <div style={styles.detailHeader}>
               <strong style={styles.detailTitle}>{selectedOpportunity.titulo}</strong>
               <Badge variant="primary" style={{ marginLeft: '10px', fontSize: '1.1em', ...nowrapBadgeStyle }}>{selectedOpportunity.preco}</Badge>
             </div>
+
+            {selectedOpportunity.is_inactive ? (
+              <Badge variant="danger" style={{ marginBottom: theme.spacing.sm, ...nowrapBadgeStyle }}>
+                Anúncio Inativo
+              </Badge>
+            ) : null}
 
             <p style={styles.detailText}><strong>Proprietário:</strong> {selectedOpportunity.owner_name || "-"}</p>
             <p style={styles.detailText}><strong>Tipo:</strong> {selectedOpportunity.tipo || "-"}</p>
@@ -1382,18 +1457,12 @@ export default function Radar() {
             <p style={styles.detailText}><strong>Concelho:</strong> {selectedOpportunity.cidade || "-"}</p>
             <p style={styles.detailText}><strong>Área:</strong> {selectedOpportunity.area || "-"} m²</p>
             <p style={styles.detailText}><strong>URL:</strong> <a href={selectedOpportunity.link || selectedOpportunity.url} target="_blank" rel="noreferrer">Ver Anúncio</a></p>
-            <label style={styles.detailField}>
-              Estado operacional
-              <select
-                value={String(selectedOpportunity.estado || "novo").toLowerCase()}
-                onChange={handleChangeOperationalState}
-                style={styles.detailSelect}
-              >
-                <option value="novo">Nova</option>
-                <option value="importado">Importada</option>
-                <option value="ignorado">Ignorada</option>
-              </select>
-            </label>
+
+            {!selectedOpportunity.is_inactive ? (
+              <Button variant="ghost" onClick={openAdjustment} style={nowrapButtonStyle}>
+                Ajustar oportunidade
+              </Button>
+            ) : null}
 
             <div style={styles.detailActions}>
               <Button variant="ghost" style={nowrapButtonStyle} onClick={closeDetail}>Fechar detalhe</Button>
@@ -1401,6 +1470,53 @@ export default function Radar() {
           </Card>
         </section>
       ) : null}
+
+      <Modal
+        open={adjustmentOpen}
+        title={maintenanceAction === "professional" ? "Alterar para profissional" : maintenanceAction === "inactive" ? "Inativar oportunidade" : "Ajustar oportunidade"}
+        onClose={closeAdjustment}
+        footer={maintenanceAction ? (
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.spacing.sm }}>
+            <Button variant="ghost" onClick={() => setMaintenanceAction(null)} disabled={maintenanceSaving}>Cancelar</Button>
+            <Button
+              variant={maintenanceAction === "inactive" ? "danger" : "primary"}
+              onClick={handleMaintenanceSubmit}
+              loading={maintenanceSaving}
+            >
+              {maintenanceAction === "inactive" ? "Inativar oportunidade" : "Guardar alteração"}
+            </Button>
+          </div>
+        ) : null}
+      >
+        {!maintenanceAction ? (
+          <div style={{ display: "grid", gap: theme.spacing.sm }}>
+            {selectedOpportunity?.is_private_owner ? (
+              <Button variant="ghost" onClick={() => setMaintenanceAction("professional")}>
+                Alterar para profissional
+              </Button>
+            ) : null}
+            <Button variant="danger" onClick={() => setMaintenanceAction("inactive")}>
+              Inativar oportunidade
+            </Button>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: theme.spacing.sm }}>
+            <p style={{ margin: 0, fontWeight: 600 }}>
+              {maintenanceAction === "professional" ? "Particular → Profissional" : "A oportunidade ficará inativa e deixará de ser considerada disponível. O registo não será apagado."}
+            </p>
+            <label style={{ display: "grid", gap: theme.spacing.xs }}>
+              Motivo obrigatório
+              <textarea
+                value={maintenanceReason}
+                onChange={(event) => setMaintenanceReason(event.target.value)}
+                rows={4}
+                required
+                style={styles.detailTextarea}
+              />
+            </label>
+          </div>
+        )}
+      </Modal>
 
       <SyncPreparationModal
         open={syncPreparationOpen}

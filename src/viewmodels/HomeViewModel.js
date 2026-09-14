@@ -9,7 +9,7 @@ export function createHomeViewModel(theme) {
     { id: "kpi-leads-ativas", titulo: "Leads Ativas", valor: "128", variacao: "5% vs ontem", icone: "L", cor: theme.colors.primary },
     { id: "kpi-leads-sem-contacto", titulo: "Leads sem Contacto", valor: "23", variacao: "3 pendentes", icone: "C", cor: theme.colors.warning },
     { id: "kpi-leads-agendadas", titulo: "Leads Agendadas", valor: "41", variacao: "7 para hoje", icone: "A", cor: theme.colors.secondary },
-    { id: "kpi-negocios-fechados", titulo: "Negocios Fechados", valor: "12", variacao: "2 esta semana", icone: "N", cor: theme.colors.success },
+    { id: "kpi-negocios-fechados", titulo: "Convertidos", valor: "12", variacao: "2 esta semana", icone: "N", cor: theme.colors.success },
     { id: "kpi-imoveis-incompletos", titulo: "Imoveis Incompletos", valor: "19", variacao: "4 criticos", icone: "I", cor: theme.colors.danger },
     { id: "kpi-atividades-hoje", titulo: "Atividades Hoje", valor: "64", variacao: "em execucao", icone: "T", cor: theme.colors.accent }
   ];
@@ -41,12 +41,12 @@ export function createHomeViewModel(theme) {
   // Origem dos dados: distribuicao de leads por etapa comercial.
   // Tabela: leads.
   // Campos necessarios: leads.id, leads.status, leads.tipo, leads.created_at, leads.updated_at.
-  // Dependencias: dicionario oficial de status (novo/contactado/agendado/fechado) e consistencia de transicoes.
+  // Dependencias: dicionario oficial de estados comerciais e consistencia de transicoes.
   const pipeline = [
     { id: "pipeline-novo", label: "Novo", value: "38", hint: "Placeholder" },
-    { id: "pipeline-contactado", label: "Contactado", value: "29", hint: "Placeholder" },
-    { id: "pipeline-agendado", label: "Agendado", value: "17", hint: "Placeholder" },
-    { id: "pipeline-fechado", label: "Fechado", value: "12", hint: "Placeholder" }
+    { id: "pipeline-contactado", label: "Em contacto", value: "29", hint: "Placeholder" },
+    { id: "pipeline-agendado", label: "Agendamento", value: "17", hint: "Placeholder" },
+    { id: "pipeline-fechado", label: "Convertido", value: "12", hint: "Placeholder" }
   ];
 
   // ARQ-COCKPIT: IMOVEIS EM RISCO

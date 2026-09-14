@@ -68,7 +68,7 @@ export function criarFluxoLeads(origem, qualificacaoVeioDaObjecao) {
     fecho: {
       pergunta: "Agendamento",
       script: "Sugira duas datas próximas com horários disponíveis.",
-      opcoes: [{ texto: "Agendado", next: "lead_quente" }]
+      opcoes: [{ texto: "Agendamento", next: "lead_quente" }]
     },
     lead_quente: { tipo: "quente" },
     lead_morno: { tipo: "morno" },
