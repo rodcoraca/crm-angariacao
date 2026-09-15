@@ -104,15 +104,18 @@ export function getOlxCollectionSessionStatus(session) {
 
 async function enrichOlxListings(
   listings,
-  { worker, delayBetweenRequestsMs = 0, maxRetries = 0, budget = null, requireCompletedDetail = false } = {}
+  { worker, delayBetweenRequestsMs = 0, maxRetries = 0, budget = null } = {}
 ) {
   const enriched = [];
   const metrics = { detailRequests: 0, detailFailures: 0, detailBytes: 0 };
   let budgetStop = null;
 
-  for (const listing of Array.isArray(listings) ? listings : []) {
+  const sourceListings = Array.isArray(listings) ? listings : [];
+  for (let listingIndex = 0; listingIndex < sourceListings.length; listingIndex += 1) {
+    const listing = sourceListings[listingIndex];
     const beforeDelay = checkOlxBudget(budget, "detail");
     if (!beforeDelay.allowed) {
+      enriched.push(...sourceListings.slice(listingIndex));
       budgetStop = beforeDelay;
       break;
     }
@@ -123,6 +126,7 @@ async function enrichOlxListings(
 
     const beforeRequest = checkOlxBudget(budget, "detail");
     if (!beforeRequest.allowed) {
+      enriched.push(...sourceListings.slice(listingIndex));
       budgetStop = beforeRequest;
       break;
     }
@@ -135,13 +139,13 @@ async function enrichOlxListings(
       metrics.detailBytes += acquisition.bytes || 0;
       if (acquisition.errorType || !acquisition.body) {
         metrics.detailFailures += 1;
-        if (!requireCompletedDetail) enriched.push(listing);
+        enriched.push(listing);
         continue;
       }
       enriched.push(mergeOlxListing(listing, parseOlxDetailPage(acquisition.body)));
     } catch (_) {
       metrics.detailFailures += 1;
-      if (!requireCompletedDetail) enriched.push(listing);
+      enriched.push(listing);
     }
   }
 
@@ -185,8 +189,7 @@ async function enrichRoundRobinCategory(state, {
   delayBetweenRequestsMs,
   maxRetries,
   timeoutMs,
-  budget,
-  districts
+  budget
 }) {
   const existingMap = normalizeExistingListingsMap(existingListings);
   const newListings = state.listings.filter((listing) => !existingMap.has(String(listing.externalId)));
@@ -196,8 +199,7 @@ async function enrichRoundRobinCategory(state, {
     worker: createOlxWorker(fetchImpl, timeoutMs),
     delayBetweenRequestsMs,
     maxRetries,
-    budget,
-    requireCompletedDetail: Array.isArray(districts) && districts.some(Boolean)
+    budget
   });
 
   const enrichedById = new Map(enriched.listings.map((listing) => [String(listing.externalId), listing]));
@@ -207,7 +209,7 @@ async function enrichRoundRobinCategory(state, {
       if (existingMap.has(externalId)) {
         return { ...listing, existingProviderLeadId: existingMap.get(externalId) };
       }
-      return enrichedById.get(externalId);
+      return enrichedById.get(externalId) || listing;
     })
     .filter(Boolean);
   state.metrics.detailRequests = enriched.metrics.detailRequests;
@@ -327,8 +329,7 @@ export async function collectOlxRoundRobinPaginatedListings({
       delayBetweenRequestsMs,
       maxRetries,
       timeoutMs,
-      budget,
-      districts
+      budget
     });
     state.listings = filterOlxListingsByDistrict(state.listings, districts)
       .map((listing) => normalizeOlxListing(listing))

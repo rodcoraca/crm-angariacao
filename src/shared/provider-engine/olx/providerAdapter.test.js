@@ -176,7 +176,27 @@ describe("OLX provider adapter", () => {
     expect(result.listings[0]).toMatchObject({ location: "Paranhos", district: null });
   });
 
-  it("preserves only completed details when the global detail budget ends", async () => {
+  it("preserves the Search listing when the detail budget ends", async () => {
+    const searchHtml = '<div data-testid="l-card"><a data-testid="card-title-link" aria-label="A" href="/d/anuncio/a-IDJone.html"><h4>A</h4></a><p data-testid="location-date">Porto - hoje</p></div><div data-testid="l-card"><a data-testid="card-title-link" aria-label="B" href="/d/anuncio/b-IDJtwo.html"><h4>B</h4></a><p data-testid="location-date">Porto - hoje</p></div>';
+    const budget = createOlxExecutionBudget({ maxDetailRequests: 1, maxDetailRequestsPerCategory: 4 }, Date.now());
+    const result = await collectOlxRoundRobinPaginatedListings({
+      searchUrls: ["https://www.olx.pt/imoveis/apartamentos/"],
+      maxPages: 1,
+      delayBetweenRequestsMs: 0,
+      budget,
+      fetchImpl: async (url) => {
+        if (url.includes("/d/anuncio/")) return { ok: true, status: 200, url, text: async () => "<html>detail</html>" };
+        return { ok: true, status: 200, url, text: async () => searchHtml };
+      }
+    });
+
+    expect(result.categories[0].metrics.detailRequests).toBe(1);
+    expect(result.categories[0].listings).toHaveLength(2);
+    expect(result.categories[0].listings.map((listing) => listing.externalId)).toEqual(["IDJone", "IDJtwo"]);
+    expect(result.budget).toMatchObject({ budgetExhausted: true, reason: "global_detail_limit", scope: "global" });
+  });
+
+  it("preserves Search listings when the global detail budget ends", async () => {
     const searchHtml = '<div data-testid="l-card"><a data-testid="card-title-link" aria-label="A" href="/d/anuncio/a-IDJone.html"><h4>A</h4></a><p data-testid="ad-price">100 €</p><p data-testid="location-date">Paranhos - hoje às 09:00</p></div><div data-testid="l-card"><a data-testid="card-title-link" aria-label="B" href="/d/anuncio/b-IDJtwo.html"><h4>B</h4></a><p data-testid="ad-price">200 €</p><p data-testid="location-date">Cacém - hoje às 09:01</p></div>';
     const budget = createOlxExecutionBudget({ maxDetailRequests: 1, maxDetailRequestsPerCategory: 4 }, Date.now());
     const requestedUrls = [];
@@ -184,7 +204,6 @@ describe("OLX provider adapter", () => {
       searchUrl: "https://www.olx.pt/imoveis/apartamentos/",
       maxPages: 1,
       maxRequests: 1,
-      districts: ["Porto"],
       budget,
       fetchImpl: async (url) => {
         requestedUrls.push(url);
@@ -195,12 +214,44 @@ describe("OLX provider adapter", () => {
 
     expect(requestedUrls).toHaveLength(2);
     expect(result.metrics.detailRequests).toBe(1);
-    expect(result.listings).toHaveLength(1);
+    expect(result.listings).toHaveLength(2);
     expect(result.listings[0].district).toBe("Porto");
+    expect(result.listings[1].externalId).toBe("IDJtwo");
     expect(result.budget).toMatchObject({ budgetExhausted: true, reason: "global_detail_limit", scope: "global" });
   });
 
-  it("stops details at the category limit and returns a partial category result", async () => {
+  it("keeps every acquired category eligible after the global detail budget ends", async () => {
+    const searchUrls = ["a", "b"].map((category) => `https://www.olx.pt/imoveis/${category}/`);
+    const requestedUrls = [];
+    const budget = createOlxExecutionBudget({ maxDetailRequests: 1, maxDetailRequestsPerCategory: 4 }, Date.now());
+    const result = await collectOlxRoundRobinPaginatedListings({
+      searchUrls,
+      maxPages: 1,
+      delayBetweenRequestsMs: 0,
+      budget,
+      fetchImpl: async (url) => {
+        requestedUrls.push(url);
+        if (url.includes("/d/anuncio/")) {
+          return { ok: true, status: 200, url, text: async () => detailHtml("Porto", "Porto") };
+        }
+        const category = url.match(/\/imoveis\/([^/]+)/)[1];
+        const searchHtml = `<div data-testid="l-card"><a data-testid="card-title-link" aria-label="${category}" href="/d/anuncio/${category}-IDJ${category}.html"><h4>${category}</h4></a><p data-testid="location-date">Porto - hoje</p></div>`;
+        return { ok: true, status: 200, url, text: async () => searchHtml };
+      }
+    });
+
+    expect(requestedUrls).toEqual([
+      searchUrls[0],
+      searchUrls[1],
+      "https://www.olx.pt/d/anuncio/a-IDJa.html"
+    ]);
+    expect(result.categories).toHaveLength(2);
+    expect(result.categories.map((category) => category.listings.map((listing) => listing.externalId)))
+      .toEqual([["IDJa"], ["IDJb"]]);
+    expect(result.budget).toMatchObject({ budgetExhausted: true, reason: "global_detail_limit", scope: "global" });
+  });
+
+  it("stops details at the category limit and preserves the category result", async () => {
     const searchHtml = '<div data-testid="l-card"><a data-testid="card-title-link" aria-label="A" href="/d/anuncio/a-IDJone.html"><h4>A</h4></a><p data-testid="location-date">Paranhos - hoje</p></div><div data-testid="l-card"><a data-testid="card-title-link" aria-label="B" href="/d/anuncio/b-IDJtwo.html"><h4>B</h4></a><p data-testid="location-date">Matosinhos - hoje</p></div>';
     const budget = createOlxExecutionBudget({ maxDetailRequests: 10, maxDetailRequestsPerCategory: 1 }, Date.now());
     const result = await collectOlxPaginatedListings({
@@ -216,7 +267,7 @@ describe("OLX provider adapter", () => {
 
     expect(result.metrics.detailRequests).toBe(1);
     expect(result.budget).toMatchObject({ budgetExhausted: true, reason: "category_detail_limit", scope: "category" });
-    expect(result.listings).toHaveLength(1);
+    expect(result.listings).toHaveLength(2);
     expect(budget.exhausted).toBe(false);
   });
 

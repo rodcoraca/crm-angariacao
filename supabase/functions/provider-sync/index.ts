@@ -844,10 +844,6 @@ Deno.serve(async (request: Request) => {
           duplicados: categoryResult.skipped
         });
 
-        if (paginated.budget?.scope === "global") {
-          executionStatus = "budget_exhausted";
-          break;
-        }
       }
 
       if (olxCollectionSession?.budget?.exhausted) {
