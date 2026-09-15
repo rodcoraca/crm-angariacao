@@ -10,6 +10,22 @@ import {
   resetOlxCategoryBudget
 } from "./executionBudget.js";
 
+const OLX_HOSTNAMES = new Set(["olx.pt", "www.olx.pt"]);
+const OLX_LISTINGS_PATH = "/imoveis/";
+
+function normalizeOlxPageUrl(value) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || !OLX_HOSTNAMES.has(url.hostname.toLowerCase()) || !url.pathname.startsWith(OLX_LISTINGS_PATH)) return null;
+    if (url.pathname.startsWith("/d/") || url.pathname.includes("/d/anuncio/")) return null;
+    url.hash = "";
+    return url.toString();
+  } catch (_) {
+    return null;
+  }
+}
+
 function parsePrice(value) {
   const text = String(value || "").replace(/[^\d,.-]/g, "").trim();
   if (!text) return null;
@@ -72,6 +88,7 @@ export function normalizeOlxListing(listing) {
     ...(listing.publishedAtSource ? { publishedAtSource: listing.publishedAtSource } : {}),
     modifiedAt: null,
     shortDescription: listing.shortDescription || null,
+    ...(listing.existingProviderLeadId ? { existingProviderLeadId: listing.existingProviderLeadId } : {}),
     source: "olx",
     rawData: listing
   };
@@ -129,6 +146,206 @@ async function enrichOlxListings(
   }
 
   return { listings: enriched, metrics, budget: budgetStop };
+}
+
+function createOlxRoundRobinState(searchUrl) {
+  return {
+    searchUrl,
+    nextUrl: searchUrl,
+    visitedUrls: new Set(),
+    pagesFetched: 0,
+    finished: false,
+    listings: [],
+    metrics: {
+      pagesFetched: 0,
+      requests: 0,
+      successfulPages: 0,
+      failedPages: 0,
+      totalListings: 0,
+      duplicatesRemoved: 0,
+      detailRequests: 0,
+      detailFailures: 0,
+      detailBytes: 0
+    },
+    error: null,
+    budget: null,
+    fetchedAt: null
+  };
+}
+
+function normalizeExistingListingsMap(value) {
+  if (value instanceof Map) return value;
+  if (!value || typeof value !== "object") return new Map();
+  return new Map(Object.entries(value));
+}
+
+async function enrichRoundRobinCategory(state, {
+  existingListings,
+  fetchImpl,
+  delayBetweenRequestsMs,
+  maxRetries,
+  timeoutMs,
+  budget,
+  districts
+}) {
+  const existingMap = normalizeExistingListingsMap(existingListings);
+  const newListings = state.listings.filter((listing) => !existingMap.has(String(listing.externalId)));
+
+  resetOlxCategoryBudget(budget);
+  const enriched = await enrichOlxListings(newListings, {
+    worker: createOlxWorker(fetchImpl, timeoutMs),
+    delayBetweenRequestsMs,
+    maxRetries,
+    budget,
+    requireCompletedDetail: Array.isArray(districts) && districts.some(Boolean)
+  });
+
+  const enrichedById = new Map(enriched.listings.map((listing) => [String(listing.externalId), listing]));
+  state.listings = state.listings
+    .map((listing) => {
+      const externalId = String(listing.externalId);
+      if (existingMap.has(externalId)) {
+        return { ...listing, existingProviderLeadId: existingMap.get(externalId) };
+      }
+      return enrichedById.get(externalId);
+    })
+    .filter(Boolean);
+  state.metrics.detailRequests = enriched.metrics.detailRequests;
+  state.metrics.detailFailures = enriched.metrics.detailFailures;
+  state.metrics.detailBytes = enriched.metrics.detailBytes;
+  state.budget = enriched.budget;
+}
+
+export async function collectOlxRoundRobinPaginatedListings({
+  searchUrls = [],
+  maxPages,
+  fetchImpl = globalThis.fetch,
+  delayBetweenRequestsMs = 1500,
+  districts = [],
+  maxRetries = 0,
+  timeoutMs = 30000,
+  collectionSession = null,
+  budget: providedBudget = null,
+  resolveExistingListings = null
+} = {}) {
+  if (typeof fetchImpl !== "function") throw new Error("Fetch API indisponível para obter páginas OLX.");
+  if (!Array.isArray(searchUrls)) throw new TypeError("searchUrls OLX deve ser um array.");
+
+  const budget = collectionSession?.budget || providedBudget;
+  const configuredMaxPages = maxPages || budget?.limits.maxSearchPagesPerCategory || 1;
+  const effectiveMaxPages = Math.min(
+    configuredMaxPages,
+    budget?.limits.maxSearchPagesPerCategory || configuredMaxPages
+  );
+  const states = searchUrls.map((searchUrl) => createOlxRoundRobinState(searchUrl));
+  const uniqueExternalIds = new Set();
+  const effectiveMaxRequests = budget?.limits.maxSearchRequests ?? states.length * effectiveMaxPages;
+
+  for (let round = 0; round < effectiveMaxPages; round += 1) {
+    for (const state of states) {
+      if (state.finished || state.pagesFetched >= effectiveMaxPages) continue;
+      if (!state.nextUrl || state.visitedUrls.has(state.nextUrl)) {
+        state.finished = true;
+        continue;
+      }
+      if (budget && budget.searchRequests >= effectiveMaxRequests) {
+        state.finished = true;
+        break;
+      }
+
+      state.visitedUrls.add(state.nextUrl);
+      resetOlxCategoryBudget(budget);
+      const result = await acquireOlxSearchPages(
+        { provider: "olx", searchUrl: state.nextUrl },
+        {
+          worker: createOlxWorker(fetchImpl, timeoutMs),
+          parseSearchPage: parseOlxSearchPage,
+          maxPages: 1,
+          maxRequests: 1,
+          maxRetries,
+          delayBetweenRequestsMs,
+          budget
+        }
+      );
+
+      const page = result.pages[0];
+      state.pagesFetched += result.metrics.pagesFetched;
+      state.metrics.pagesFetched += result.metrics.pagesFetched;
+      state.metrics.requests += result.metrics.requests;
+      state.metrics.successfulPages += result.metrics.successfulPages;
+      state.metrics.failedPages += result.metrics.failedPages;
+      state.metrics.totalListings += result.metrics.totalListings;
+      state.metrics.duplicatesRemoved += result.metrics.duplicatesRemoved;
+      state.fetchedAt = state.fetchedAt || new Date().toISOString();
+
+      if (result.budget?.scope === "global") {
+        state.budget = result.budget;
+        state.finished = true;
+        break;
+      }
+
+      if (budget && budget.searchRequests >= effectiveMaxRequests) {
+        const globalBudget = checkOlxBudget(budget, "search");
+        state.budget = globalBudget;
+        state.finished = true;
+      }
+
+      if (!page || page.error || !page.nextUrl) state.finished = true;
+
+      for (const listing of result.listings) {
+        const externalId = String(listing?.externalId || "");
+        if (!externalId || uniqueExternalIds.has(externalId)) {
+          if (externalId) state.metrics.duplicatesRemoved += 1;
+          continue;
+        }
+        uniqueExternalIds.add(externalId);
+        state.listings.push(listing);
+      }
+
+      if (!state.finished) {
+        const nextUrl = normalizeOlxPageUrl(page.nextUrl);
+        if (!nextUrl || state.visitedUrls.has(nextUrl)) {
+          state.finished = true;
+        } else {
+          state.nextUrl = nextUrl;
+        }
+      }
+    }
+
+    if (budget?.exhausted || states.every((state) => state.finished)) break;
+  }
+
+  const allExternalIds = states.flatMap((state) => state.listings.map((listing) => listing.externalId));
+  const existingMap = allExternalIds.length > 0 && typeof resolveExistingListings === "function"
+    ? normalizeExistingListingsMap(await resolveExistingListings([...new Set(allExternalIds)]))
+    : new Map();
+
+  for (const state of states) {
+    await enrichRoundRobinCategory(state, {
+      existingListings: existingMap,
+      fetchImpl,
+      delayBetweenRequestsMs,
+      maxRetries,
+      timeoutMs,
+      budget,
+      districts
+    });
+    state.listings = filterOlxListingsByDistrict(state.listings, districts)
+      .map((listing) => normalizeOlxListing(listing))
+      .filter(Boolean);
+  }
+
+  return {
+    categories: states,
+    listings: states.flatMap((state) => state.listings),
+    budget: budget?.exhausted
+      ? {
+        budgetExhausted: true,
+        reason: budget.exhaustionReason,
+        scope: budget.exhaustionScope
+      }
+      : null
+  };
 }
 
 async function fetchWithTimeout(fetchImpl, url, options, timeoutMs) {

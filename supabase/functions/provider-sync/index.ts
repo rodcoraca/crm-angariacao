@@ -9,7 +9,7 @@ import { collectCustoJustoPaginatedListings } from "../../../src/shared/provider
 import { collectIdealistaPaginatedListings } from "../../../src/shared/provider-engine/idealista/collectPaginatedListings.js";
 import {
   createOlxCollectionSession,
-  collectOlxPaginatedListings,
+  collectOlxRoundRobinPaginatedListings,
   discoverOlxCategoriesForSync,
   getOlxCollectionSessionStatus
 } from "../../../src/shared/provider-engine/olx/providerAdapter.js";
@@ -686,7 +686,42 @@ Deno.serve(async (request: Request) => {
 
       console.log("[DEBUG URLS]", searchUrls);
 
-      for (const searchUrl of searchUrls) {
+      let olxRoundRobinCategories = null;
+      if (provider === "olx") {
+        const resolveExistingOlxListings = async (externalIds: string[]) => {
+          const { data, error } = await supabaseAdmin
+            .from("empresa_provider_listings")
+            .select("provider_lead_id, provider_leads!inner(external_id, provider)")
+            .eq("empresa_id", empresaId)
+            .eq("is_active", true)
+            .eq("provider_leads.provider", "olx")
+            .in("provider_leads.external_id", externalIds);
+
+          if (error) throw error;
+
+          const existing = new Map<string, string>();
+          for (const row of data || []) {
+            const providerLead = Array.isArray(row.provider_leads)
+              ? row.provider_leads[0]
+              : row.provider_leads;
+            if (providerLead?.external_id && row.provider_lead_id) {
+              existing.set(String(providerLead.external_id), String(row.provider_lead_id));
+            }
+          }
+          return existing;
+        };
+
+        const roundRobinResult = await collectOlxRoundRobinPaginatedListings({
+          searchUrls,
+          maxPages: effectiveMaxPages,
+          districts,
+          collectionSession: olxCollectionSession,
+          resolveExistingListings: resolveExistingOlxListings
+        });
+        olxRoundRobinCategories = roundRobinResult.categories;
+      }
+
+      for (const [searchIndex, searchUrl] of searchUrls.entries()) {
         const categoryLabel = getCategoryLabel(searchUrl);
 
         let paginated;
@@ -714,12 +749,14 @@ Deno.serve(async (request: Request) => {
               includeProfessionalOwners
             });
           } else if (provider === "olx") {
-            paginated = await collectOlxPaginatedListings({
-              searchUrl,
-              maxPages: effectiveMaxPages,
-              districts,
-              collectionSession: olxCollectionSession
-            });
+            const categoryResult = olxRoundRobinCategories?.[searchIndex];
+            paginated = {
+              ...categoryResult,
+              listings: categoryResult?.listings || [],
+              fetchedAt: categoryResult?.fetchedAt || new Date().toISOString(),
+              pagesFetched: categoryResult?.pagesFetched || 0,
+              budget: categoryResult?.budget || null
+            };
           } else {
             return fallbackResponse("Provider não suportado.");
           }
@@ -751,6 +788,13 @@ Deno.serve(async (request: Request) => {
             detectedAtFallbackNow: true,
             // OLX currently has no reliable createdAtFirst; do not synthesize one.
             allowListingsWithoutCreatedAtFirst: provider === "olx",
+            existingProviderLeadIds: provider === "olx"
+              ? new Map(
+                (paginated.listings || [])
+                  .filter((listing: any) => listing?.existingProviderLeadId)
+                  .map((listing: any) => [String(listing.externalId), listing.existingProviderLeadId])
+              )
+              : null,
             syncStartedAtMs
           });
         } catch (error) {

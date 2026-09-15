@@ -1,9 +1,24 @@
-import { collectOlxPaginatedListings, filterOlxListingsByDistrict, normalizeOlxListing } from "./providerAdapter";
+import {
+  collectOlxPaginatedListings,
+  collectOlxRoundRobinPaginatedListings,
+  filterOlxListingsByDistrict,
+  normalizeOlxListing
+} from "./providerAdapter";
 import { createOlxExecutionBudget } from "./executionBudget";
 import { olxP1Fixture } from "./testFixtures";
 
 function detailHtml(location, district) {
   return `<ol data-testid="breadcrumbs"><li data-testid="breadcrumb-item"><a href="/imoveis/apartamento-casa-a-venda/apartamentos-venda/${district.toLowerCase()}/">Vende-se - ${district}</a></li><li data-testid="breadcrumb-item"><a href="/imoveis/apartamento-casa-a-venda/apartamentos-venda/local/">Vende-se - ${location}</a></li></ol><img alt="Location"/><p data-nx-name="P2">${location}</p><p data-nx-name="P3">${district}</p>`;
+}
+
+function roundRobinSearchHtml(category, pageNumber, includeListing = false) {
+  const listing = includeListing
+    ? `<div data-testid="l-card"><a data-testid="card-title-link" aria-label="${category}-${pageNumber}" href="/d/anuncio/${category}-${pageNumber}-IDJ${category}${pageNumber}.html"><h4>${category}-${pageNumber}</h4></a><p data-testid="location-date">Porto - hoje</p></div>`
+    : "";
+  const next = pageNumber < 2
+    ? `<a data-testid="pagination-forward" href="/imoveis/${category}/?page=2">Seguinte</a>`
+    : "";
+  return `${listing}${next}`;
 }
 
 describe("OLX provider adapter", () => {
@@ -203,5 +218,142 @@ describe("OLX provider adapter", () => {
     expect(result.budget).toMatchObject({ budgetExhausted: true, reason: "category_detail_limit", scope: "category" });
     expect(result.listings).toHaveLength(1);
     expect(budget.exhausted).toBe(false);
+  });
+
+  it("processes all category page 1 requests before page 2 requests", async () => {
+    const searchUrls = ["a", "b", "c"].map((category) => `https://www.olx.pt/imoveis/${category}/`);
+    const calls = [];
+    const result = await collectOlxRoundRobinPaginatedListings({
+      searchUrls,
+      maxPages: 2,
+      delayBetweenRequestsMs: 0,
+      collectionSession: { budget: createOlxExecutionBudget({ maxSearchPagesPerCategory: 2, maxSearchRequests: 22 }) },
+      resolveExistingListings: async (externalIds) => new Map(externalIds.map((id) => [id, `lead-${id}`])),
+      fetchImpl: async (url) => {
+        calls.push(url);
+        const match = url.match(/\/imoveis\/([^/]+)\/\?page=(\d+)/);
+        const category = match?.[1] || url.match(/\/imoveis\/([^/]+)\//)[1];
+        const pageNumber = Number(match?.[2] || 1);
+        return { ok: true, status: 200, url, text: async () => roundRobinSearchHtml(category, pageNumber, true) };
+      }
+    });
+
+    expect(calls.map((url) => url.replace(/\?page=\d+$/, ""))).toEqual([
+      searchUrls[0], searchUrls[1], searchUrls[2],
+      searchUrls[0], searchUrls[1], searchUrls[2]
+    ]);
+    expect(result.categories.every((category) => category.pagesFetched === 2)).toBe(true);
+    expect(calls.every((url) => !url.includes("/d/anuncio/"))).toBe(true);
+  });
+
+  it("keeps independent nextUrls and removes a finished category from later rounds", async () => {
+    const searchUrls = ["a", "b", "c"].map((category) => `https://www.olx.pt/imoveis/${category}/`);
+    const calls = [];
+    await collectOlxRoundRobinPaginatedListings({
+      searchUrls,
+      maxPages: 2,
+      delayBetweenRequestsMs: 0,
+      collectionSession: { budget: createOlxExecutionBudget({ maxSearchPagesPerCategory: 2, maxSearchRequests: 22 }) },
+      fetchImpl: async (url) => {
+        calls.push(url);
+        const category = url.match(/\/imoveis\/([^/]+)/)[1];
+        const pageNumber = url.includes("?page=2") ? 2 : 1;
+        const next = category === "a" ? 2 : pageNumber;
+        return {
+          ok: true,
+          status: 200,
+          url,
+          text: async () => roundRobinSearchHtml(category, next, false)
+        };
+      }
+    });
+
+    expect(calls.map((url) => url.replace(/\?page=\d+$/, ""))).toEqual([
+      searchUrls[0], searchUrls[1], searchUrls[2], searchUrls[1], searchUrls[2]
+    ]);
+  });
+
+  it("does not let an error in one category block the next round", async () => {
+    const searchUrls = ["a", "b", "c"].map((category) => `https://www.olx.pt/imoveis/${category}/`);
+    const calls = [];
+    await collectOlxRoundRobinPaginatedListings({
+      searchUrls,
+      maxPages: 2,
+      delayBetweenRequestsMs: 0,
+      collectionSession: { budget: createOlxExecutionBudget({ maxSearchPagesPerCategory: 2, maxSearchRequests: 22 }) },
+      fetchImpl: async (url) => {
+        calls.push(url);
+        if (url.includes("/imoveis/b/") && !url.includes("?page=2")) {
+          return { ok: false, status: 500, url, text: async () => "" };
+        }
+        const category = url.match(/\/imoveis\/([^/]+)/)[1];
+        const pageNumber = url.includes("?page=2") ? 2 : 1;
+        return { ok: true, status: 200, url, text: async () => roundRobinSearchHtml(category, pageNumber, false) };
+      }
+    });
+
+    expect(calls.map((url) => url.replace(/\?page=\d+$/, ""))).toEqual([
+      searchUrls[0], searchUrls[1], searchUrls[2], searchUrls[0], searchUrls[2]
+    ]);
+  });
+
+  it.each([
+    [10, 22, 20, 2],
+    [20, 22, 22, 2],
+    [30, 22, 22, 1]
+  ])("respects round-robin budget for %i categories and %i requests", async (categoryCount, maxSearchRequests, expectedRequests, expectedMaxPages) => {
+    const searchUrls = Array.from({ length: categoryCount }, (_, index) => `https://www.olx.pt/imoveis/c${index}/`);
+    const calls = [];
+    const result = await collectOlxRoundRobinPaginatedListings({
+      searchUrls,
+      maxPages: 2,
+      delayBetweenRequestsMs: 0,
+      collectionSession: { budget: createOlxExecutionBudget({ maxSearchPagesPerCategory: 2, maxSearchRequests }) },
+      fetchImpl: async (url) => {
+        calls.push(url);
+        const category = url.match(/\/imoveis\/([^/]+)/)[1];
+        const pageNumber = url.includes("?page=2") ? 2 : 1;
+        return { ok: true, status: 200, url, text: async () => roundRobinSearchHtml(category, pageNumber, false) };
+      }
+    });
+
+    expect(calls).toHaveLength(expectedRequests);
+    expect(Math.max(...result.categories.map((category) => category.pagesFetched))).toBe(expectedMaxPages);
+  });
+
+  it("does one existing lookup batch and skips detail for existing listings", async () => {
+    const searchUrl = "https://www.olx.pt/imoveis/a/";
+    const requestedUrls = [];
+    const lookupCalls = [];
+    const result = await collectOlxRoundRobinPaginatedListings({
+      searchUrls: [searchUrl],
+      maxPages: 1,
+      delayBetweenRequestsMs: 0,
+      collectionSession: { budget: createOlxExecutionBudget({ maxSearchPagesPerCategory: 2, maxSearchRequests: 22 }) },
+      resolveExistingListings: async (externalIds) => {
+        lookupCalls.push(externalIds);
+        return new Map([["IDJexisting", "provider-lead-existing"]]);
+      },
+      fetchImpl: async (url) => {
+        requestedUrls.push(url);
+        if (url.includes("/d/anuncio/")) {
+          return { ok: true, status: 200, url, text: async () => detailHtml("Porto", "Porto") };
+        }
+        return {
+          ok: true,
+          status: 200,
+          url,
+          text: async () => '<div data-testid="l-card"><a data-testid="card-title-link" aria-label="Existing" href="/d/anuncio/existing-IDJexisting.html"><h4>Existing</h4></a><p data-testid="location-date">Porto - hoje</p></div><div data-testid="l-card"><a data-testid="card-title-link" aria-label="New" href="/d/anuncio/new-IDJnew.html"><h4>New</h4></a><p data-testid="location-date">Porto - hoje</p></div>'
+        };
+      }
+    });
+
+    expect(lookupCalls).toEqual([["IDJexisting", "IDJnew"]]);
+    expect(requestedUrls).toEqual([searchUrl, "https://www.olx.pt/d/anuncio/new-IDJnew.html"]);
+    expect(result.categories[0].listings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ externalId: "IDJexisting", existingProviderLeadId: "provider-lead-existing" }),
+      expect.objectContaining({ externalId: "IDJnew" })
+    ]));
+    expect(result.categories[0].metrics.detailRequests).toBe(1);
   });
 });
