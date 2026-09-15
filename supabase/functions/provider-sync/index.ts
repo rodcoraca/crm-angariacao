@@ -716,6 +716,7 @@ Deno.serve(async (request: Request) => {
           } else if (provider === "olx") {
             paginated = await collectOlxPaginatedListings({
               searchUrl,
+              maxPages: effectiveMaxPages,
               districts,
               collectionSession: olxCollectionSession
             });

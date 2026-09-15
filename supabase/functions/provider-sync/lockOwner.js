@@ -34,6 +34,7 @@ export async function acquireProviderLock(client, {
     .from("provider_registry")
     .update({
       sync_running: true,
+      last_started_at: nowIso,
       last_execution: nowIso,
       last_error: buildLockOwnerMarker(ownerId)
     })

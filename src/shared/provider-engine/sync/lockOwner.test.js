@@ -36,6 +36,7 @@ test("acquires only an unlocked registry row and records the owner", async () =>
 
   expect(calls).toContainEqual(["update", {
     sync_running: true,
+    last_started_at: "2026-09-14T00:00:00.000Z",
     last_execution: "2026-09-14T00:00:00.000Z",
     last_error: "__lock_owner:owner-a"
   }]);

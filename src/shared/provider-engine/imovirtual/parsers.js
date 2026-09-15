@@ -1,5 +1,3 @@
-import { normalizePortugalLocalIsoToUtc } from "../providerLocalTime.js";
-
 const LISTING_SELECTORS = [
   '[data-cy="search.listing"]',
   '[data-testid="listing"]',
@@ -36,6 +34,13 @@ function getLocationPath(item) {
     region: address?.province?.name || null,
     freguesia: address?.parish?.name || address?.freguesia?.name || null
   };
+}
+
+function normalizeImovirtualPublishedAt(value) {
+  if (!value) return null;
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
 export function parseListingIds(html) {
@@ -133,7 +138,7 @@ export function mapNextDataItemToListing(item) {
     ownerName: item.advertOwner?.name?.trim() || null,
     url: buildImovirtualPublicUrl(item.href),
     isPrivateOwner: Boolean(item.isPrivateOwner),
-    createdAtFirst: normalizePortugalLocalIsoToUtc(item.createdAtFirst),
+    createdAtFirst: normalizeImovirtualPublishedAt(item.createdAtFirst),
     modifiedAt: null,
     shortDescription: item.shortDescription || null,
     source: item.source || null
