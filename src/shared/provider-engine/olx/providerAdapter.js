@@ -234,11 +234,7 @@ export async function collectOlxRoundRobinPaginatedListings({
   if (!Array.isArray(searchUrls)) throw new TypeError("searchUrls OLX deve ser um array.");
 
   const budget = collectionSession?.budget || providedBudget;
-  const configuredMaxPages = maxPages || budget?.limits.maxSearchPagesPerCategory || 1;
-  const effectiveMaxPages = Math.min(
-    configuredMaxPages,
-    budget?.limits.maxSearchPagesPerCategory || configuredMaxPages
-  );
+  const effectiveMaxPages = maxPages || Number.POSITIVE_INFINITY;
   const states = searchUrls.map((searchUrl) => createOlxRoundRobinState(searchUrl));
   const uniqueExternalIds = new Set();
   const effectiveMaxRequests = budget?.limits.maxSearchRequests ?? states.length * effectiveMaxPages;
@@ -435,7 +431,7 @@ export async function collectOlxPaginatedListings({
   if (!searchUrl) throw new Error("Search Definition OLX sem searchUrl.");
   const budget = collectionSession?.budget || providedBudget;
   if (budget) resetOlxCategoryBudget(budget);
-  const effectiveMaxPages = maxPages || budget?.limits.maxSearchPagesPerCategory || 1;
+  const effectiveMaxPages = maxPages || Number.POSITIVE_INFINITY;
   const effectiveMaxRequests = maxRequests || budget?.limits.maxSearchRequests || effectiveMaxPages;
   const fetchedAt = new Date().toISOString();
   const result = await acquireOlxSearchPages(

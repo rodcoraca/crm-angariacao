@@ -62,9 +62,6 @@ export function checkOlxBudget(budget, requestType, now = Date.now()) {
       return exhaust(budget, "global_search_limit", "global");
     }
 
-    if (budget.categorySearchRequests >= budget.limits.maxSearchPagesPerCategory) {
-      return exhaust(budget, "category_search_limit", "category");
-    }
   }
 
   if (requestType === "detail") {

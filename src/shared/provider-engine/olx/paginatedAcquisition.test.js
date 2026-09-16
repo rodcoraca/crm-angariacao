@@ -81,15 +81,22 @@ describe("OLX Paginated Acquisition v0.1", () => {
     expect(result.budget).toMatchObject({ budgetExhausted: true, reason: "global_search_limit", scope: "global" });
   });
 
-  it("para por limite de páginas da categoria sem marcar o budget global", async () => {
+  it("ignora o limite de páginas da categoria e segue nextUrl até ao fim", async () => {
     const budget = createOlxExecutionBudget({ maxSearchPagesPerCategory: 1 }, Date.now());
     const { result, calls } = await run([
       page(definition.searchUrl, "https://www.olx.pt/imoveis/apartamentos/?page=2", [{ externalId: "IDJ1" }]),
-      page("https://www.olx.pt/imoveis/apartamentos/?page=2", null, [{ externalId: "IDJ2" }])
+      page("https://www.olx.pt/imoveis/apartamentos/?page=2", "https://www.olx.pt/imoveis/apartamentos/?page=3", [{ externalId: "IDJ2" }]),
+      page("https://www.olx.pt/imoveis/apartamentos/?page=3", null, [{ externalId: "IDJ3" }])
     ], { budget });
 
-    expect(calls).toHaveLength(1);
-    expect(result.budget).toMatchObject({ budgetExhausted: true, reason: "category_search_limit", scope: "category" });
+    expect(calls.map((call) => call.url)).toEqual([
+      definition.searchUrl,
+      "https://www.olx.pt/imoveis/apartamentos/?page=2",
+      "https://www.olx.pt/imoveis/apartamentos/?page=3"
+    ]);
+    expect(result.listings.map((listing) => listing.externalId)).toEqual(["IDJ1", "IDJ2", "IDJ3"]);
+    expect(result.metrics.paginationStoppedReason).toBe("no_next_url");
+    expect(result.budget).toBeNull();
     expect(budget.exhausted).toBe(false);
   });
 

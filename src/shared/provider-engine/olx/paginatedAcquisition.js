@@ -45,7 +45,7 @@ function createMetrics() {
 export async function acquireOlxSearchPages(searchDefinition, {
   worker,
   parseSearchPage,
-  maxPages = 3,
+  maxPages = Number.POSITIVE_INFINITY,
   maxRequests = 3,
   maxRetries = 0,
   maxRedirects = 5,
@@ -152,11 +152,6 @@ export async function acquireOlxSearchPages(searchDefinition, {
       break;
     }
     if (pages.length >= maxPages) {
-      if (budget && page.nextUrl && pages.length >= budget.limits.maxSearchPagesPerCategory) {
-        budgetStop = checkOlxBudget(budget, "search");
-        metrics.paginationStoppedReason = "budget_exhausted";
-        break;
-      }
       metrics.paginationStoppedReason = "max_pages";
       break;
     }

@@ -11,12 +11,12 @@ function detailHtml(location, district) {
   return `<ol data-testid="breadcrumbs"><li data-testid="breadcrumb-item"><a href="/imoveis/apartamento-casa-a-venda/apartamentos-venda/${district.toLowerCase()}/">Vende-se - ${district}</a></li><li data-testid="breadcrumb-item"><a href="/imoveis/apartamento-casa-a-venda/apartamentos-venda/local/">Vende-se - ${location}</a></li></ol><img alt="Location"/><p data-nx-name="P2">${location}</p><p data-nx-name="P3">${district}</p>`;
 }
 
-function roundRobinSearchHtml(category, pageNumber, includeListing = false) {
+function roundRobinSearchHtml(category, pageNumber, includeListing = false, lastPage = 2) {
   const listing = includeListing
     ? `<div data-testid="l-card"><a data-testid="card-title-link" aria-label="${category}-${pageNumber}" href="/d/anuncio/${category}-${pageNumber}-IDJ${category}${pageNumber}.html"><h4>${category}-${pageNumber}</h4></a><p data-testid="location-date">Porto - hoje</p></div>`
     : "";
-  const next = pageNumber < 2
-    ? `<a data-testid="pagination-forward" href="/imoveis/${category}/?page=2">Seguinte</a>`
+  const next = pageNumber < lastPage
+    ? `<a data-testid="pagination-forward" href="/imoveis/${category}/?page=${pageNumber + 1}">Seguinte</a>`
     : "";
   return `${listing}${next}`;
 }
@@ -295,6 +295,31 @@ describe("OLX provider adapter", () => {
     ]);
     expect(result.categories.every((category) => category.pagesFetched === 2)).toBe(true);
     expect(calls.every((url) => !url.includes("/d/anuncio/"))).toBe(true);
+  });
+
+  it("follows each category nextUrl through page 3 without the category page limit", async () => {
+    const searchUrls = ["a", "b"].map((category) => `https://www.olx.pt/imoveis/${category}/`);
+    const calls = [];
+    const result = await collectOlxRoundRobinPaginatedListings({
+      searchUrls,
+      delayBetweenRequestsMs: 0,
+      collectionSession: { budget: createOlxExecutionBudget({ maxSearchPagesPerCategory: 2, maxSearchRequests: 10 }) },
+      resolveExistingListings: async (externalIds) => new Map(externalIds.map((id) => [id, `lead-${id}`])),
+      fetchImpl: async (url) => {
+        calls.push(url);
+        const category = url.match(/\/imoveis\/([^/]+)/)[1];
+        const pageNumber = Number(url.match(/page=(\d+)/)?.[1] || 1);
+        return { ok: true, status: 200, url, text: async () => roundRobinSearchHtml(category, pageNumber, true, 3) };
+      }
+    });
+
+    expect(calls.map((url) => url.replace(/\?page=\d+$/, ""))).toEqual([
+      searchUrls[0], searchUrls[1],
+      searchUrls[0], searchUrls[1],
+      searchUrls[0], searchUrls[1]
+    ]);
+    expect(result.categories.map((category) => category.pagesFetched)).toEqual([3, 3]);
+    expect(result.listings).toHaveLength(6);
   });
 
   it("keeps independent nextUrls and removes a finished category from later rounds", async () => {

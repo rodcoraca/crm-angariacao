@@ -55,17 +55,14 @@ describe("OLX execution budget", () => {
     expect(isOlxExecutionBudgetExhausted(globalBudget)).toBe(true);
   });
 
-  it("enforces search page and search request limits", () => {
+  it("enforces only the global search request limit", () => {
     const budget = createOlxExecutionBudget({
       maxSearchPagesPerCategory: 1,
       maxSearchRequests: 2
     }, 1000);
 
     recordOlxRequest(budget, "search");
-    expect(checkOlxBudget(budget, "search", 1001)).toMatchObject({
-      reason: "category_search_limit",
-      scope: "category"
-    });
+    expect(checkOlxBudget(budget, "search", 1001)).toMatchObject({ allowed: true, budgetExhausted: false });
 
     const globalBudget = createOlxExecutionBudget({
       maxSearchPagesPerCategory: 5,
