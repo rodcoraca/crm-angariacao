@@ -66,6 +66,8 @@ type ProviderListing = {
   url?: string | null;
   isPrivateOwner?: boolean;
   createdAtFirst?: string | null;
+  publishedAt?: string | null;
+  modifiedAt?: string | null;
   shortDescription?: string | null;
   source?: string | null;
 };
@@ -150,7 +152,7 @@ async function saveSeenListings(
             price: listing.price ?? null,
             owner_name: listing.ownerName || null,
             short_description: listing.shortDescription || null,
-            published_at: listing.createdAtFirst ? new Date(listing.createdAtFirst).toISOString() : null,
+            published_at: listing.publishedAt ? new Date(listing.publishedAt).toISOString() : null,
             modified_at: listing.modifiedAt ? new Date(listing.modifiedAt).toISOString() : null,
             last_seen_at: now,
             updated_at: now,
@@ -186,7 +188,7 @@ async function saveSeenListings(
           owner_name: listing.ownerName || null, url: listing.url || null,
           is_private_owner: Boolean(listing.isPrivateOwner),
           created_at_first: listing.createdAtFirst || null,
-          published_at: listing.createdAtFirst ? new Date(listing.createdAtFirst).toISOString() : null,
+          published_at: listing.publishedAt ? new Date(listing.publishedAt).toISOString() : null,
           modified_at: listing.modifiedAt ? new Date(listing.modifiedAt).toISOString() : null,
           short_description: listing.shortDescription || null,
           source: listing.source || null,

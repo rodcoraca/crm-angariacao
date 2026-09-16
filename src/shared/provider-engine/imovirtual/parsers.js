@@ -43,6 +43,10 @@ function normalizeImovirtualPublishedAt(value) {
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString();
 }
 
+export function deriveImovirtualPublishedAt(item) {
+  return normalizeImovirtualPublishedAt(item?.publishedAt ?? item?.dateCreated);
+}
+
 export function parseListingIds(html) {
   if (!html || typeof DOMParser === "undefined") {
     console.info("[ProviderEngine][Imovirtual] parse_listing_ids", { totalListings: 0 });
@@ -104,23 +108,6 @@ export function mapNextDataItemToListing(item) {
     return null;
   }
 
-  if (!globalThis.__imovirtualTemporalLogged) {
-    globalThis.__imovirtualTemporalLogged = true;
-
-    const temporalFields = Object.fromEntries(
-      Object.entries(item).filter(([key]) =>
-        /date|time|created|updated|update|modified|publish|published|change/i.test(key)
-      )
-    );
-
-    console.info("[Imovirtual][TEMPORAL_FIELDS]", {
-      externalId: item.id,
-      keys: Object.keys(item),
-      temporalFields,
-      rawItem: item
-    });
-  }
-
   const locationPath = getLocationPath(item);
 
   return {
@@ -139,6 +126,7 @@ export function mapNextDataItemToListing(item) {
     url: buildImovirtualPublicUrl(item.href),
     isPrivateOwner: Boolean(item.isPrivateOwner),
     createdAtFirst: normalizeImovirtualPublishedAt(item.createdAtFirst),
+    publishedAt: deriveImovirtualPublishedAt(item),
     modifiedAt: null,
     shortDescription: item.shortDescription || null,
     source: item.source || null
