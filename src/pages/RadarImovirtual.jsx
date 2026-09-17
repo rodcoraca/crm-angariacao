@@ -4,7 +4,7 @@ import Table from "../components/ui/Table";
 import { listImovirtualLeads } from "../services/providerLeadService";
 
 const euro = (value) => value == null ? "-" : new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(value);
-const date = (value) => value ? new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short" }).format(new Date(value)) : "-";
+const date = (value) => value ? new Intl.DateTimeFormat("pt-PT", { dateStyle: "short", timeStyle: "short", timeZone: "Europe/Lisbon" }).format(new Date(value)) : "-";
 
 function normalizeText(value) {
   return String(value || "").trim();
@@ -66,7 +66,7 @@ export default function RadarImovirtual() {
     { key: "title", title: "Imóvel" },
     { key: "price", title: "Preço", render: (row) => euro(row.price) },
     { key: "location", title: "Localização", render: (row) => buildLocationLabel(row) },
-    { key: "created_at_first", title: "Data publicação", render: (row) => date(row.created_at_first) },
+    { key: "published_at", title: "Data publicação", render: (row) => date(row.published_at ?? row.raw_data?.publishedAt) },
     { key: "url", title: "Abrir anúncio", render: (row) => row.url ? <a href={row.url} target="_blank" rel="noreferrer">Abrir anúncio</a> : "-" }
   ];
   return <section><h1>Radar &gt; Imovirtual Beta</h1><Card><p>Total anúncios: {leads.length}</p><p>Total particulares: {totalPrivate}</p><p>Última sincronização: {date(lastSync)}</p></Card><Card><label><select value={filters.privateOnly ? "private" : "all"} onChange={(event) => setFilter("privateOnly", event.target.value === "private")}><option value="all">Todos</option><option value="private">Apenas particulares</option></select></label><label><input type="checkbox" checked={filters.last24Hours} onChange={(event) => setFilter("last24Hours", event.target.checked)} /> Últimas 24h</label><label>Distrito <select value={filters.district} onChange={(event) => setFilter("district", event.target.value)}><option value="">Todos</option>{[...geoOptions.districts].sort().map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label>Concelho <select value={filters.concelho} onChange={(event) => setFilter("concelho", event.target.value)}><option value="">Todos</option>{[...geoOptions.concelhos].sort().map((value) => <option key={value} value={value}>{value}</option>)}</select></label><label>Freguesia <select value={filters.freguesia} onChange={(event) => setFilter("freguesia", event.target.value)}><option value="">Todos</option>{[...geoOptions.freguesias].sort().map((value) => <option key={value} value={value}>{value}</option>)}</select></label></Card>{error ? <p>Falha ao carregar anúncios: {error.message}</p> : <Table columns={columns} rows={filteredLeads} emptyMessage="Sem anúncios Imovirtual." />}</section>;
