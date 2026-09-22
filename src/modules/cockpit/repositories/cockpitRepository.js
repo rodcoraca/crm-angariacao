@@ -100,14 +100,32 @@ export function queryAgendaVisitasHoje(camposAgenda, inicioHojeIso, inicioAmanha
     .limit(limite), empresaId);
 }
 
-export function queryAgendaLembretesHoje(camposLembrete, dataHoje, limite, empresaId = null) {
-  return applyEmpresaScope(supabase
+export function queryAgendaLembretesHoje(camposLembrete, dataHoje, limite, empresaId = null, usuarioId = null) {
+  let query = applyEmpresaScope(supabase
     .from("lead_lembretes")
     .select(`${camposLembrete},lead:lead_id (id,nome,telefone)`)
     .eq("estado", "ativo")
     .eq("data_lembrete", dataHoje)
     .order("hora_lembrete", { ascending: true, nullsFirst: false })
     .limit(limite), empresaId);
+
+  if (usuarioId) query = query.eq("criado_por", usuarioId);
+  return query;
+}
+
+export function queryAgendaLembretesFuturos(camposLembrete, dataInicio, dataFim, limite, empresaId = null, usuarioId = null) {
+  let query = applyEmpresaScope(supabase
+    .from("lead_lembretes")
+    .select(`${camposLembrete},lead:lead_id (id,nome,telefone)`)
+    .eq("estado", "ativo")
+    .gte("data_lembrete", dataInicio)
+    .lte("data_lembrete", dataFim)
+    .order("data_lembrete", { ascending: true })
+    .order("hora_lembrete", { ascending: true, nullsFirst: false })
+    .limit(limite), empresaId);
+
+  if (usuarioId) query = query.eq("criado_por", usuarioId);
+  return query;
 }
 
 export function queryRiscoImoveis() {

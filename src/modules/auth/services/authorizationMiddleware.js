@@ -9,6 +9,7 @@ export const PROTECTED_VIEW_RULES = {
   quente: { permission: "leads.hot.view" },
   morno: { permission: "leads.warm.view" },
   frio: { permission: "leads.cold.view" },
+  leads_acompanhamento: { permission: "leads.acompanhamento.view" },
   mensagens: { permission: "messages.view" },
   servicos: { permission: "servico.view" },
   plantoes: { permission: "plantao.view" },

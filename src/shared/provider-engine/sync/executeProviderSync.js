@@ -287,7 +287,8 @@ export async function executeProviderSync({
         short_description: listing.shortDescription || null,
         source: listing.source || null,
         status: "new",
-        detected_at: toIsoOrNull(fetchedAt) || (detectedAtFallbackNow ? new Date().toISOString() : null),
+        detected_at: toIsoOrNull(providerName === "imovirtual" ? listing.detectedAt : fetchedAt)
+          || (detectedAtFallbackNow ? new Date().toISOString() : null),
         provider_active: true,
         last_seen_at: syncStartedAtIso,
         raw_data: listing

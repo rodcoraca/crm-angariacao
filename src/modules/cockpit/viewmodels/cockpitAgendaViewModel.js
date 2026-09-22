@@ -8,3 +8,7 @@ export function mapCockpitAgendaData(raw) {
     ...lembretesHoje.map(mapLembreteLead)
   ];
 }
+
+export function mapCockpitFutureAgendaData(raw) {
+  return (raw?.lembretesFuturos || []).map(mapLembreteLead);
+}

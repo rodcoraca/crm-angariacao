@@ -10,6 +10,7 @@ import Forbidden from "./pages/Forbidden";
 import Fluxo from "./pages/Fluxo";
 import Dashboard from "./pages/Dashboard";
 import LeadsPorTipo from "./pages/LeadsPorTipo";
+import LeadsAcompanhamento from "./pages/LeadsAcompanhamento";
 import MensagensPadrao from "./pages/MensagensPadrao";
 import Servicos from "./pages/Servicos";
 import RelatoriosEscalasServico from "./pages/RelatoriosEscalasServico";
@@ -65,6 +66,7 @@ const RESTORABLE_VIEWS = new Set([
   "quente",
   "morno",
   "frio",
+  "leads_acompanhamento",
   "mensagens",
   "servicos",
   "plantoes",
@@ -641,6 +643,7 @@ export default function App() {
       quente: "Leads",
       morno: "Leads",
       frio: "Leads",
+      leads_acompanhamento: "Leads",
       estoque_np: "Imóveis",
       admin_documentacao: "Documentos",
       empresas_admin: "Administração",
@@ -987,6 +990,7 @@ export default function App() {
     quente: canAccessView("quente") ? <LeadsPorTipo tipo="quente" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="quente" requiredPermission={getRequiredPermission("quente")} />,
     morno: canAccessView("morno") ? <LeadsPorTipo tipo="morno" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="morno" requiredPermission={getRequiredPermission("morno")} />,
     frio: canAccessView("frio") ? <LeadsPorTipo tipo="frio" user={user} onAbrirLead={abrirFichaLead} onVoltarLead={voltarDaFicha} /> : <Forbidden requestedView="frio" requiredPermission={getRequiredPermission("frio")} />,
+    leads_acompanhamento: canAccessView("leads_acompanhamento") ? <LeadsAcompanhamento user={user} onAbrirLead={abrirFichaLead} /> : <Forbidden requestedView="leads_acompanhamento" requiredPermission={getRequiredPermission("leads_acompanhamento")} />,
     mensagens: canAccessView("mensagens") ? <MensagensPadrao /> : <Forbidden requestedView="mensagens" requiredPermission={getRequiredPermission("mensagens")} />,
     servicos: canAccessView("servicos") ? <Servicos /> : <Forbidden requestedView="servicos" requiredPermission={getRequiredPermission("servicos")} />,
     plantoes: canAccessView("plantoes") ? <Plantoes /> : <Forbidden requestedView="plantoes" requiredPermission={getRequiredPermission("plantoes")} />,

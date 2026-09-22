@@ -48,7 +48,7 @@ async function carregarLeadParaLembrete(leadId, empresaId, user) {
   return lead;
 }
 
-export async function criarLeadLembrete({ leadId, user, dataLembrete, horaLembrete, criadoPor = null }) {
+export async function criarLeadLembrete({ leadId, user, dataLembrete, horaLembrete }) {
   const empresaId = await resolveEmpresaId(user);
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
@@ -59,7 +59,7 @@ export async function criarLeadLembrete({ leadId, user, dataLembrete, horaLembre
     await carregarLeadParaLembrete(leadId, empresaId, user);
 
     const contrato = resolverContratoIdentidade(user);
-    const usuarioCriadorId = criadoPor || contrato.usuarioId || contrato.responsavelId || null;
+    const usuarioCriadorId = contrato.usuarioId || null;
 
     const payload = {
       lead_id: leadId,
@@ -104,7 +104,8 @@ export async function carregarLeadLembreteAtivo({ leadId, user }) {
   }
 
   try {
-    const { data, error } = await fetchLeadLembreteAtivo(leadId, empresaId);
+    const usuarioId = resolverContratoIdentidade(user).usuarioId;
+    const { data, error } = await fetchLeadLembreteAtivo(leadId, empresaId, usuarioId);
     if (error) return { data: null, error };
     return { data: data || null, error: null };
   } catch (error) {
@@ -120,7 +121,8 @@ export async function carregarHistoricoLeadLembretes({ leadId, user }) {
   }
 
   try {
-    const { data, error } = await fetchLeadLembretesConcluidos(leadId, empresaId);
+    const usuarioId = resolverContratoIdentidade(user).usuarioId;
+    const { data, error } = await fetchLeadLembretesConcluidos(leadId, empresaId, usuarioId);
     if (error) return { data: [], error };
     return { data: data || [], error: null };
   } catch (error) {
@@ -136,7 +138,8 @@ export async function alterarLeadLembrete({ lembreteId, user, dataLembrete, hora
   }
 
   try {
-    const { data: lembreteAtual, error: errorRead } = await fetchLeadLembreteById(lembreteId, empresaId);
+    const contrato = resolverContratoIdentidade(user);
+    const { data: lembreteAtual, error: errorRead } = await fetchLeadLembreteById(lembreteId, empresaId, contrato.usuarioId);
     if (errorRead) throw errorRead;
     if (!lembreteAtual) {
       return { error: new Error("Lembrete não encontrado.") };
@@ -165,7 +168,7 @@ export async function alterarLeadLembrete({ lembreteId, user, dataLembrete, hora
     const result = await auditMutation("update", () => executarMutacaoComErro(() => updateLeadLembreteById(lembreteId, {
       data_lembrete: dataLembrete,
       hora_lembrete: horaLembrete || null
-    }, empresaId)), contexto);
+    }, empresaId, contrato.usuarioId)), contexto);
 
     return { error: null, data: result?.data || null };
   } catch (error) {
@@ -181,14 +184,14 @@ export async function concluirLeadLembrete({ lembreteId, user }) {
   }
 
   try {
-    const { data: lembreteAtual, error: errorRead } = await fetchLeadLembreteById(lembreteId, empresaId);
+    const contrato = resolverContratoIdentidade(user);
+    const { data: lembreteAtual, error: errorRead } = await fetchLeadLembreteById(lembreteId, empresaId, contrato.usuarioId);
     if (errorRead) throw errorRead;
     if (!lembreteAtual) {
       return { error: new Error("Lembrete não encontrado.") };
     }
 
-    const contrato = resolverContratoIdentidade(user);
-    const concluidoPor = contrato.usuarioId || contrato.responsavelId || null;
+    const concluidoPor = contrato.usuarioId || null;
 
     const contexto = criarContextoAuditoriaLeadLembrete({
       user,
@@ -214,7 +217,7 @@ export async function concluirLeadLembrete({ lembreteId, user }) {
       estado: "concluido",
       concluido_at: new Date().toISOString(),
       concluido_por: concluidoPor
-    }, empresaId)), contexto);
+    }, empresaId, contrato.usuarioId)), contexto);
 
     return { error: null, data: result?.data || null };
   } catch (error) {

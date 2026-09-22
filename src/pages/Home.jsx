@@ -6,10 +6,10 @@ import EmptyState from "../components/ui/EmptyState";
 import Card from "../components/ui/Card";
 import KpiCard from "../components/ui/KpiCard";
 import Tooltip from "../components/ui/Tooltip";
+import Modal from "../components/ui/Modal";
 import { notify } from "../components/ui/feedbackBus";
 import {
   useCockpitActions,
-  useCockpitActivity,
   useCockpitAgenda,
   useCockpitKPIs,
   useCockpitPipeline,
@@ -74,6 +74,20 @@ function obterDataLocal() {
 }
 
 const lembretesDisparadosSessao = new Set();
+const COCKPIT_POSTIT_KEY = "osflow-cockpit-postit";
+const POSTIT_COLORS = ["blue", "lime", "pink", "yellow"];
+
+function getCockpitPostitStorageKey(user) {
+  const tenant = (
+    user?.user_metadata?.empresa_id
+    || user?.user_metadata?.empresa
+    || user?.user_metadata?.company_name
+    || user?.empresa_id
+    || "default"
+  )?.toString() || "default";
+  const userKey = user?.id || user?.user_metadata?.sub || "anonymous";
+  return `${COCKPIT_POSTIT_KEY}:${tenant}:${userKey}`;
+}
 
 function lembreteDevido(item, agora = new Date()) {
   if (item.tipoAgenda !== "lembrete" || !item.dataLembrete || !item.horaLembrete) return false;
@@ -112,6 +126,11 @@ function reproduzirSomLembrete() {
   }
 }
 
+function formatarDataAgenda(data) {
+  if (!data) return "Data não definida";
+  return new Intl.DateTimeFormat("pt-PT", { weekday: "long", day: "2-digit", month: "long" }).format(new Date(`${data}T00:00:00`));
+}
+
 function AgendaItems({ items, onOpenLead, onCompleteReminder, completingReminderIds = new Set(), emptyTitle }) {
   if (!items.length) return <EmptyState title={emptyTitle} />;
 
@@ -121,7 +140,7 @@ function AgendaItems({ items, onOpenLead, onCompleteReminder, completingReminder
         const content = (
           <>
             <div className="cockpit-agenda-item__time">{item.hora}</div>
-            <div className="cockpit-agenda-item__type">{item.tipoAgenda === "lembrete" ? "🔔 Lembrete" : "📅 Compromisso"}</div>
+            <div className="cockpit-agenda-item__type">{item.tipoAgenda === "lembrete" ? "🔔 Lembrete" : "📅 Visita"}</div>
             <strong className="cockpit-agenda-item__title">{item.nome}</strong>
             <span className="cockpit-agenda-item__client">{item.informacaoCurta}</span>
           </>
@@ -147,7 +166,38 @@ function AgendaItems({ items, onOpenLead, onCompleteReminder, completingReminder
         return (
           <Tooltip key={item.id} content={item.tooltip} placement="top">
             <div className="cockpit-agenda-item cockpit-agenda-item--lembrete">
-              {content}
+              <button
+                type="button"
+                className="cockpit-agenda-item__time"
+                style={{ padding: 0, border: 0, background: "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
+                onClick={() => onOpenLead?.(item.leadId)}
+              >
+                {item.hora}
+              </button>
+              <button
+                type="button"
+                className="cockpit-agenda-item__type"
+                style={{ padding: 0, border: 0, background: "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
+                onClick={() => onOpenLead?.(item.leadId)}
+              >
+                {item.tipoAgenda === "lembrete" ? "🔔 Lembrete" : "📅 Visita"}
+              </button>
+              <button
+                type="button"
+                className="cockpit-agenda-item__title"
+                style={{ padding: 0, border: 0, background: "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
+                onClick={() => onOpenLead?.(item.leadId)}
+              >
+                {item.nome}
+              </button>
+              <button
+                type="button"
+                className="cockpit-agenda-item__client"
+                style={{ padding: 0, border: 0, background: "transparent", color: "inherit", font: "inherit", textAlign: "left", cursor: "pointer" }}
+                onClick={() => onOpenLead?.(item.leadId)}
+              >
+                {item.informacaoCurta}
+              </button>
               <div className="cockpit-agenda-item__actions">
                 <button
                   type="button"
@@ -231,8 +281,7 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
   const {
     kpis,
     pipeline,
-    produtividade: produtividadeBase,
-    ultimasAtividades: ultimasAtividadesBase
+    produtividade: produtividadeBase
   } = useMemo(() => createCockpitViewModel(theme), [theme]);
 
   const { data: kpisTopo } = useCockpitKPIs(kpis);
@@ -244,11 +293,76 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
   } = useCockpitActions();
   const {
     data: agendaItems,
-    loading: agendaLoading,
-    error: agendaError,
+    futureData: futureAgendaItems,
     refresh: refreshAgenda
-  } = useCockpitAgenda();
+  } = useCockpitAgenda(user);
+  const postitStorageKey = useMemo(() => getCockpitPostitStorageKey(user), [user]);
+  const [postits, setPostits] = useState([]);
+  const [postitDraft, setPostitDraft] = useState("");
+  const [postitColor, setPostitColor] = useState("blue");
+  const [postitEditing, setPostitEditing] = useState(false);
+  const [editingPostitId, setEditingPostitId] = useState(null);
   const permissaoNotificacaoRef = useRef(false);
+
+  useEffect(() => {
+    if (!postitStorageKey) return;
+    try {
+      const current = window.localStorage.getItem(postitStorageKey);
+      if (!current) {
+        setPostits([]);
+        setPostitDraft("");
+        return;
+      }
+      const parsed = JSON.parse(current);
+      const storedPostits = Array.isArray(parsed)
+        ? parsed
+        : parsed?.content
+          ? [{ id: `postit-${Date.now()}`, content: parsed.content, color: "blue", state: parsed.state || "ativo", created_at: parsed.created_at || new Date().toISOString() }]
+          : [];
+      setPostits(storedPostits.filter((item) => item?.state === "ativo" && item.content));
+      setPostitDraft("");
+    } catch {
+      setPostits([]);
+      setPostitDraft("");
+    }
+  }, [postitStorageKey]);
+
+  function persistPostits(nextPostits) {
+    if (!postitStorageKey) return;
+    window.localStorage.setItem(postitStorageKey, JSON.stringify(nextPostits));
+    setPostits(nextPostits.filter((item) => item.state === "ativo"));
+  }
+
+  function handleSavePostit() {
+    const cleaned = postitDraft.trim();
+    if (!cleaned) return;
+    const now = new Date().toISOString();
+    const nextPostits = editingPostitId
+      ? postits.map((item) => item.id === editingPostitId ? { ...item, content: cleaned, color: postitColor, atualizado_at: now } : item)
+      : [...postits, { id: `postit-${Date.now()}`, content: cleaned, color: postitColor, state: "ativo", criado_at: now, atualizado_at: now }];
+    persistPostits(nextPostits);
+    setPostitDraft("");
+    setPostitColor("blue");
+    setEditingPostitId(null);
+    setPostitEditing(false);
+  }
+
+  function editPostit(item) {
+    setPostitDraft(item.content);
+    setPostitColor(item.color || "blue");
+    setEditingPostitId(item.id);
+    setPostitEditing(true);
+  }
+
+  function selectPostit(item) {
+    if (!item || postits[postits.length - 1]?.id === item.id) return;
+    const nextPostits = [...postits.filter((postit) => postit.id !== item.id), item];
+    persistPostits(nextPostits);
+  }
+
+  function handleDismissPostit(item) {
+    persistPostits(postits.map((postit) => postit.id === item.id ? { ...postit, state: "dispensado", dispensado_at: new Date().toISOString() } : postit));
+  }
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -297,11 +411,19 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
     error: imoveisSaudeError
   } = useCockpitRisk();
   const { data: produtividade } = useCockpitProductivity(produtividadeBase);
-  const { data: ultimasAtividades } = useCockpitActivity(ultimasAtividadesBase);
   const agendaItemsVisiveis = useMemo(
     () => agendaItems.filter((item) => item.tipoAgenda !== "lembrete" || !lembretesConcluidosIds.has(item.leadId)),
     [agendaItems, lembretesConcluidosIds]
   );
+  const futureAgendaGroups = useMemo(() => {
+    const groups = new Map();
+    futureAgendaItems.forEach((item) => {
+      if (!groups.has(item.dataLembrete)) groups.set(item.dataLembrete, []);
+      groups.get(item.dataLembrete).push(item);
+    });
+    return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
+  }, [futureAgendaItems]);
+  const [agendaModalOpen, setAgendaModalOpen] = useState(false);
 
   async function concluirLembreteAgenda(item) {
     if (!item?.leadId || lembretesAConcluirIds.has(item.leadId)) return;
@@ -706,7 +828,7 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
       </section>
 
       <section className="cockpit-grid-12">
-        <Card className="cockpit-panel cockpit-panel--pipeline" style={{ gridColumn: "span 8", padding: "16px", borderRadius: "12px", height: "100%" }}>
+        <Card className="cockpit-panel cockpit-panel--pipeline cockpit-pipeline-panel" style={{ gridColumn: "span 8", padding: "16px", borderRadius: "12px", height: "100%" }}>
           <div className="cockpit-panel__header">
             <div>
               <h2 className="cockpit-panel__title">Pipeline comercial</h2>
@@ -745,40 +867,96 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
           </div>
         </Card>
 
-        <Card className="cockpit-panel" style={{ gridColumn: "span 4", padding: "16px", borderRadius: "12px", height: "100%" }}>
+        <div className="cockpit-right-column">
+        <section className="cockpit-postit-panel cockpit-agenda-panel" aria-label="Agenda de hoje">
           <div className="cockpit-panel__header">
             <div>
               <h2 className="cockpit-panel__title">Agenda de hoje</h2>
-              <p className="cockpit-panel__subtitle">Compromissos e lembretes do dia com leitura imediata.</p>
+              <p className="cockpit-panel__subtitle">Lembretes do dia com leitura imediata.</p>
             </div>
-            <Badge variant="primary">{agendaItemsVisiveis.length || 0}</Badge>
+            <Badge variant="primary">{agendaItemsVisiveis.filter((item) => item.tipoAgenda === "lembrete").length || 0}</Badge>
+          </div>
+          {agendaItemsVisiveis.some((item) => item.tipoAgenda === "lembrete") ? (
+            <AgendaItems
+              items={agendaItemsVisiveis.filter((item) => item.tipoAgenda === "lembrete")}
+              onOpenLead={onOpenLead}
+              onCompleteReminder={concluirLembreteAgenda}
+              completingReminderIds={lembretesAConcluirIds}
+              emptyTitle="Sem lembretes para hoje."
+            />
+          ) : <EmptyState title="Sem lembretes para hoje." style={{ width: "100%", boxSizing: "border-box", textAlign: "left", padding: "16px" }} />}
+        </section>
+
+        <section className="cockpit-postit-panel cockpit-postit-section" aria-label="Post-it">
+          <div className="cockpit-panel__header">
+            <div>
+              <h2 className="cockpit-panel__title">Post-it</h2>
+            </div>
+            <button type="button" className="cockpit-postit-add" onClick={() => { setPostitDraft(""); setPostitColor("blue"); setEditingPostitId(null); setPostitEditing(true); }} aria-label="Novo post-it">+</button>
           </div>
 
-          {agendaLoading ? (
-            <p className="cockpit-empty-state">A carregar agenda...</p>
-          ) : agendaError ? (
-            <p className="cockpit-empty-state">Erro ao carregar agenda.</p>
+          {postitEditing ? (
+            <div className="cockpit-postit">
+              <textarea value={postitDraft} onChange={(event) => setPostitDraft(event.target.value)} rows={3} className="cockpit-postit__textarea" placeholder="Escreva a sua anotação..." />
+              <div className="cockpit-postit__colors" aria-label="Cor do Post-it">
+                {POSTIT_COLORS.map((color) => <button key={color} type="button" className={`cockpit-postit__swatch cockpit-postit__swatch--${color}${postitColor === color ? " cockpit-postit__swatch--selected" : ""}`} onClick={() => setPostitColor(color)} aria-label={`Cor ${color}`} />)}
+              </div>
+              <div className="cockpit-postit__actions">
+                <button type="button" className="cockpit-postit__button cockpit-postit__button--secondary" onClick={() => setPostitEditing(false)}>Cancelar</button>
+                <button type="button" className="cockpit-postit__button cockpit-postit__button--primary" onClick={handleSavePostit}>Guardar</button>
+              </div>
+            </div>
+          ) : postits.length ? (
+            <div className="cockpit-postit-stack">
+              {postits.map((item, index) => <article key={item.id} className={`cockpit-postit cockpit-postit--${item.color || "blue"}`} onClick={() => selectPostit(item)} style={{ "--postit-index": index, zIndex: index + 1 }}>
+                <div className="cockpit-postit__content">{item.content}</div>
+                <div className="cockpit-postit__actions">
+                  <button type="button" className="cockpit-postit__button cockpit-postit__button--secondary" onClick={(event) => { event.stopPropagation(); editPostit(item); }}>Editar</button>
+                  <button type="button" className="cockpit-postit__button cockpit-postit__button--primary" onClick={(event) => { event.stopPropagation(); handleDismissPostit(item); }}>✓ Dispensar</button>
+                </div>
+              </article>)}
+            </div>
           ) : (
-            <>
-              <h3 className="cockpit-panel__title">Compromissos</h3>
-              <AgendaItems items={agendaItemsVisiveis.filter((item) => item.tipoAgenda === "compromisso")} onOpenLead={onOpenLead} emptyTitle="Sem compromissos para hoje." />
-              <h3 className="cockpit-panel__title">Lembretes</h3>
-              {agendaItemsVisiveis.some((item) => item.tipoAgenda === "lembrete") ? (
+            <div className="cockpit-postit-empty">
+              <p>Nenhuma anotação</p>
+              <button type="button" className="cockpit-postit-add cockpit-postit-add--empty" onClick={() => { setPostitDraft(""); setPostitColor("blue"); setEditingPostitId(null); setPostitEditing(true); }}>+ Novo Post-it</button>
+            </div>
+          )}
+        </section>
+
+        {futureAgendaItems.length ? <div className="cockpit-future-agenda-line cockpit-future-agenda-section">
+          <div className="cockpit-future-agenda-hint">
+            <div><strong>Você tem lembretes futuros</strong><span>{futureAgendaItems.length} lembretes agendados</span></div>
+            <button type="button" onClick={() => setAgendaModalOpen(true)}>Abrir agenda →</button>
+          </div>
+        </div> : null}
+
+        <Modal
+          open={agendaModalOpen}
+          onClose={() => setAgendaModalOpen(false)}
+          title="Agenda"
+          size="xl"
+          style={{ maxWidth: "min(1180px, calc(100vw - 24px))", maxHeight: "calc(100vh - 24px)" }}
+        >
+          <div className="cockpit-future-agenda-modal">
+            {futureAgendaGroups.map(([date, items]) => (
+              <section key={date} className="cockpit-future-agenda-day">
+                <h4>{formatarDataAgenda(date)}</h4>
                 <AgendaItems
-                  items={agendaItemsVisiveis.filter((item) => item.tipoAgenda === "lembrete")}
+                  items={items}
                   onOpenLead={onOpenLead}
                   onCompleteReminder={concluirLembreteAgenda}
                   completingReminderIds={lembretesAConcluirIds}
-                  emptyTitle="Sem lembretes para hoje."
+                  emptyTitle="Sem lembretes."
                 />
-              ) : (
-                <EmptyState title="Sem lembretes para hoje." />
-              )}
-            </>
-          )}
-        </Card>
+              </section>
+            ))}
+            {!futureAgendaGroups.length ? <EmptyState title="Sem lembretes futuros" /> : null}
+          </div>
+        </Modal>
+        </div>
 
-        <Card className="cockpit-panel" style={{ gridColumn: "span 8", padding: "16px", borderRadius: "12px", height: "100%" }}>
+        <Card className="cockpit-panel cockpit-radar-panel" style={{ gridColumn: "span 8", padding: "16px", borderRadius: "12px", height: "100%" }}>
           <div className="cockpit-panel__header">
             <div>
               <h2 className="cockpit-panel__title">Radar comercial</h2>
@@ -804,34 +982,6 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
                 <div className="cockpit-radar-card__footer">
                   <small>{item.variation}</small>
                   <span>{item.progress}%</span>
-                </div>
-              </article>
-            ))}
-          </div>
-        </Card>
-
-        <Card className="cockpit-panel" style={{ gridColumn: "span 4", padding: "16px", borderRadius: "12px", height: "100%" }}>
-          <div className="cockpit-panel__header">
-            <div>
-              <h2 className="cockpit-panel__title">Ultimas atividades</h2>
-              <p className="cockpit-panel__subtitle">Feed continuo da operacao.</p>
-            </div>
-            <Badge variant="neutral">Live</Badge>
-          </div>
-
-          <div className="cockpit-activity-list">
-            {ultimasAtividades.map((item) => (
-              <article key={item.id} className="cockpit-activity-item">
-                <div className={`cockpit-activity-item__icon cockpit-activity-item__icon--${item.variant || "neutral"}`}>
-                  {obterIniciais(item.title)}
-                </div>
-
-                <div className="cockpit-activity-item__content">
-                  <div className="cockpit-activity-item__header">
-                    <strong>{item.title}</strong>
-                    <span>{item.badge}</span>
-                  </div>
-                  <p>{item.description}</p>
                 </div>
               </article>
             ))}

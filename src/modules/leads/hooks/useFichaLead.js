@@ -24,7 +24,7 @@ export function useFichaLead({ leadId, user }) {
   const carregar = useCallback(async () => {
     setLoading(true);
 
-    const result = await carregarFichaLead(leadId);
+    const result = await carregarFichaLead(leadId, user);
 
     console.log("Lead carregada:", result.lead);
     console.log("agente_id:", result.lead?.agente_id);

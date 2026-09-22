@@ -128,9 +128,9 @@ export async function alterarTipoLead(leadId, novoTipo, user) {
       user,
       leadId,
       eventType: "update",
-      action: "alterar_estado_lead",
+      action: "alterar_tipo_lead",
       details: {
-        mutation: "state_change",
+        mutation: "type_change",
         before: {
           tipo: leadAtual?.tipo || null
         },
@@ -182,8 +182,8 @@ export async function salvarObservacaoLead(leadId, observacoes, user) {
   }
 }
 
-export async function carregarFichaLead(leadId) {
-  const empresaId = await resolveEmpresaId();
+export async function carregarFichaLead(leadId, user = null) {
+  const empresaId = await resolveEmpresaId(user);
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
     return { lead: null, form: null, error: null };
@@ -192,7 +192,11 @@ export async function carregarFichaLead(leadId) {
   const { data, error } = await fetchLeadById(leadId, empresaId);
   if (error) return { lead: null, form: null, error };
 
-  const { data: lembreteAtivo, error: erroLembrete } = await fetchLeadLembreteAtivo(leadId, empresaId);
+  const { data: lembreteAtivo, error: erroLembrete } = await fetchLeadLembreteAtivo(
+    leadId,
+    empresaId,
+    resolverContratoIdentidade(user).usuarioId
+  );
   if (erroLembrete) return { lead: null, form: null, error: erroLembrete };
 
   return {
@@ -249,7 +253,7 @@ export async function verificarLeadExistente(telefone) {
   return { lead: data || null, error: null };
 }
 
-export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao, user }) {
+export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao, user, auditDetails = {} }) {
   const telefoneNormalizado = normalizarTelefone(telefone);
   const hasPhone = Boolean(telefoneNormalizado);
 
@@ -289,24 +293,24 @@ export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao
   };
 
   try {
-    const contexto = criarContextoAuditoriaLeads({
-      user,
-      eventType: "create",
-      action: "criar_lead",
-      details: {
-        mutation: "lead_create",
-        payload: {
-          tipo,
-          origem,
-          agente_id: contrato.responsavelId
-        }
-      }
-    });
-
     const mutationResult = await auditMutation(
       "create",
       () => executarMutacaoComErro(() => insertLead(payload)),
-      contexto
+      (result) => criarContextoAuditoriaLeads({
+        user,
+        leadId: result?.data?.id || null,
+        eventType: "create",
+        action: "criar_lead",
+        details: {
+          mutation: "lead_create",
+          payload: {
+            tipo,
+            origem,
+            agente_id: contrato.responsavelId
+          },
+          ...auditDetails
+        }
+      })
     );
 
     return { error: null, duplicateLead: null, id: mutationResult?.data?.id || null };
@@ -348,7 +352,11 @@ export async function salvarFichaLead({ leadId, form, user }) {
     };
   }
 
-  const { data: lembreteAtivoAtual, error: erroLembreteAtual } = await fetchLeadLembreteAtivo(leadId, empresaId);
+  const { data: lembreteAtivoAtual, error: erroLembreteAtual } = await fetchLeadLembreteAtivo(
+    leadId,
+    empresaId,
+    resolverContratoIdentidade(user).usuarioId
+  );
   if (erroLembreteAtual) {
     return { error: erroLembreteAtual };
   }
@@ -458,7 +466,11 @@ export async function concluirLembreteLead({ leadId, user }) {
   try {
     await carregarLeadAutorizada(leadId, empresaId, user, canManageLead);
 
-    const { data: lembreteAtivo, error: erroLembrete } = await fetchLeadLembreteAtivo(leadId, empresaId);
+    const { data: lembreteAtivo, error: erroLembrete } = await fetchLeadLembreteAtivo(
+      leadId,
+      empresaId,
+      resolverContratoIdentidade(user).usuarioId
+    );
     if (erroLembrete) {
       return { error: erroLembrete };
     }

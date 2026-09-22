@@ -111,6 +111,10 @@ export async function collectImovirtualPaginatedListings({
 
     const nextData = extractNextData(html);
     const rawPageListings = extractListings(nextData);
+    const pageListings = rawPageListings.map((listing) => ({
+      ...listing,
+      detectedAt: pageFetchedAt
+    }));
     const resolvedLastPage = resolveLastPage(nextData);
     if (resolvedLastPage) {
       lastPageKnown = resolvedLastPage;
@@ -121,17 +125,17 @@ export async function collectImovirtualPaginatedListings({
     if (typeof onPage === "function") {
       onPage({
         page,
-        found: rawPageListings.length,
+        found: pageListings.length,
         totalPages: lastPageKnown
       });
     }
 
-    if (rawPageListings.length === 0) {
+    if (pageListings.length === 0) {
       stopReason = "empty_page";
       break;
     }
 
-    const checkpointPage = filterPageListingsByCheckpoint(rawPageListings, checkpointMs);
+    const checkpointPage = filterPageListingsByCheckpoint(pageListings, checkpointMs);
     const effectiveListings = checkpointPage.filtered;
 
     if (checkpointMs !== null && checkpointPage.stopAtPage) {
@@ -143,7 +147,7 @@ export async function collectImovirtualPaginatedListings({
     }
 
     if (checkpointMs === null) {
-      listings.push(...rawPageListings);
+      listings.push(...pageListings);
     } else {
       listings.push(...effectiveListings);
     }

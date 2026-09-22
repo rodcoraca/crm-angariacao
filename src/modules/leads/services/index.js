@@ -22,6 +22,8 @@ export {
 
 export { canManageLead, canTransferLead } from "./leadPermissionService";
 
+export { carregarAcompanhamentoLeads } from "./leadsAcompanhamentoService";
+
 export {
   carregarAgentesParaFicha,
   carregarAgentesParaLeads,

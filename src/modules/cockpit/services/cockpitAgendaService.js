@@ -1,10 +1,23 @@
-import { queryAgendaLembretesHoje, queryAgendaVisitasHoje } from "../repositories";
+import { queryAgendaLembretesFuturos, queryAgendaLembretesHoje, queryAgendaVisitasHoje } from "../repositories";
 import { fetchRows } from "./sharedQueries";
 import { resolveEmpresaId } from "../../../utils/empresaScope";
+import { resolverContratoIdentidade } from "../../leads/utils/identityContract";
 import { listarCompromissosPorPeriodo } from "../../servicos/services/compromissosService";
 
 function normalizarHora(value) {
   return typeof value === "string" ? value.slice(0, 5) : value || "";
+}
+
+function normalizarLembretes(lembretes) {
+  return lembretes.map((item) => ({
+    ...item,
+    id: item.lead_id || item.id,
+    nome: item.lead?.nome || "Lead sem nome",
+    telefone: item.lead?.telefone || "Sem telefone",
+    lembrete_ativo: item.estado === "ativo",
+    data_lembrete: item.data_lembrete,
+    hora_lembrete: item.hora_lembrete
+  }));
 }
 
 function mapCompromissoParaAgendaItem(compromisso) {
@@ -33,8 +46,9 @@ function mapCompromissoParaAgendaItem(compromisso) {
   };
 }
 
-export async function fetchCockpitAgenda() {
-  const empresaId = await resolveEmpresaId();
+export async function fetchCockpitAgenda(user = null) {
+  const empresaId = await resolveEmpresaId(user);
+  const usuarioId = resolverContratoIdentidade(user).usuarioId;
   if (!empresaId) {
     return { visitasHoje: [], lembretesHoje: [], compromissosHoje: [] };
   }
@@ -46,32 +60,34 @@ export async function fetchCockpitAgenda() {
   inicioHoje.setHours(0, 0, 0, 0);
   const inicioAmanha = new Date(inicioHoje);
   inicioAmanha.setDate(inicioAmanha.getDate() + 1);
+  const fimFuturo = new Date(inicioHoje);
+  fimFuturo.setDate(fimFuturo.getDate() + 30);
 
   const dataHoje = [
     inicioHoje.getFullYear(),
     String(inicioHoje.getMonth() + 1).padStart(2, "0"),
     String(inicioHoje.getDate()).padStart(2, "0")
   ].join("-");
+  const dataAmanha = inicioAmanha.toISOString().slice(0, 10);
+  const dataFimFuturo = fimFuturo.toISOString().slice(0, 10);
 
-  const [visitasHoje, lembretesHoje, compromissosHojeResult] = await Promise.all([
+  const lembretesQuery = usuarioId
+    ? queryAgendaLembretesHoje(camposLembrete, dataHoje, limite, empresaId, usuarioId)
+    : null;
+  const lembretesFuturosQuery = usuarioId
+    ? queryAgendaLembretesFuturos(camposLembrete, dataAmanha, dataFimFuturo, 100, empresaId, usuarioId)
+    : null;
+
+  const [visitasHoje, lembretesHoje, lembretesFuturos, compromissosHojeResult] = await Promise.all([
     fetchRows(queryAgendaVisitasHoje(camposAgenda, inicioHoje.toISOString(), inicioAmanha.toISOString(), limite, empresaId)),
-    fetchRows(queryAgendaLembretesHoje(camposLembrete, dataHoje, limite, empresaId)),
+    lembretesQuery ? fetchRows(lembretesQuery) : Promise.resolve([]),
+    lembretesFuturosQuery ? fetchRows(lembretesFuturosQuery) : Promise.resolve([]),
     listarCompromissosPorPeriodo(null, {
       empresa_id: empresaId,
       data: dataHoje,
       limit: limite
     })
   ]);
-
-  const lembretesHojeNormalizados = lembretesHoje.map((item) => ({
-    ...item,
-    id: item.lead_id || item.id,
-    nome: item.lead?.nome || "Lead sem nome",
-    telefone: item.lead?.telefone || "Sem telefone",
-    lembrete_ativo: item.estado === "ativo",
-    data_lembrete: item.data_lembrete,
-    hora_lembrete: item.hora_lembrete
-  }));
 
   const compromissosHoje = Array.isArray(compromissosHojeResult?.data)
     ? compromissosHojeResult.data
@@ -81,7 +97,8 @@ export async function fetchCockpitAgenda() {
 
   return {
     visitasHoje,
-    lembretesHoje: lembretesHojeNormalizados,
+    lembretesHoje: normalizarLembretes(lembretesHoje),
+    lembretesFuturos: normalizarLembretes(lembretesFuturos),
     compromissosHoje
   };
 }

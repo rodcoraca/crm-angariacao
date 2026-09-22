@@ -301,6 +301,10 @@ export default function SyncProgressModal() {
           50%  { opacity: 1; }
           100% { opacity: 0.4; }
         }
+        @keyframes osflow-sync-indeterminate {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(300%); }
+        }
       `}</style>
       <Modal
         open={open}
@@ -536,6 +540,31 @@ export default function SyncProgressModal() {
               }}>
                 Progresso da sincronização
               </div>
+
+              {isBlocking ? (
+                <div
+                  aria-hidden="true"
+                  style={{
+                    position: "relative",
+                    width: "100%",
+                    height: "4px",
+                    marginBottom: theme.spacing.sm,
+                    borderRadius: theme.borderRadius.full,
+                    background: theme.colors.surface,
+                    border: `1px solid ${theme.colors.border}`,
+                    overflow: "hidden"
+                  }}
+                >
+                  <div style={{
+                    position: "absolute",
+                    inset: 0,
+                    width: "35%",
+                    borderRadius: theme.borderRadius.full,
+                    background: theme.colors.primary,
+                    animation: "osflow-sync-indeterminate 1.4s ease-in-out infinite"
+                  }} />
+                </div>
+              ) : null}
 
               <div style={{
                 display: "grid",

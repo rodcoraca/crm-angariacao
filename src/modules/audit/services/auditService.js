@@ -235,21 +235,22 @@ export async function auditMutation(
   try {
     const result =
       await execute();
+    const resolvedContext = typeof context === "function" ? context(result) : context;
 
     if (eventType === "create") {
-      await registrarCriacao(context);
+      await registrarCriacao(resolvedContext);
     }
 
     if (eventType === "update") {
-      await registrarEdicao(context);
+      await registrarEdicao(resolvedContext);
     }
 
     if (eventType === "delete") {
-      await registrarExclusao(context);
+      await registrarExclusao(resolvedContext);
     }
 
     if (eventType === "lead.transfer") {
-      await writeAudit("lead.transfer", "success", context);
+      await writeAudit("lead.transfer", "success", resolvedContext);
     }
 
     return result;
@@ -258,9 +259,9 @@ export async function auditMutation(
       eventType,
       "error",
       {
-        ...context,
+        ...(typeof context === "function" ? context() : context),
         metadata: {
-          ...(context.metadata || {}),
+          ...((typeof context === "function" ? context() : context).metadata || {}),
           error:
             error?.message ||
             "unknown_error"

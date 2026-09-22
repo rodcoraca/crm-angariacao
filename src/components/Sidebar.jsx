@@ -138,7 +138,7 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
         {podeVerRota('dashboard') || podeVerRota('quente') || podeVerRota('morno') || podeVerRota('frio') ? (
           <>
             {(() => {
-              const isLeadsActive = ["dashboard", "quente", "morno", "frio"].includes(activeView);
+              const isLeadsActive = ["dashboard", "quente", "morno", "frio", "leads_acompanhamento"].includes(activeView);
               const menuStyles = getMenuStyles(isLeadsActive);
               return (
                 <SidebarItem
@@ -157,6 +157,7 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
                 {podeVerRota('quente') ? <SidebarItem style={getSubMenuStyle(activeView === "quente")} onClick={() => handleSelectView("quente")}>Quentes</SidebarItem> : null}
                 {podeVerRota('morno') ? <SidebarItem style={getSubMenuStyle(activeView === "morno")} onClick={() => handleSelectView("morno")}>Mornos</SidebarItem> : null}
                 {podeVerRota('frio') ? <SidebarItem style={getSubMenuStyle(activeView === "frio")} onClick={() => handleSelectView("frio")}>Frios</SidebarItem> : null}
+                {podeVerRota('leads_acompanhamento') ? <SidebarItem style={getSubMenuStyle(activeView === "leads_acompanhamento")} onClick={() => handleSelectView("leads_acompanhamento")}>Acompanhamento</SidebarItem> : null}
               </div>
             )}
           </>

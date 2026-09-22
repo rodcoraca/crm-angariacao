@@ -27,6 +27,12 @@ const MODULE_GROUPS = [
         base: "leads.cold"
       },
       {
+        key: "leads_acompanhamento",
+        label: "Acompanhamento de Leads",
+        base: "leads.acompanhamento",
+        actions: ["view"]
+      },
+      {
         key: "mensagens",
         label: "Mensagens",
         base: "messages"
@@ -153,8 +159,8 @@ const MODULE_GROUPS = [
   }
 ];
 
-function buildStandardPermissions(base) {
-  return STANDARD_ACTIONS.map((action) => ({
+function buildStandardPermissions(base, actions = STANDARD_ACTIONS) {
+  return actions.map((action) => ({
     code: `${base}.${action}`,
     action,
     label: action
@@ -165,7 +171,7 @@ export const PERMISSION_MODULES = MODULE_GROUPS.map((moduleItem) => ({
   key: moduleItem.key,
   label: moduleItem.label,
   groups: moduleItem.groups.map((groupItem) => {
-    const standardPermissions = buildStandardPermissions(groupItem.base);
+    const standardPermissions = buildStandardPermissions(groupItem.base, groupItem.actions);
     const extraPermissions = (groupItem.extras || []).map((extraAction) => ({
       code: `${groupItem.base}.${extraAction}`,
       action: extraAction,

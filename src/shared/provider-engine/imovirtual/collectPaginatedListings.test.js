@@ -11,9 +11,30 @@ describe('collectImovirtualPaginatedListings', () => {
     }
   });
 
-  const makeFetchPage = (pages) => async (page) => ({
+  const makeFetchPage = (pages, fetchedAtByPage = {}) => async (page) => ({
     html: `<script id="__NEXT_DATA__">${JSON.stringify(pages[page - 1] || makePage([]))}</script>`,
-    fetchedAt: new Date().toISOString()
+    fetchedAt: fetchedAtByPage[page] || new Date().toISOString()
+  });
+
+  it('associa detectedAt ao fetchedAt da página e preserva fetchedAt global', async () => {
+    const pageOneFetchedAt = '2026-09-17T10:00:00.000Z';
+    const pageTwoFetchedAt = '2026-09-17T10:00:01.000Z';
+    const result = await collectImovirtualPaginatedListings({
+      maxPages: 2,
+      fetchPage: makeFetchPage([
+        makePage([{ id: 'page-1', href: '/pt/anuncio/page-1', createdAtFirst: '2026-09-17T09:00:00.000Z' }]),
+        makePage([{ id: 'page-2', href: '/pt/anuncio/page-2', createdAtFirst: '2026-09-17T08:00:00.000Z' }])
+      ], {
+        1: pageOneFetchedAt,
+        2: pageTwoFetchedAt
+      })
+    });
+
+    expect(result.fetchedAt).toBe(pageOneFetchedAt);
+    expect(result.listings.map((listing) => listing.detectedAt)).toEqual([
+      pageOneFetchedAt,
+      pageTwoFetchedAt
+    ]);
   });
 
   it('A) página 1 totalmente posterior ao checkpoint continua', async () => {

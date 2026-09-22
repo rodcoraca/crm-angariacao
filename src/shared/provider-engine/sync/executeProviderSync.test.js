@@ -77,6 +77,39 @@ describe("executeProviderSync normalized contract", () => {
     });
   });
 
+  it("uses each Imovirtual listing detectedAt instead of the collector fetchedAt", async () => {
+    const insertedRows = [];
+    await executeProviderSync({
+      providerName: "imovirtual",
+      empresaId: "empresa-1",
+      listings: [baseListing("IMV123", {
+        source: "imovirtual",
+        createdAtFirst: "2026-09-12T10:00:00.000Z",
+        detectedAt: "2026-09-17T10:00:01.000Z"
+      })],
+      fetchedAt: "2026-09-17T10:00:00.000Z",
+      supabaseClient: createSupabaseInsertMock(insertedRows)
+    });
+
+    expect(insertedRows[0].detected_at).toBe("2026-09-17T10:00:01.000Z");
+  });
+
+  it("keeps the global fetchedAt detected_at behavior for other providers", async () => {
+    const insertedRows = [];
+    await executeProviderSync({
+      providerName: "olx",
+      empresaId: "empresa-1",
+      listings: [baseListing("OLX123", {
+        detectedAt: "2026-09-17T10:00:01.000Z"
+      })],
+      fetchedAt: "2026-09-17T10:00:00.000Z",
+      supabaseClient: createSupabaseInsertMock(insertedRows),
+      allowListingsWithoutCreatedAtFirst: true
+    });
+
+    expect(insertedRows[0].detected_at).toBe("2026-09-17T10:00:00.000Z");
+  });
+
   it("converts Para o topo to a pure published_at timestamp", async () => {
     const insertedRows = [];
     await executeProviderSync({

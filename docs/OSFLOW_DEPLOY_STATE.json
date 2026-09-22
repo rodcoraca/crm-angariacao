@@ -1,0 +1,64 @@
+{
+  "baseline_id": "OSFLOW-BASELINE-20260922-DB079-DEPLOYED",
+  "baseline_date": "2026-09-22",
+  "environment": "linked-remote",
+  "branch": "main",
+  "git_commit": "7fa6773af4084fb1d94b75d3f66897d1a7ed8c6b",
+  "worktree_status": "dirty",
+  "status": "deployed_with_exceptions",
+  "last_remote_migration": "20260903_db058_unidades_unique_fracao",
+  "last_homologated_migration": null,
+  "last_deployed_migration": "20260922_db079_leads_acompanhamento_global_kpis.sql",
+  "deployed_migrations": [
+    "20260922_db077_leads_acompanhamento.sql",
+    "20260922_db078_leads_acompanhamento_hardening.sql",
+    "20260922_db079_leads_acompanhamento_global_kpis.sql"
+  ],
+  "preserved_migrations": [
+    "20260911_db070_radar_lead_import_claim.sql",
+    "20260917_db076_lead_lembretes_personal_scope.sql"
+  ],
+  "pending_migrations": [
+    "20260911_db070_radar_lead_import_claim.sql",
+    "20260911_db071_lead_commercial_statuses.sql",
+    "20260917_db074_radar_imported_at.sql",
+    "20260917_db076_lead_lembretes_personal_scope.sql",
+    "20260922_db077_leads_acompanhamento.sql",
+    "20260922_db078_leads_acompanhamento_hardening.sql",
+    "20260922_db079_leads_acompanhamento_global_kpis.sql"
+  ],
+  "planned_feature_order": [
+    "20260911_db070_radar_lead_import_claim.sql",
+    "20260917_db076_lead_lembretes_personal_scope.sql",
+    "20260922_db077_leads_acompanhamento.sql",
+    "20260922_db078_leads_acompanhamento_hardening.sql",
+    "20260922_db079_leads_acompanhamento_global_kpis.sql"
+  ],
+  "deployed_at": "2026-09-22",
+  "deployed_by": "GitHub Copilot",
+  "deploy_method": "supabase db query --linked --file",
+  "deploy_result": "success_with_known_exceptions",
+  "build_validated": false,
+  "tests": {
+    "focused_passed": 4,
+    "focused_failed": 0,
+    "full_passed": 197,
+    "full_failed": 1,
+    "legacy_failure": "src/App.test.js: renders learn react link"
+  },
+  "database_validation": {
+    "schema_lint": "passed",
+    "transactional_dry_run_db079": "passed_rolled_back",
+    "authenticated_rpc_test": "passed_admin_claim",
+    "cross_tenant_test": "passed_forbidden_other_company"
+  },
+  "edge_functions": [],
+  "known_exceptions": [
+    "Remote history does not register DB-070, DB-076, DB-077, DB-078 or DB-079; no migration repair was executed.",
+    "DB-070 and DB-076 were preserved because their relevant objects were already reflected remotely.",
+    "Worktree contains unrelated and related uncommitted changes.",
+    "Production build is blocked by pre-existing lint warnings outside this phase.",
+    "Full browser session validation is not available in the project harness.",
+    "Cross-tenant RPC validation used an authenticated ADMIN claim and returned forbidden for another company."
+  ]
+}

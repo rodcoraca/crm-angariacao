@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchAgendaOperacional } from "../services";
-import { mapCockpitAgendaData } from "../viewmodels/cockpitAgendaViewModel";
+import { mapCockpitAgendaData, mapCockpitFutureAgendaData } from "../viewmodels/cockpitAgendaViewModel";
 
-export function useCockpitAgenda() {
+export function useCockpitAgenda(user = null) {
   const [data, setData] = useState([]);
+  const [futureData, setFutureData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -12,15 +13,17 @@ export function useCockpitAgenda() {
     setError(false);
 
     try {
-      const raw = await fetchAgendaOperacional();
+      const raw = await fetchAgendaOperacional(user);
       setData(mapCockpitAgendaData(raw));
+      setFutureData(mapCockpitFutureAgendaData(raw));
     } catch {
       setError(true);
       setData([]);
+      setFutureData([]);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     let isMounted = true;
@@ -30,13 +33,15 @@ export function useCockpitAgenda() {
       setError(false);
 
       try {
-        const raw = await fetchAgendaOperacional();
+        const raw = await fetchAgendaOperacional(user);
         if (!isMounted) return;
         setData(mapCockpitAgendaData(raw));
+        setFutureData(mapCockpitFutureAgendaData(raw));
       } catch {
         if (!isMounted) return;
         setError(true);
         setData([]);
+        setFutureData([]);
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -47,10 +52,11 @@ export function useCockpitAgenda() {
     return () => {
       isMounted = false;
     };
-  }, []);
+  }, [user]);
 
   return {
     data,
+    futureData,
     loading,
     error,
     refresh

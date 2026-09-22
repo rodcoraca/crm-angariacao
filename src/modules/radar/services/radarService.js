@@ -92,7 +92,11 @@ function mapOpportunityToLeadPayload(opportunity, user) {
     tipo: opportunity?.score >= 85 ? "quente" : opportunity?.score >= 75 ? "morno" : "frio",
     origem: resolveLeadOriginFromProvider(metadata.provider || opportunity?.source || opportunity?.origem),
     observacao,
-    user
+    user,
+    auditDetails: {
+      importProviderLeadId: opportunity?.id || null,
+      importProvider: metadata.provider || opportunity?.source || opportunity?.origem || null
+    }
   };
 }
 
