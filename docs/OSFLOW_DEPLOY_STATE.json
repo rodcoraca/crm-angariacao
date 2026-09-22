@@ -3,7 +3,7 @@
   "baseline_date": "2026-09-22",
   "environment": "linked-remote",
   "branch": "main",
-  "git_commit": "7fa6773af4084fb1d94b75d3f66897d1a7ed8c6b",
+  "git_commit": "0890b03f49c928bd9a804cab3ad208245333f09c",
   "worktree_status": "dirty",
   "status": "deployed_with_exceptions",
   "last_remote_migration": "20260903_db058_unidades_unique_fracao",
