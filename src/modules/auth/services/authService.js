@@ -445,7 +445,7 @@ export async function requestPasswordReset(email, redirectTo) {
   });
 }
 
-export async function sendAccountActivationInvite(email, redirectTo, { nome = "", username = "", empresa = "" } = {}) {
+export async function sendAccountActivationInvite(email, redirectTo, { nome = "", username = "", empresa = "", usuarioId = "", authUserId = "", empresaId = "" } = {}) {
   const normalizedEmail =
     normalizeIdentifier(email)
       .toLowerCase();
@@ -515,6 +515,9 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
 
     const payload = {
       email: normalizedEmail,
+      usuarioId: usuarioId || undefined,
+      authUserId: authUserId || undefined,
+      empresaId: empresaId || undefined,
       redirectTo: redirectTo || undefined,
       nome: nome || undefined,
       username: username || undefined,
@@ -579,10 +582,10 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
   }
 }
 
-export async function getAuthUserInviteStatus(email) {
+export async function getAuthUserInviteStatus(email, { usuarioId = "", authUserId = "", empresaId = "" } = {}) {
   const normalizedEmail = normalizeIdentifier(email).toLowerCase();
 
-  if (!normalizedEmail) {
+  if (!normalizedEmail && !usuarioId && !authUserId) {
     return {
       data: null,
       error: {
@@ -595,6 +598,9 @@ export async function getAuthUserInviteStatus(email) {
   const result = await supabase.functions.invoke("send-user-invite", {
     body: {
       email: normalizedEmail,
+      usuarioId: usuarioId || undefined,
+      authUserId: authUserId || undefined,
+      empresaId: empresaId || undefined,
       action: "status"
     }
   });
@@ -612,6 +618,37 @@ export async function getAuthUserInviteStatus(email) {
     },
     error: null
   };
+}
+
+export async function updateAuthUserEmail({ usuarioId, authUserId, empresaId, email, newEmail }) {
+  const normalizedNewEmail = normalizeIdentifier(newEmail || email).toLowerCase();
+  if ((!usuarioId && !authUserId) || !normalizedNewEmail) {
+    return {
+      data: null,
+      error: { code: "missing_email_update_context", message: "Identidade Auth e novo email são obrigatórios." }
+    };
+  }
+
+  const result = await supabase.functions.invoke("send-user-invite", {
+    body: {
+      action: "update_email",
+      usuarioId,
+      authUserId,
+      empresaId,
+      email: normalizedNewEmail,
+      newEmail: normalizedNewEmail
+    }
+  });
+
+  if (result.error) return { data: null, error: result.error };
+  if (!result.data?.success) {
+    return {
+      data: null,
+      error: { code: result.data?.error || "auth_email_update_failed", message: result.data?.message || "Falha ao atualizar email no Auth." }
+    };
+  }
+
+  return { data: result.data?.data?.user || null, error: null };
 }
 
 export async function alterarPasswordUtilizador({ authUserId, password }) {
@@ -690,13 +727,23 @@ export async function alterarPasswordUtilizador({ authUserId, password }) {
   return { data: result.data?.data || null, error: null };
 }
 
-export async function markUserAccountActive(profileId) {
+export async function markUserAccountActive(profileId, { activationCompleted = false } = {}) {
   if (!profileId) {
     return {
       data: null,
       error: {
         code: "missing_profile_id",
         message: "Identificador do perfil obrigatorio para ativacao."
+      }
+    };
+  }
+
+  if (!activationCompleted) {
+    return {
+      data: null,
+      error: {
+        code: "activation_not_completed",
+        message: "A conta só pode ser ativada após a conclusão do onboarding."
       }
     };
   }
@@ -716,36 +763,12 @@ export async function markUserAccountActive(profileId) {
     .maybeSingle();
 }
 
-function isEmailConfirmed(authUser) {
-  return Boolean(authUser?.email_confirmed_at || authUser?.confirmed_at);
-}
-
 export async function reconcilePendingActivation(authUser, profile) {
   if (!authUser?.id || !profile?.id) {
     return { data: profile || null, error: null, updated: false };
   }
 
-  const accountStatus = String(profile?.account_status || "").trim().toLowerCase();
-  if (accountStatus !== "pending_activation" || !isEmailConfirmed(authUser)) {
-    return { data: profile, error: null, updated: false };
-  }
-
-  const activationResult = await markUserAccountActive(profile.id);
-  if (activationResult.error) {
-    return { data: profile, error: activationResult.error, updated: false };
-  }
-
-  return {
-    data: {
-      ...profile,
-      account_status: "active",
-      activated_at: activationResult.data?.activated_at || new Date().toISOString(),
-      disabled_at: null,
-      ativo: true
-    },
-    error: null,
-    updated: true
-  };
+  return { data: profile, error: null, updated: false };
 }
 
 export async function createAuthUserFromAdminFlow({ email, password, metadata = {}, existingAuthUserId = null }) {

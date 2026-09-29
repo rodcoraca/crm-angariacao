@@ -452,15 +452,24 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
     setEtapaAtiva('lista');
   }
 
-  async function reenviarConvite() {
+  async function reenviarConvite({ allowEmailChange = false } = {}) {
     if (!usuarioSelecionadoMeta?.id) return;
+
+    const targetEmail = String(form.email || '').trim().toLowerCase();
+    const currentEmail = String(usuarioSelecionadoMeta.email || '').trim().toLowerCase();
+    if (allowEmailChange && targetEmail !== currentEmail) {
+      const confirmed = window.confirm(`A ativação será enviada para ${targetEmail}. Confirmar alteração de email e reativação?`);
+      if (!confirmed) return;
+    }
 
     setErro('');
     setIsResendingInvite(true);
 
     try {
-      const { error, action } = await reenviarConviteAtivacaoUtilizador({
+      const { error } = await reenviarConviteAtivacaoUtilizador({
         usuarioId: usuarioSelecionadoMeta.id,
+        targetEmail: allowEmailChange ? targetEmail : currentEmail,
+        redirectTo: 'https://app.osflow.pt/?activation=1',
         currentUser,
       });
 
@@ -505,7 +514,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
   }
 
   async function repararAssociacaoAuth() {
-    if (!usuarioSelecionadoMeta?.id || !usuarioSelecionadoMeta?.email) return;
+    if (!usuarioSelecionadoMeta?.id) return;
 
     if (!can('users.edit')) {
       setErro('Sem permissão para executar esta ação.');
@@ -1169,7 +1178,8 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
               <UserAccountSection
                 conta={utilizadorVM.conta}
                 onChange={atualizarCampo}
-                onResendInvite={etapaAtiva === 'ficha' && modoEdicao ? reenviarConvite : null}
+                onResendInvite={etapaAtiva === 'ficha' && modoEdicao ? () => reenviarConvite() : null}
+                onReactivate={etapaAtiva === 'ficha' && modoEdicao ? () => reenviarConvite({ allowEmailChange: true }) : null}
                 resendInviteLoading={isResendingInvite}
                 onSendPasswordReset={etapaAtiva === 'ficha' && modoEdicao ? enviarRedefinicaoPassword : null}
                 sendPasswordResetLoading={isSendingPasswordReset}

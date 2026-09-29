@@ -9,6 +9,7 @@ import { registrarLogin } from "../modules/audit/services";
 import {
   createAuthUserFromAdminFlow,
   loadAuthorizationProfileByAuthUserId,
+  markUserAccountActive,
   reconcilePendingActivation,
   requestPasswordReset,
   resolveLoginEmail,
@@ -19,7 +20,7 @@ import { notifyError, notifySuccess } from "../components/ui/feedbackBus";
 
 const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
 
-export default function Login({ setUser, onLogin, passwordRecoveryMode = false, onPasswordRecoveryComplete = null }) {
+export default function Login({ setUser, onLogin, passwordRecoveryMode = false, passwordRecoveryUserId = null, passwordRecoveryReady = false, passwordRecoveryError = null, passwordRecoveryActivation = false, onPasswordRecoveryComplete = null }) {
   const theme = useTheme();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -37,7 +38,10 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
   useEffect(() => {
     setRecoveryMode(Boolean(passwordRecoveryMode));
-  }, [passwordRecoveryMode]);
+    if (passwordRecoveryError) {
+      notifyError(passwordRecoveryError);
+    }
+  }, [passwordRecoveryError, passwordRecoveryMode]);
 
   function clearOnboardingClientState() {
     if (typeof window === "undefined") return;
@@ -340,11 +344,38 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
     setIsUpdatingPassword(true);
     try {
+      if (!passwordRecoveryMode || !passwordRecoveryReady || !passwordRecoveryUserId) {
+        notifyError("Não existe uma sessão de recuperação válida. Solicite um novo email.");
+        return;
+      }
+
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || sessionData?.session?.user?.id !== passwordRecoveryUserId) {
+        notifyError("A sessão de recuperação expirou ou não corresponde ao link recebido.");
+        return;
+      }
+
       const { error } = await supabase.auth.updateUser({ password: novaPassword });
       if (error) {
         reportError(error, "Login.atualizarPasswordRecuperacao");
         notifyError("Não foi possível definir a nova password.");
         return;
+      }
+
+      if (passwordRecoveryActivation) {
+        const { data: profile, error: profileError } = await loadAuthorizationProfileByAuthUserId(passwordRecoveryUserId);
+        if (profileError || !profile?.id) {
+          reportError(profileError || new Error("Perfil de ativação não encontrado."), "Login.atualizarPasswordRecuperacao.profile");
+          notifyError("A password foi definida, mas não foi possível concluir a ativação da conta.");
+          return;
+        }
+
+        const activationResult = await markUserAccountActive(profile.id, { activationCompleted: true });
+        if (activationResult.error) {
+          reportError(activationResult.error, "Login.atualizarPasswordRecuperacao.activation");
+          notifyError("A password foi definida, mas não foi possível concluir a ativação da conta.");
+          return;
+        }
       }
 
       await supabase.auth.signOut();

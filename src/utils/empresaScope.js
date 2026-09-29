@@ -18,6 +18,29 @@ export function resolveEmpresaIdFromContext(currentUser) {
   );
 }
 
+export function buildCurrentUserWithEmpresa(currentUser = null, perfil = null) {
+  if (!currentUser) return null;
+
+  const empresaId = normalizeEmpresaId(
+    currentUser?.empresa_id
+    || currentUser?.user_metadata?.empresa_id
+    || perfil?.empresa_id
+    || currentUser?.perfil?.empresa_id
+    || null
+  );
+
+  return {
+    ...currentUser,
+    empresa_id: empresaId,
+    perfil: currentUser?.perfil || perfil || null,
+    user_metadata: {
+      ...(currentUser?.user_metadata || {}),
+      empresa_id: empresaId,
+      perfil: perfil?.perfil || currentUser?.user_metadata?.perfil || currentUser?.perfil?.perfil || null
+    }
+  };
+}
+
 export async function resolveEmpresaId(currentUser = null) {
   const fromContext = resolveEmpresaIdFromContext(currentUser);
   if (fromContext) return fromContext;

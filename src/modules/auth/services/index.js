@@ -12,6 +12,7 @@ export {
 	requestPasswordReset,
 	sendAccountActivationInvite,
 	getAuthUserInviteStatus,
+	updateAuthUserEmail,
 	alterarPasswordUtilizador,
 	createAuthUserFromAdminFlow,
 	markUserAccountActive,

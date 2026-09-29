@@ -8,17 +8,6 @@ const corsHeaders = {
 
 type JsonMap = Record<string, unknown>;
 
-type AuthAdminUser = {
-  id: string;
-  email?: string | null;
-  email_confirmed_at?: string | null;
-};
-
-type AuthAdminListResult = {
-  users?: AuthAdminUser[];
-  nextPage?: number | null;
-};
-
 function jsonResponse(status: number, body: JsonMap) {
   return new Response(JSON.stringify(body), {
     status,
@@ -35,34 +24,6 @@ function normalizeIdentifier(value: unknown) {
 
 function normalizeEmail(value: unknown) {
   return normalizeIdentifier(value).toLowerCase();
-}
-
-async function findAuthUserByEmail(adminClient: ReturnType<typeof createClient>, email: string) {
-  const targetEmail = normalizeEmail(email);
-  if (!targetEmail) return null;
-
-  let page = 1;
-  const perPage = 200;
-
-  for (;;) {
-    const { data, error } = await adminClient.auth.admin.listUsers({ page, perPage });
-    if (error) {
-      throw error;
-    }
-
-    const typedData = (data || {}) as AuthAdminListResult;
-    const users = typedData.users || [];
-    const found = users.find((user) => normalizeEmail(user?.email) === targetEmail) || null;
-    if (found) return found;
-
-    if (!users.length || !typedData.nextPage) {
-      break;
-    }
-
-    page = typedData.nextPage;
-  }
-
-  return null;
 }
 
 Deno.serve(async (request) => {
@@ -115,15 +76,14 @@ Deno.serve(async (request) => {
 
     const payload = await request.json().catch(() => ({}));
     const usuarioId = normalizeIdentifier(payload?.usuarioId);
-    const email = normalizeEmail(payload?.email);
     const empresaId = normalizeIdentifier(payload?.empresaId) || null;
     const actorUserId = normalizeIdentifier(payload?.actorUserId) || null;
 
-    if (!usuarioId || !email) {
+    if (!usuarioId || !empresaId) {
       return jsonResponse(400, {
         success: false,
         error: "missing_payload",
-        message: "usuarioId e email são obrigatórios para reparação."
+        message: "usuarioId e empresaId são obrigatórios para reparação."
       });
     }
 
@@ -153,29 +113,90 @@ Deno.serve(async (request) => {
       });
     }
 
-    const authUser = await findAuthUserByEmail(adminClient, email);
-    if (!authUser?.id) {
-      return jsonResponse(404, {
+    const { data: actorProfile, error: actorProfileError } = await adminClient
+      .from("usuarios")
+      .select("id,empresa_id")
+      .eq("auth_user_id", callerData.user.id)
+      .eq("empresa_id", empresaId)
+      .maybeSingle();
+
+    if (actorProfileError || !actorProfile) {
+      return jsonResponse(403, {
         success: false,
-        error: "auth_user_not_found",
-        message: "Não foi encontrado auth.users para o email informado."
+        error: "tenant_access_denied",
+        message: "O administrador não pertence à empresa do utilizador."
+      });
+    }
+
+    const { data: roleRows, error: roleError } = await adminClient
+      .from("user_roles")
+      .select("role_id,empresa_id")
+      .eq("user_id", callerData.user.id)
+      .or(`empresa_id.is.null,empresa_id.eq.${empresaId}`);
+
+    if (roleError) throw roleError;
+    const roleIds = (roleRows || []).map((row) => row.role_id).filter(Boolean);
+    let canEditUsers = false;
+    if (roleIds.length) {
+      const { data: permissionRows, error: permissionError } = await adminClient
+        .from("role_permissions")
+        .select("permissions!inner(code,is_active)")
+        .in("role_id", roleIds);
+      if (permissionError) throw permissionError;
+      canEditUsers = (permissionRows || []).some((row) =>
+        row.permissions?.is_active !== false && row.permissions?.code === "users.edit"
+      );
+    }
+
+    if (!canEditUsers) {
+      return jsonResponse(403, {
+        success: false,
+        error: "permission_denied",
+        message: "Sem permissão users.edit para reparar associação."
+      });
+    }
+
+    const authUserId = normalizeIdentifier(profile.auth_user_id);
+    const authLookup = authUserId
+      ? await adminClient.auth.admin.getUserById(authUserId)
+      : { data: null, error: null };
+    const authUser = authLookup.data?.user || null;
+
+    if (!authUserId || authLookup.error || !authUser?.id) {
+      await adminClient
+        .from("audit_logs")
+        .insert([
+          {
+            event_type: "update",
+            status: "error",
+            user_id: actorUserId || callerData.user.id,
+            empresa_id: profile.empresa_id || empresaId,
+            modulo: "users",
+            entidade: "usuarios",
+            entidade_id: usuarioId,
+            user_agent: request.headers.get("user-agent") || null,
+            metadata: {
+              action: "repair_auth_association",
+              previousAuthUserId: profile.auth_user_id || null,
+              error: "auth_user_association_not_repairable",
+              autoActivated: false
+            },
+            created_at: new Date().toISOString()
+          }
+        ]);
+
+      return jsonResponse(409, {
+        success: false,
+        error: "auth_user_association_not_repairable",
+        message: "Não foi possível validar o auth_user_id existente; a associação não pode ser reparada automaticamente."
       });
     }
 
     const nowIso = new Date().toISOString();
-    const shouldAutoActivate = Boolean(authUser.email_confirmed_at) && String(profile.account_status || "").toLowerCase() === "pending_activation";
-
     const updatePayload: JsonMap = {
       auth_user_id: authUser.id,
       updated_at: nowIso
     };
-
-    if (shouldAutoActivate) {
-      updatePayload.account_status = "active";
-      updatePayload.activated_at = nowIso;
-      updatePayload.disabled_at = null;
-      updatePayload.ativo = true;
-    }
 
     const { data: updatedProfile, error: updateError } = await adminClient
       .from("usuarios")
@@ -208,8 +229,8 @@ Deno.serve(async (request) => {
             action: "repair_auth_association",
             previousAuthUserId: profile.auth_user_id || null,
             nextAuthUserId: authUser.id,
-            email,
-            autoActivated: shouldAutoActivate
+            email: normalizeEmail(profile.email),
+            autoActivated: false
           },
           created_at: nowIso
         }
@@ -220,7 +241,7 @@ Deno.serve(async (request) => {
       message: "Associação reparada com sucesso.",
       data: {
         profile: updatedProfile || null,
-        autoActivated: shouldAutoActivate
+        autoActivated: false
       }
     });
   } catch (error) {

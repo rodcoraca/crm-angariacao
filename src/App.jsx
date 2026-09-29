@@ -24,7 +24,6 @@ import EmpresasAdmin from "./pages/EmpresasAdmin";
 
 import Sidebar from "./components/Sidebar";
 import Layout from "./components/Layout";
-import Card from "./components/ui/Card";
 import {
   authorizeProtectedView,
   isProtectedView,
@@ -45,6 +44,7 @@ import FeedbackHost from "./components/ui/FeedbackHost";
 import { notifyError, notifyInfo } from "./components/ui/feedbackBus";
 import { NavigationGuard } from "./shared/navigation";
 import useVersionUpdateChecker from "./modules/version/useVersionUpdateChecker";
+import { buildCurrentUserWithEmpresa } from "./utils/empresaScope";
 
 /*Pauground Test*/
 //import WorkspacePlayground from "./pages/WorkspacePlayground";
@@ -83,16 +83,37 @@ function getInitialView() {
   return RESTORABLE_VIEWS.has(storedView) ? storedView : COCKPIT_VIEW;
 }
 
-function detectPasswordRecoveryHash() {
-  if (typeof window === "undefined") return false;
-  const hash = String(window.location.hash || "").toLowerCase();
-  return hash.includes("type=recovery") || hash.includes("type=invite");
+function getPasswordRecoveryUrlContext() {
+  if (typeof window === "undefined") {
+    return { isRecovery: false, code: "", accessToken: "", refreshToken: "" };
+  }
+
+  const searchParams = new URLSearchParams(window.location.search || "");
+  const hashParams = new URLSearchParams(String(window.location.hash || "").replace(/^#/, ""));
+  const type = String(hashParams.get("type") || searchParams.get("type") || "").toLowerCase();
+  const activation = String(hashParams.get("activation") || searchParams.get("activation") || "").toLowerCase();
+  const code = String(searchParams.get("code") || "").trim();
+  const accessToken = String(hashParams.get("access_token") || "").trim();
+  const refreshToken = String(hashParams.get("refresh_token") || "").trim();
+
+  return {
+    isRecovery: type === "recovery" || type === "invite" || Boolean(code) || Boolean(accessToken && refreshToken),
+    isActivation: activation === "1" || activation === "true",
+    code,
+    accessToken,
+    refreshToken
+  };
 }
 
 export default function App() {
   useVersionUpdateChecker();
 
-  const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(detectPasswordRecoveryHash);
+  const recoveryUrlContext = useMemo(getPasswordRecoveryUrlContext, []);
+  const [isPasswordRecoveryMode, setIsPasswordRecoveryMode] = useState(recoveryUrlContext.isRecovery);
+  const [isPasswordActivationMode, setIsPasswordActivationMode] = useState(recoveryUrlContext.isActivation);
+  const [recoveryUserId, setRecoveryUserId] = useState(null);
+  const [recoveryReady, setRecoveryReady] = useState(false);
+  const [recoveryError, setRecoveryError] = useState(null);
   const [user, setUser] = useState(null);
   const [perfil, setPerfil] = useState(null);
   const [authReady, setAuthReady] = useState(false);
@@ -119,6 +140,18 @@ export default function App() {
   const activityTrackingStartedRef = useRef(false);
   const bootstrapInFlightRef = useRef(false);
   const navigationGuardRef = useRef(null);
+  const recoveryPendingRef = useRef(recoveryUrlContext.isRecovery);
+  const recoveryModeRef = useRef(recoveryUrlContext.isRecovery);
+  const recoveryUserIdRef = useRef(null);
+  const recoveryResolvedRef = useRef(false);
+  const recoveryEventPromiseRef = useRef(null);
+  const recoveryEventResolveRef = useRef(null);
+
+  if (recoveryPendingRef.current && !recoveryEventPromiseRef.current) {
+    recoveryEventPromiseRef.current = new Promise((resolve) => {
+      recoveryEventResolveRef.current = resolve;
+    });
+  }
 
   const requestNavigation = useCallback((navigate, origin = "App") => {
     if (navigationGuardRef.current) {
@@ -179,8 +212,10 @@ export default function App() {
       console.log("[TIMEOUT][4] After expireSessionOnTimeout");
 
       if (actorId) {
+        const empresaId = user?.empresa_id || perfil?.empresa_id || user?.user_metadata?.empresa_id || null;
         await registrarNavegacao({
           userId: actorId,
+          empresaId,
           acao: "SESSION_TIMEOUT",
           detalhes: "Sessão terminada automaticamente por inatividade."
         });
@@ -454,14 +489,61 @@ export default function App() {
   useEffect(() => {
     let isMounted = true;
 
+    async function resolveRecoverySession() {
+      const { code, accessToken, refreshToken } = recoveryUrlContext;
+
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error || !data?.session?.user?.id) {
+          throw error || new Error("Sessão de recuperação inválida ou expirada.");
+        }
+        return data.session;
+      }
+
+      if (accessToken && refreshToken) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+        if (error || !data?.session?.user?.id) {
+          throw error || new Error("Token de recuperação inválido ou expirado.");
+        }
+        return data.session;
+      }
+
+      if (recoveryResolvedRef.current && recoveryUserIdRef.current) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error || data?.session?.user?.id !== recoveryUserIdRef.current) {
+          throw error || new Error("Sessão de recuperação não corresponde ao link recebido.");
+        }
+        return data.session;
+      }
+
+      const recoveryEventSession = await Promise.race([
+        recoveryEventPromiseRef.current,
+        new Promise((resolve) => window.setTimeout(() => resolve(null), 3000))
+      ]);
+      if (recoveryEventSession?.user?.id) {
+        return recoveryEventSession;
+      }
+
+      throw new Error("Não foi possível estabelecer uma sessão de recuperação segura.");
+    }
+
     async function bootstrapAuthSession() {
       bootstrapInFlightRef.current = true;
       try {
-        if (isPasswordRecoveryMode) {
-          const { data } = await supabase.auth.getSession();
-          if (data?.session?.user) {
-            await reconcilePendingActivationFromSession(data.session, "bootstrapAuthSession.passwordRecovery");
-          }
+        if (recoveryPendingRef.current) {
+          const recoverySession = await resolveRecoverySession();
+          const nextRecoveryUserId = recoverySession.user.id;
+          recoveryUserIdRef.current = nextRecoveryUserId;
+          recoveryResolvedRef.current = true;
+          recoveryModeRef.current = true;
+          setRecoveryUserId(nextRecoveryUserId);
+          setRecoveryReady(true);
+          setRecoveryError(null);
+          setIsPasswordRecoveryMode(true);
+          setIsPasswordActivationMode(recoveryUrlContext.isActivation);
           setUser(null);
           setPerfil(null);
           setAuthzReady(true);
@@ -502,7 +584,18 @@ export default function App() {
         if (!isMounted) return;
 
         reportAuthError(error, "App.bootstrapAuthSession");
-        notifyError("Erro interno ao recuperar a sessão.");
+        if (recoveryPendingRef.current) {
+          recoveryModeRef.current = true;
+          setRecoveryReady(false);
+          setRecoveryError(error?.message || "O link de recuperação é inválido ou expirou.");
+          setIsPasswordRecoveryMode(true);
+          setIsPasswordActivationMode(recoveryUrlContext.isActivation);
+          setUser(null);
+          setPerfil(null);
+          setAuthzReady(true);
+        } else {
+          notifyError("Erro interno ao recuperar a sessão.");
+        }
         setAuthzReady(true);
       } finally {
         bootstrapInFlightRef.current = false;
@@ -512,13 +605,28 @@ export default function App() {
       }
     }
 
-    bootstrapAuthSession();
     const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!isMounted) return;
 
       if (event === "PASSWORD_RECOVERY") {
-        void reconcilePendingActivationFromSession(session, "onAuthStateChange.PASSWORD_RECOVERY");
+        const nextRecoveryUserId = session?.user?.id || null;
+        if (!nextRecoveryUserId) {
+          setRecoveryReady(false);
+          setRecoveryError("Não foi possível validar a sessão de recuperação.");
+          return;
+        }
+
+        recoveryPendingRef.current = true;
+        recoveryModeRef.current = true;
+        recoveryResolvedRef.current = true;
+        recoveryUserIdRef.current = nextRecoveryUserId;
+        recoveryEventResolveRef.current?.(session);
+        recoveryEventResolveRef.current = null;
+        setRecoveryUserId(nextRecoveryUserId);
+        setRecoveryReady(true);
+        setRecoveryError(null);
         setIsPasswordRecoveryMode(true);
+        setIsPasswordActivationMode(recoveryUrlContext.isActivation);
         setUser(null);
         setPerfil(null);
         setAuthzReady(true);
@@ -548,6 +656,13 @@ export default function App() {
 
       if (event === "SIGNED_IN") {
         // Só navega para o cockpit num login genuíno; ignora revalidações de token/foco.
+        if (recoveryPendingRef.current || recoveryModeRef.current) {
+          setUser(null);
+          setPerfil(null);
+          setAuthzReady(true);
+          return;
+        }
+
         const isSessionRestore =
           bootstrapInFlightRef.current ||
           (sessionInitializedRef.current && sessionInitializedUserRef.current === session?.user?.id);
@@ -568,10 +683,7 @@ export default function App() {
           return;
       }
 
-      if (isPasswordRecoveryMode) {
-        if (event === "SIGNED_IN") {
-          void reconcilePendingActivationFromSession(session, "onAuthStateChange.SIGNED_IN.passwordRecovery");
-        }
+      if (recoveryPendingRef.current || recoveryModeRef.current) {
         setUser(null);
         setPerfil(null);
         setAuthzReady(true);
@@ -625,11 +737,13 @@ export default function App() {
       }, 0);
     });
 
+    bootstrapAuthSession();
+
     return () => {
       isMounted = false;
       listener?.subscription?.unsubscribe?.();
     };
-  }, [entrarNoCockpit, hydrateSessionFromAuth, isPasswordRecoveryMode, isSameUserSession, montarUsuarioSessao, reconcilePendingActivationFromSession, restoreEmpresaIdFromStorage]);
+  }, [entrarNoCockpit, hydrateSessionFromAuth, isSameUserSession, montarUsuarioSessao, recoveryUrlContext, reconcilePendingActivationFromSession, restoreEmpresaIdFromStorage]);
 
   function getHeaderContextTitle() {
     if (leadSelecionadoId) return "Leads";
@@ -873,9 +987,11 @@ export default function App() {
 
   async function registrarLog(acao, detalhes) {
     const actorId = user?.perfil_id || user?.id || null;
+    const empresaId = user?.empresa_id || perfil?.empresa_id || user?.user_metadata?.empresa_id || null;
     if (!actorId) return;
     await registrarNavegacao({
       userId: actorId,
+      empresaId,
       acao,
       detalhes
     });
@@ -944,12 +1060,18 @@ export default function App() {
   }
 
 
+  const currentUserWithTenant = useMemo(() => buildCurrentUserWithEmpresa(user, perfil), [user, perfil]);
+
   if (!authReady || !user) {
     return (
       <>
         <Login
           onLogin={handleLogin}
           passwordRecoveryMode={isPasswordRecoveryMode}
+          passwordRecoveryUserId={recoveryUserId}
+          passwordRecoveryReady={recoveryReady}
+          passwordRecoveryActivation={isPasswordActivationMode}
+          passwordRecoveryError={recoveryError}
           onPasswordRecoveryComplete={() => {
             setIsPasswordRecoveryMode(false);
             setUser(null);
@@ -998,8 +1120,8 @@ export default function App() {
     comissoes: canAccessView("comissoes") ? <CalculadoraComissoes /> : <Forbidden requestedView="comissoes" requiredPermission={getRequiredPermission("comissoes")} />,
     estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} defaultSection="imoveis" /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
     estoque_np_empreendimentos: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} defaultSection="clientes" /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
-    usuarios: canAccessView("usuarios") ? <Usuarios currentUser={user} selectionRequest={userSelectionRequest} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
-    logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={user} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
+    usuarios: canAccessView("usuarios") ? <Usuarios currentUser={currentUserWithTenant} selectionRequest={userSelectionRequest} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
+    logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={currentUserWithTenant} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
   
     //workspace_playground: <WorkspacePlayground />,
   };
@@ -1032,7 +1154,7 @@ export default function App() {
   return (
     <NavigationGuard ref={navigationGuardRef}>
       <AuthProvider value={authContextValue}>
-        <TenantProvider currentUser={user}>
+        <TenantProvider currentUser={currentUserWithTenant}>
       <Layout
         collapsed={sidebarCollapsed}
         header={

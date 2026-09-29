@@ -8,6 +8,7 @@ export default function UserAccountSection({
   conta,
   onChange,
   onResendInvite = null,
+  onReactivate = null,
   resendInviteLoading = false,
   onSendPasswordReset = null,
   sendPasswordResetLoading = false,
@@ -15,7 +16,7 @@ export default function UserAccountSection({
   repairAssociationLoading = false,
   styles
 }) {
-  const shouldShowInviteButton = conta.modoEdicao && onResendInvite && !conta.ocultarReenviarConvite;
+  const shouldShowInviteButton = conta.modoEdicao && onResendInvite;
   const hasPasswordValue = String(conta.password || "").trim().length > 0;
   const passwordTooShort = hasPasswordValue && String(conta.password || "").length < 8;
 
@@ -77,8 +78,18 @@ export default function UserAccountSection({
               onClick={onResendInvite}
               disabled={resendInviteLoading}
             >
-              {resendInviteLoading ? "A enviar..." : "Reenviar convite"}
+              {resendInviteLoading ? "A enviar..." : "Reenviar ativação"}
             </button>
+            {onReactivate ? (
+              <button
+                type="button"
+                style={styles.smallButton}
+                onClick={onReactivate}
+                disabled={resendInviteLoading}
+              >
+                {resendInviteLoading ? "A enviar..." : "Alterar email e reenviar ativação"}
+              </button>
+            ) : null}
           </label>
         ) : null}
 

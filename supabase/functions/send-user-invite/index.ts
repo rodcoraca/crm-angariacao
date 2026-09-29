@@ -110,6 +110,73 @@ async function findAuthUserByEmail(
   return null;
 }
 
+async function findAuthUserById(adminClient: any, authUserId: string) {
+  if (!authUserId) return null;
+
+  const { data, error } = await adminClient.auth.admin.getUserById(authUserId);
+  if (error) throw error;
+  return data?.user || null;
+}
+
+async function hasUsersEditPermission(adminClient: any, operatorId: string, empresaId: string) {
+  const { data: operatorProfile, error: operatorError } = await adminClient
+    .from("usuarios")
+    .select("id,empresa_id")
+    .eq("auth_user_id", operatorId)
+    .eq("empresa_id", empresaId)
+    .maybeSingle();
+
+  if (operatorError || !operatorProfile) return false;
+
+  const { data: roleRows, error: roleError } = await adminClient
+    .from("user_roles")
+    .select("role_id,empresa_id")
+    .eq("user_id", operatorId)
+    .or(`empresa_id.is.null,empresa_id.eq.${empresaId}`);
+
+  if (roleError) throw roleError;
+
+  const roleIds = (roleRows || []).map((row: { role_id?: string }) => row.role_id).filter(Boolean);
+  if (!roleIds.length) return false;
+
+  const { data: permissionRows, error: permissionError } = await adminClient
+    .from("role_permissions")
+    .select("permissions!inner(code,is_active)")
+    .in("role_id", roleIds);
+
+  if (permissionError) throw permissionError;
+
+  return (permissionRows || []).some((row: any) =>
+    row.permissions?.is_active !== false && row.permissions?.code === "users.edit"
+  );
+}
+
+async function writeSecurityAudit(adminClient: any, {
+  operatorId,
+  empresaId,
+  usuarioId,
+  action,
+  error
+}: {
+  operatorId: string;
+  empresaId?: string | null;
+  usuarioId?: string | null;
+  action: string;
+  error: string;
+}) {
+  await adminClient.from("audit_logs").insert([{
+    user_id: operatorId,
+    empresa_id: empresaId || null,
+    modulo: "users",
+    entidade: "usuarios",
+    entidade_id: usuarioId || null,
+    event_type: "update",
+    status: "denied",
+    metadata: { action, error },
+    created_at: new Date().toISOString()
+  }]);
+}
+
 Deno.serve(async (req: Request) => {
   // ---------------------------------------------------------
   // PRE-FLIGHT
@@ -309,6 +376,10 @@ Deno.serve(async (req: Request) => {
         body.email
       );
 
+    const usuarioId = String(body.usuarioId || "").trim();
+    const authUserId = String(body.authUserId || "").trim();
+    const empresaId = String(body.empresaId || "").trim();
+
     const redirectTo =
       body.redirectTo;
 
@@ -368,7 +439,7 @@ Deno.serve(async (req: Request) => {
     // -------------------------------------------------------
     // VALIDATE EMAIL
     // -------------------------------------------------------
-    if (!email) {
+    if (!usuarioId && !authUserId && !email) {
       return logAndRespond(
         "missing_email",
         400,
@@ -383,11 +454,91 @@ Deno.serve(async (req: Request) => {
     // -------------------------------------------------------
     // FIND EXISTING AUTH USER
     // -------------------------------------------------------
-    const existingUser =
-      await findAuthUserByEmail(
-        admin,
-        email
-      );
+    let profile = null;
+    if (usuarioId) {
+      let profileQuery = admin
+        .from("usuarios")
+        .select("id,auth_user_id,email,empresa_id")
+        .eq("id", usuarioId);
+      const { data, error } = await profileQuery.maybeSingle();
+      if (error) throw error;
+      profile = data;
+      if (!profile) {
+        return logAndRespond("profile_not_found", 404, {
+          success: false,
+          error: "profile_not_found"
+        });
+      }
+    }
+
+    if (usuarioId) {
+      const targetEmpresaId = normalizeEmail(profile?.empresa_id);
+      const operatorProfile = targetEmpresaId
+        ? await admin
+          .from("usuarios")
+          .select("id,empresa_id")
+          .eq("auth_user_id", authUser.user.id)
+          .eq("empresa_id", targetEmpresaId)
+          .maybeSingle()
+        : { data: null, error: null };
+
+      if (operatorProfile.error || !operatorProfile.data) {
+        await writeSecurityAudit(admin, {
+          operatorId: authUser.user.id,
+          empresaId: targetEmpresaId || null,
+          usuarioId,
+          action: "send_user_invite",
+          error: "tenant_access_denied"
+        });
+        return logAndRespond("tenant_access_denied", 403, {
+          success: false,
+          error: "tenant_access_denied"
+        });
+      }
+
+      if (!(await hasUsersEditPermission(admin, authUser.user.id, targetEmpresaId))) {
+        await writeSecurityAudit(admin, {
+          operatorId: authUser.user.id,
+          empresaId: targetEmpresaId,
+          usuarioId,
+          action: "send_user_invite",
+          error: "permission_denied"
+        });
+        return logAndRespond("permission_denied", 403, {
+          success: false,
+          error: "permission_denied"
+        });
+      }
+
+      if (!profile.auth_user_id) {
+        await writeSecurityAudit(admin, {
+          operatorId: authUser.user.id,
+          empresaId: targetEmpresaId,
+          usuarioId,
+          action: "send_user_invite",
+          error: "missing_auth_user_id"
+        });
+        return logAndRespond("missing_auth_user_id", 409, {
+          success: false,
+          error: "missing_auth_user_id"
+        });
+      }
+    }
+
+    const resolvedAuthUserId = usuarioId
+      ? profile.auth_user_id
+      : authUserId || "";
+    const existingUser = resolvedAuthUserId
+      ? await findAuthUserById(admin, resolvedAuthUserId)
+      : await findAuthUserByEmail(admin, email);
+    const effectiveEmail = normalizeEmail(existingUser?.email || profile?.email || email);
+
+    if (!effectiveEmail) {
+      return logAndRespond("missing_email", 400, {
+        success: false,
+        error: "missing_email"
+      });
+    }
 
     const emailConfirmed =
       Boolean(
@@ -418,6 +569,64 @@ Deno.serve(async (req: Request) => {
       )
         .trim()
         .toLowerCase();
+
+    if (action === "update_email") {
+      const nextEmail = normalizeEmail(body.newEmail || body.email);
+      if (!existingUser?.id || !nextEmail) {
+        return logAndRespond("missing_email_update_context", 400, {
+          success: false,
+          error: "missing_email_update_context"
+        });
+      }
+
+      if (profile?.empresa_id) {
+        const { data: callerProfile, error: callerProfileError } = await admin
+          .from("usuarios")
+          .select("id")
+          .eq("auth_user_id", authUser.user.id)
+          .eq("empresa_id", profile.empresa_id)
+          .maybeSingle();
+        if (callerProfileError || !callerProfile) {
+          return logAndRespond("tenant_access_denied", 403, {
+            success: false,
+            error: "tenant_access_denied"
+          });
+        }
+
+        const { data: roleRows, error: roleError } = await admin
+          .from("user_roles")
+          .select("role_id,empresa_id")
+          .eq("user_id", authUser.user.id)
+          .or(`empresa_id.is.null,empresa_id.eq.${profile.empresa_id}`);
+        if (roleError) throw roleError;
+
+        const roleIds = (roleRows || []).map((row: { role_id?: string }) => row.role_id).filter(Boolean);
+        const { data: permissionRows, error: permissionError } = roleIds.length
+          ? await admin.from("role_permissions").select("permissions!inner(code,is_active)").in("role_id", roleIds)
+          : { data: [], error: null };
+        if (permissionError) throw permissionError;
+
+        const canEditUsers = (permissionRows || []).some((row: any) =>
+          row.permissions?.is_active !== false && row.permissions?.code === "users.edit"
+        );
+        if (!canEditUsers) {
+          return logAndRespond("permission_denied", 403, {
+            success: false,
+            error: "permission_denied"
+          });
+        }
+      }
+
+      const { data, error } = await admin.auth.admin.updateUserById(existingUser.id, {
+        email: nextEmail
+      });
+      if (error) throw error;
+
+      return logAndRespond("email_updated", 200, {
+        success: true,
+        data: { user: data?.user || null }
+      });
+    }
 
     if (
       action === "status"
@@ -555,7 +764,7 @@ Deno.serve(async (req: Request) => {
     } =
       await admin.auth.admin
         .inviteUserByEmail(
-          email,
+          effectiveEmail,
           inviteOptions
         );
 
