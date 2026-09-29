@@ -402,7 +402,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
                                 const selected = e.target.files?.[0];
                                 if (!selected) return;
                                 setFileUnidade(selected);
-                                await uploadPlanta(unidade.id);
+                                await uploadPlanta(unidade.id, selected);
                                 e.target.value = "";
                               }}
                               disabled={!podeEditarUnidades}
