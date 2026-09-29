@@ -257,8 +257,10 @@ export function useUnidades({ empreendimentoId = null } = {}) {
     }
   }
 
-  async function uploadPlanta(unidadeId = unidadeEdicao?.id || null) {
-    if (!file || !unidadeId) {
+  async function uploadPlanta(unidadeId = unidadeEdicao?.id || null, fileOverride = null) {
+    const ficheiroParaUpload = fileOverride || file;
+
+    if (!ficheiroParaUpload || !unidadeId) {
       return null;
     }
 
@@ -270,7 +272,7 @@ export function useUnidades({ empreendimentoId = null } = {}) {
         "create",
         async () => {
           const { insertError } = await uploadPlantaUnidadeService({
-            file,
+            file: ficheiroParaUpload,
             unidadeId,
             setProgresso,
             currentUser: user
@@ -292,7 +294,7 @@ export function useUnidades({ empreendimentoId = null } = {}) {
             action: "Upload de planta",
             unidade_id: unidadeId,
             empreendimento_id: empreendimentoId,
-            ficheiro_nome: file?.name || null,
+            ficheiro_nome: ficheiroParaUpload?.name || null,
             tipo_documento: "planta"
           }
         }
