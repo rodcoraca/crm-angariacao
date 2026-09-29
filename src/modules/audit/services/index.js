@@ -9,6 +9,12 @@ export {
 } from "./auditService.js";
 
 export {
+  normalizarRegistoContexto,
+  registrarEvento,
+  listarRegistos
+} from "./registoService.js";
+
+export {
   listarUtilizadoresIdentityAccess,
   listarAtividadeUtilizador
 } from "./identityAccessLogService.js";
