@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { supabase } from "../../../supabase";
 import { applyEmpresaScope, resolveEmpresaId } from "../../../utils/empresaScope";
 import { carregarLeadsDashboard } from "../services/leadsService";
@@ -8,22 +8,73 @@ import {
   formatarDataDashboard
 } from "../viewmodels/leadsViewModel";
 import { resolverNomeAgente } from "../services/agentService";
+import {
+  DEFAULT_DASHBOARD_FILTERS,
+  readDashboardFilters,
+  writeDashboardFilters
+} from "../utils/dashboardState";
+
+function resolveDashboardStorageScope(user) {
+  const empresaId = user?.empresa_id || user?.user_metadata?.empresa_id || "empresa";
+  const userId = user?.id || user?.perfil_id || user?.auth_user_id || "usuario";
+
+  return {
+    empresaId: String(empresaId || "empresa"),
+    userId: String(userId || "usuario")
+  };
+}
 
 export function useDashboardLeads({ onAbrirLead, theme, user }) {
+  const storageScope = useMemo(() => resolveDashboardStorageScope(user), [user]);
   const [leads, setLeads] = useState([]);
-  const [filtroTipo, setFiltroTipo] = useState("");
-  const [filtroStatus, setFiltroStatus] = useState("");
-  const [filtroUtilizador, setFiltroUtilizador] = useState("");
   const [opcoesUtilizador, setOpcoesUtilizador] = useState([]);
   const [agentes, setAgentes] = useState([]);
-  const [busca, setBusca] = useState("");
   const [leadSelecionado, setLeadSelecionado] = useState(null);
+  const [filtros, setFiltros] = useState(() => ({
+    ...DEFAULT_DASHBOARD_FILTERS,
+    ...readDashboardFilters(storageScope)
+  }));
 
   useEffect(() => {
-    async function carregar() {
-      const result = await carregarLeadsDashboard();
-      setLeads(result.data || []);
-    }
+    const restored = readDashboardFilters(storageScope);
+    setFiltros((prev) => {
+      const next = { ...DEFAULT_DASHBOARD_FILTERS, ...restored };
+      if (
+        prev.busca === next.busca &&
+        prev.filtroTipo === next.filtroTipo &&
+        prev.filtroStatus === next.filtroStatus &&
+        prev.filtroUtilizador === next.filtroUtilizador
+      ) {
+        return prev;
+      }
+
+      return next;
+    });
+  }, [storageScope]);
+
+  const setFiltroTipo = (value) => setFiltros((prev) => ({ ...prev, filtroTipo: value }));
+  const setFiltroStatus = (value) => setFiltros((prev) => ({ ...prev, filtroStatus: value }));
+  const setFiltroUtilizador = (value) => setFiltros((prev) => ({ ...prev, filtroUtilizador: value }));
+  const setBusca = (value) => setFiltros((prev) => ({ ...prev, busca: value }));
+
+  const { busca, filtroTipo, filtroStatus, filtroUtilizador } = filtros;
+
+  useEffect(() => {
+    writeDashboardFilters({
+      empresaId: storageScope.empresaId,
+      userId: storageScope.userId,
+      filters: filtros
+    });
+  }, [storageScope.empresaId, storageScope.userId, filtros]);
+
+  const refetchLeads = useCallback(async () => {
+    const result = await carregarLeadsDashboard();
+    setLeads(result.data || []);
+    return result;
+  }, []);
+
+  useEffect(() => {
+    void refetchLeads();
 
     async function carregarUtilizadores() {
       const empresaId = await resolveEmpresaId(user);
@@ -62,9 +113,8 @@ export function useDashboardLeads({ onAbrirLead, theme, user }) {
       );
     }
 
-    carregar();
     carregarUtilizadores();
-  }, [user]);
+  }, [refetchLeads, user]);
 
   const dados = useMemo(
     () => filtrarLeadsDashboard(leads, busca, filtroTipo, filtroUtilizador, filtroStatus),
@@ -114,6 +164,7 @@ export function useDashboardLeads({ onAbrirLead, theme, user }) {
     setBusca,
     setLeadSelecionado,
     exportarCSV,
+    refetchLeads,
     getInteractiveCellProps,
     nomeAgente,
     formatarData: formatarDataDashboard

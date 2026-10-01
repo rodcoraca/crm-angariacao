@@ -70,7 +70,7 @@ function criarContextoAuditoriaLeads({
   const contrato = resolverContratoIdentidade(user);
 
   return {
-    userId: contrato.responsavelId,
+    userId: contrato.authUserId,
     empresaId: user?.empresa_id || user?.user_metadata?.empresa_id || null,
     modulo: "leads",
     entidade: "leads",
@@ -488,7 +488,7 @@ export async function concluirLembreteLead({ leadId, user }) {
   }
 }
 
-export async function transferirLead({ leadId, agenteId, user }) {
+export async function transferirLead({ leadId, agenteId, user, origem = "FichaLead" }) {
   try {
     const empresaId = await resolveEmpresaId(user);
     if (!hasEmpresaId(empresaId)) {
@@ -511,7 +511,7 @@ export async function transferirLead({ leadId, agenteId, user }) {
       action: "transferir_responsavel_lead",
       details: {
         mutation: "lead_transfer",
-        origem: "FichaLead",
+        origem,
         lead: leadId,
         responsavelAnterior: leadAtual.agente_id || null,
         novoResponsavel: novoResponsavelId,
@@ -529,4 +529,55 @@ export async function transferirLead({ leadId, agenteId, user }) {
   } catch (error) {
     return { error };
   }
+}
+
+export async function transferirLeadsEmLote({ leadIds = [], agenteId, user, transferFn = transferirLead }) {
+  const ids = Array.from(new Set((leadIds || []).filter(Boolean).map(String)));
+
+  if (!ids.length) {
+    return {
+      error: null,
+      totalSelecionado: 0,
+      totalTransferido: 0,
+      totalFalhado: 0,
+      transferidas: [],
+      falhadas: [],
+      data: { transferidas: [], falhadas: [] }
+    };
+  }
+
+  const transferidas = [];
+  const falhadas = [];
+
+  for (const leadId of ids) {
+    const resultado = await transferFn({
+      leadId,
+      agenteId,
+      user,
+      origem: "DashboardLeadsBulkTransfer"
+    });
+
+    if (resultado?.error) {
+      falhadas.push({
+        leadId,
+        error: resultado.error
+      });
+      continue;
+    }
+
+    transferidas.push(resultado?.data || { id: leadId });
+  }
+
+  return {
+    error: null,
+    totalSelecionado: ids.length,
+    totalTransferido: transferidas.length,
+    totalFalhado: falhadas.length,
+    transferidas,
+    falhadas,
+    data: {
+      transferidas,
+      falhadas
+    }
+  };
 }
