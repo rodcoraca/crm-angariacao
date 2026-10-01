@@ -26,6 +26,7 @@ export default function FichaLead({ leadId, user, voltar }) {
     telefoneErro,
     atualizar,
     handleTelefoneChange,
+    handleTelefoneNaoDisponivelChange,
     nomeAgente,
     salvar,
     transferirAgente,
@@ -373,13 +374,29 @@ export default function FichaLead({ leadId, user, voltar }) {
       <div style={styles.grid}>
         <label style={styles.label}>
           Telefone
-          <Input
-            value={form.telefone}
-            onChange={(e) => atualizarTelefone(e.target.value)}
-            maxLength={12}
-            inputMode="numeric"
-            disabled={!podeGerir}
-          />
+          <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.sm, marginTop: theme.spacing.xs }}>
+            <Input
+              value={form.telefone || ""}
+              onChange={(e) => atualizarTelefone(e.target.value)}
+              maxLength={12}
+              inputMode="numeric"
+              disabled={!podeGerir || Boolean(form.telefone_nao_disponivel)}
+              style={{ flex: 1 }}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: theme.spacing.sm, marginTop: theme.spacing.sm, color: theme.colors.text }}>
+            <input
+              type="checkbox"
+              checked={Boolean(form.telefone_nao_disponivel)}
+              onChange={(event) => {
+                if (!podeGerir) return;
+                markDirty();
+                handleTelefoneNaoDisponivelChange(event.target.checked);
+              }}
+              disabled={!podeGerir}
+            />
+            <span>Não disponível</span>
+          </div>
           {telefoneErro && <div style={styles.errorText}>{telefoneErro}</div>}
         </label>
 

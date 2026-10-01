@@ -199,11 +199,14 @@ export async function carregarFichaLead(leadId, user = null) {
   );
   if (erroLembrete) return { lead: null, form: null, error: erroLembrete };
 
+  const telefoneNaoDisponivel = data.telefone_nao_disponivel === true;
+
   return {
     lead: data,
     form: {
       nome: data.nome || "",
-      telefone: data.telefone || "",
+      telefone: telefoneNaoDisponivel ? "" : (data.telefone || ""),
+      telefone_nao_disponivel: telefoneNaoDisponivel,
       tipo: data.tipo || "morno",
       origem: data.origem || "",
       observacoes: removeRadarLeadMetadataFromObservation(data.observacoes),
@@ -282,6 +285,7 @@ export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao
   const payload = {
     nome,
     telefone: hasPhone ? telefoneNormalizado : null,
+    telefone_nao_disponivel: false,
     tipo,
     origem,
     observacoes: observacao,
@@ -319,8 +323,26 @@ export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao
   }
 }
 
+export function prepararAtualizacaoLead({ form, telefoneNormalizado, telefoneNaoDisponivel }) {
+  return {
+    nome: form.nome,
+    telefone: telefoneNormalizado,
+    telefone_nao_disponivel: telefoneNaoDisponivel,
+    tipo: form.tipo,
+    origem: form.origem,
+    observacoes: form.observacoes,
+    status: form.status,
+    data_visita: form.status === "agendamento" ? (form.data_visita || null) : null,
+    hora_visita: form.status === "agendamento" ? (form.hora_visita || null) : null,
+    local_visita: form.status === "agendamento" ? (form.local_visita || null) : null,
+    status_visita: form.status === "agendamento" ? (form.status_visita || null) : null,
+    updated_at: new Date().toISOString()
+  };
+}
+
 export async function salvarFichaLead({ leadId, form, user }) {
-  const telefoneNormalizado = normalizarTelefone(form.telefone);
+  const telefoneNaoDisponivel = form?.telefone_nao_disponivel === true;
+  const telefoneNormalizado = telefoneNaoDisponivel ? null : normalizarTelefone(form.telefone);
   const empresaId = await resolveEmpresaId(user);
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
@@ -334,22 +356,24 @@ export async function salvarFichaLead({ leadId, form, user }) {
     return { error };
   }
 
-  if (!validarTelefone(telefoneNormalizado)) {
-    return {
-      error: { message: "Informe o telefone com 12 dígitos (indicativo + 9 dígitos).", invalidPhone: true }
-    };
-  }
+  if (!telefoneNaoDisponivel) {
+    if (!validarTelefone(telefoneNormalizado)) {
+      return {
+        error: { message: "Informe o telefone com 12 dígitos (indicativo + 9 dígitos).", invalidPhone: true }
+      };
+    }
 
-  const { data: leadDuplicada, error: erroDuplicado } = await fetchLeadByTelefoneExcludingId(leadId, telefoneNormalizado, empresaId);
+    const { data: leadDuplicada, error: erroDuplicado } = await fetchLeadByTelefoneExcludingId(leadId, telefoneNormalizado, empresaId);
 
-  if (erroDuplicado) {
-    return { error: erroDuplicado };
-  }
+    if (erroDuplicado) {
+      return { error: erroDuplicado };
+    }
 
-  if (leadDuplicada) {
-    return {
-      error: { message: "Já existe uma lead cadastrada com este telefone.", duplicatePhone: true }
-    };
+    if (leadDuplicada) {
+      return {
+        error: { message: "Já existe uma lead cadastrada com este telefone.", duplicatePhone: true }
+      };
+    }
   }
 
   const { data: lembreteAtivoAtual, error: erroLembreteAtual } = await fetchLeadLembreteAtivo(
@@ -369,19 +393,11 @@ export async function salvarFichaLead({ leadId, form, user }) {
     return { error: { message: "Escolha a data e a hora do lembrete." } };
   }
 
-  const updatePayload = {
-    nome: form.nome,
-    telefone: telefoneNormalizado,
-    tipo: form.tipo,
-    origem: form.origem,
-    observacoes: form.observacoes,
-    status: form.status,
-    data_visita: form.status === "agendamento" ? (form.data_visita || null) : null,
-    hora_visita: form.status === "agendamento" ? (form.hora_visita || null) : null,
-    local_visita: form.status === "agendamento" ? (form.local_visita || null) : null,
-    status_visita: form.status === "agendamento" ? (form.status_visita || null) : null,
-    updated_at: new Date().toISOString()
-  };
+  const updatePayload = prepararAtualizacaoLead({
+    form,
+    telefoneNormalizado,
+    telefoneNaoDisponivel
+  });
 
   try {
     const contexto = criarContextoAuditoriaLeads({
@@ -397,6 +413,7 @@ export async function salvarFichaLead({ leadId, form, user }) {
           tipo: leadAtual?.tipo || null,
           nome: leadAtual?.nome || null,
           telefone: leadAtual?.telefone || null,
+          telefone_nao_disponivel: Boolean(leadAtual?.telefone_nao_disponivel),
           origem: leadAtual?.origem || null,
           observacoes: leadAtual?.observacoes || null,
           agente_id: leadAtual?.agente_id || null,
@@ -410,6 +427,7 @@ export async function salvarFichaLead({ leadId, form, user }) {
           tipo: form.tipo || null,
           nome: form.nome || null,
           telefone: telefoneNormalizado || null,
+          telefone_nao_disponivel: telefoneNaoDisponivel,
           origem: form.origem || null,
           observacoes: form.observacoes || null,
           agente_id: leadAtual?.agente_id || null,

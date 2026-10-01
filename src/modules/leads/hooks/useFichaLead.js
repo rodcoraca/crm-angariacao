@@ -52,9 +52,25 @@ export function useFichaLead({ leadId, user }) {
   }
 
   function handleTelefoneChange(valor) {
+    if (form?.telefone_nao_disponivel) {
+      setForm((prev) => ({ ...prev, telefone: "" }));
+      setTelefoneErro("");
+      return;
+    }
+
     const { telefone, erro } = validarEntradaTelefone(valor);
-    setForm((prev) => ({ ...prev, telefone }));
+    setForm((prev) => ({ ...prev, telefone, telefone_nao_disponivel: false }));
     setTelefoneErro(erro);
+  }
+
+  function handleTelefoneNaoDisponivelChange(checked) {
+    const marcado = Boolean(checked);
+    setForm((prev) => ({
+      ...prev,
+      telefone: marcado ? "" : prev.telefone || "",
+      telefone_nao_disponivel: marcado
+    }));
+    setTelefoneErro("");
   }
 
   function nomeAgente(agenteId) {
@@ -105,6 +121,7 @@ export function useFichaLead({ leadId, user }) {
     telefoneErro,
     atualizar,
     handleTelefoneChange,
+    handleTelefoneNaoDisponivelChange,
     nomeAgente,
     salvar,
     transferirAgente,
