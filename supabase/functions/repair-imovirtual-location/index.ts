@@ -117,7 +117,7 @@ function findObjectByExternalId(value: unknown, externalId: string, seen = new S
 
 function extractJsonLdObjects(html: string) {
   const objects: unknown[] = [];
-  const regex = /<script\\b[^>]*type=["']application\\/ld\\+json["'][^>]*>([\\s\\S]*?)<\\/script>/gi;
+  const regex = /<script\b[^>]*type=["']application\\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
 
   for (const match of html.matchAll(regex)) {
     try {
