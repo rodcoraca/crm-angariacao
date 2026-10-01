@@ -25,12 +25,23 @@ function getExternalId(element, url) {
 function getLocationPath(item) {
   const location = item?.location || {};
   const address = location?.address || {};
+  const reverseLocations = Array.isArray(location?.reverseGeocoding?.locations)
+    ? location.reverseGeocoding.locations
+    : [];
+
+  const reverseByLevel = (level) =>
+    reverseLocations.find((entry) => String(entry?.locationLevel || "").toLowerCase() === level);
+
+  const reverseDistrict = reverseByLevel("district");
+  const reverseCouncil = reverseByLevel("council");
+  const reverseParish = reverseByLevel("parish");
 
   const district =
     address?.province?.name
     || location?.province?.name
     || item?.province?.name
     || item?.province
+    || reverseDistrict?.name
     || null;
 
   const municipality =
@@ -38,6 +49,11 @@ function getLocationPath(item) {
     || location?.county?.name
     || item?.county?.name
     || item?.county
+    || item?.municipality?.name
+    || item?.municipality
+    || item?.concelho?.name
+    || item?.concelho
+    || reverseCouncil?.name
     || null;
 
   const city =
@@ -45,6 +61,7 @@ function getLocationPath(item) {
     || location?.city?.name
     || item?.city?.name
     || item?.city
+    || reverseCouncil?.name
     || null;
 
   const freguesia =
@@ -56,6 +73,7 @@ function getLocationPath(item) {
     || item?.parish
     || item?.freguesia?.name
     || item?.freguesia
+    || reverseParish?.name
     || null;
 
   return {
