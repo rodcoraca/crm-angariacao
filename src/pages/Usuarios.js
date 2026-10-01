@@ -13,6 +13,7 @@ import {
   reenviarConviteAtivacaoUtilizador,
   registrarAcaoNegadaUtilizadores,
 } from '../modules/users/services';
+import { getAppRedirectBaseUrl } from '../modules/auth/services';
 import UserPersonalSection from '../components/users/UserPersonalSection';
 import UserAccountSection from '../components/users/UserAccountSection';
 import UserProfileSection from '../components/users/UserProfileSection';
@@ -27,12 +28,17 @@ const USER_STEPS = [
   { key: 'lista', label: 'Lista de Utilizadores' },
   { key: 'novo', label: 'Novo Utilizador' },
   { key: 'ficha', label: 'Ficha do Utilizador' },
-  { key: 'sessoes', label: 'Sessões' },
-  { key: 'auditoria', label: 'Auditoria' },
+  { key: 'atividade', label: 'Atividade' },
   { key: 'permissoes', label: 'Permissões' },
 ];
 
-const USER_STEPS_REQUIRE_SELECTION = ['ficha', 'sessoes', 'auditoria', 'permissoes'];
+const USER_ACTIVITY_TABS = [
+  { key: 'registos', label: 'Registos' },
+  { key: 'sessoes', label: 'Sessões' },
+  { key: 'navegacao', label: 'Navegação' },
+];
+
+const USER_STEPS_REQUIRE_SELECTION = ['ficha', 'atividade', 'permissoes'];
 
 function resolveAccountStatus(usuario) {
   const status = String(usuario?.account_status || '').trim().toLowerCase();
@@ -98,8 +104,12 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
   const [filtroEstado, setFiltroEstado] = useState('todos');
 
   const [perfilOrganizacional, setPerfilOrganizacional] = useState('');
+  const [atividadeTab, setAtividadeTab] = useState('registos');
   const [sessoesUsuario, setSessoesUsuario] = useState([]);
   const [auditoriaUsuario, setAuditoriaUsuario] = useState([]);
+  const [navegacaoUsuario, setNavegacaoUsuario] = useState([]);
+  const [atividadeCounts, setAtividadeCounts] = useState({ sessoes: 0, auditoria: 0, navegacao: 0 });
+  const [atividadeHasMore, setAtividadeHasMore] = useState({ sessoes: false, auditoria: false, navegacao: false });
   const [atividadeResumo, setAtividadeResumo] = useState(null);
   const [preferenciasUsuario, setPreferenciasUsuario] = useState(null);
   const [loadingTimeline, setLoadingTimeline] = useState(false);
@@ -108,6 +118,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
   const [isRepairingAssociation, setIsRepairingAssociation] = useState(false);
   const [paginaSessoes, setPaginaSessoes] = useState(0);
   const [paginaAuditoria, setPaginaAuditoria] = useState(0);
+  const [paginaNavegacao, setPaginaNavegacao] = useState(0);
 
   // Arquitetura SaaS (futuro): quando houver persistencia multi-tenant,
   // este formulario deve acomodar identificadores de contexto organizacional
@@ -137,10 +148,15 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
       console.log("[BUG-017][RESET_SESSOES]", { origem: "useEffect", ts: Date.now() });
       setSessoesUsuario([]);
       setAuditoriaUsuario([]);
+      setNavegacaoUsuario([]);
+      setAtividadeCounts({ sessoes: 0, auditoria: 0, navegacao: 0 });
+      setAtividadeHasMore({ sessoes: false, auditoria: false, navegacao: false });
       setAtividadeResumo(null);
       setPreferenciasUsuario(null);
+      setAtividadeTab('registos');
       setPaginaSessoes(0);
       setPaginaAuditoria(0);
+      setPaginaNavegacao(0);
       return;
     }
 
@@ -186,6 +202,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
       empresa_id: target.empresa_id || currentUser?.empresa_id || currentUser?.user_metadata?.empresa_id || null,
     });
     setEtapaAtiva('ficha');
+    setAtividadeTab('registos');
   }, [currentUser?.empresa_id, currentUser?.user_metadata?.empresa_id, selectionRequest, usuarios]);
 
   async function carregarUsuarios() {
@@ -206,41 +223,51 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
     return lista;
   }
 
-  async function carregarTimelineUsuario(usuario) {
-    console.log("[BUG-017][LOAD_START]", { usuarioId: usuario.id, ts: Date.now() });
+  async function carregarTimelineUsuario(usuario, page = 1) {
     if (!usuario?.id && !usuario?.auth_user_id) return;
 
     setLoadingTimeline(true);
+    setErro('');
 
     const [atividadeResult, resumoResult, preferenciasResult] = await Promise.all([
-      listarAtividadeUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id, pageSize: 500, currentUser }),
-      obterResumoAtividadePorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id, currentUser }),
-      listarPreferenciasPorUtilizador({ perfilId: usuario.id }),
+      listarAtividadeUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id, page, pageSize: 50, currentUser }),
+      page === 1 ? obterResumoAtividadePorUtilizador({ perfilId: usuario.id, authUserId: usuario.auth_user_id, currentUser }) : Promise.resolve({ data: atividadeResumo, error: null }),
+      page === 1 ? listarPreferenciasPorUtilizador({ perfilId: usuario.id }) : Promise.resolve({ data: preferenciasUsuario, error: null }),
     ]);
 
     if (atividadeResult.error) {
       setErro(atividadeResult.error.message || 'Falha ao carregar atividade do utilizador.');
     } else {
-      console.log("[BUG-017][LOAD_END]", { usuarioId: usuario.id, total: atividadeResult.sessoes.length, ts: Date.now() });
       setSessoesUsuario(atividadeResult.sessoes || []);
       setAuditoriaUsuario(atividadeResult.auditoria || []);
+      setNavegacaoUsuario(atividadeResult.navegacao || []);
+      setAtividadeCounts(atividadeResult.counts || { sessoes: 0, auditoria: 0, navegacao: 0 });
+      setAtividadeHasMore(atividadeResult.hasMore || { sessoes: false, auditoria: false, navegacao: false });
+      setPaginaSessoes(page - 1);
+      setPaginaAuditoria(page - 1);
+      setPaginaNavegacao(page - 1);
     }
 
     if (resumoResult.error) {
       setErro(resumoResult.error.message || 'Falha ao carregar atividade do utilizador.');
       setAtividadeResumo(null);
-    } else {
-      setAtividadeResumo(resumoResult.data || null);
+    } else if (resumoResult.data) {
+      setAtividadeResumo(resumoResult.data);
     }
 
     if (preferenciasResult.error) {
       setErro(preferenciasResult.error.message || 'Falha ao carregar preferencias do utilizador.');
       setPreferenciasUsuario(null);
-    } else {
-      setPreferenciasUsuario(preferenciasResult.data || null);
+    } else if (preferenciasResult.data) {
+      setPreferenciasUsuario(preferenciasResult.data);
     }
 
     setLoadingTimeline(false);
+  }
+
+  function carregarPaginaAtividade(page) {
+    if (!usuarioSelecionadoMeta || page < 1 || loadingTimeline) return;
+    carregarTimelineUsuario(usuarioSelecionadoMeta, page);
   }
 
   function resetForm() {
@@ -466,10 +493,12 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
     setIsResendingInvite(true);
 
     try {
+      const redirectBase = getAppRedirectBaseUrl();
+      const redirectTo = `${redirectBase.replace(/\/$/, '')}/?activation=1`;
       const { error } = await reenviarConviteAtivacaoUtilizador({
         usuarioId: usuarioSelecionadoMeta.id,
         targetEmail: allowEmailChange ? targetEmail : currentEmail,
-        redirectTo: 'https://app.osflow.pt/?activation=1',
+        redirectTo,
         currentUser,
       });
 
@@ -496,7 +525,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
     setIsSendingPasswordReset(true);
 
     try {
-      const redirectTo = typeof window !== 'undefined' ? window.location.origin : undefined;
+      const redirectTo = getAppRedirectBaseUrl();
       const { error } = await enviarRedefinicaoPasswordUtilizador({
         usuarioId: usuarioSelecionadoMeta.id,
         currentUser,
@@ -816,6 +845,8 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
       color: theme.colors.text,
       fontFamily: theme.typography.fontFamily,
       fontSize: `calc(${theme.typography.fontSize} * 0.82)`,
+      flex: '0 0 auto',
+      whiteSpace: 'nowrap',
     },
     actionButton: {
       minWidth: '150px',
@@ -872,7 +903,10 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
     stepNav: {
       display: 'flex',
       gap: theme.spacing.xs,
-      flexWrap: 'wrap',
+      flexWrap: 'nowrap',
+      overflowX: 'auto',
+      overflowY: 'hidden',
+      scrollbarWidth: 'thin',
       position: 'fixed',
       top: '70px',
       left: '230px',
@@ -883,6 +917,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
       boxSizing: 'border-box',
       minHeight: '48px',
       alignItems: 'center',
+      whiteSpace: 'nowrap',
       boxShadow: theme.shadow.sm,
     },
     stepButton: {
@@ -1101,8 +1136,7 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
             {usuarioSelecionadoMeta ? (
               <div style={styles.listActions}>
                 <button style={styles.smallButton} onClick={() => setEtapaAtiva('ficha')}>Ficha do Utilizador</button>
-                <button style={styles.smallButton} onClick={() => setEtapaAtiva('sessoes')}>Sessões</button>
-                <button style={styles.smallButton} onClick={() => setEtapaAtiva('auditoria')}>Auditoria</button>
+                <button style={styles.smallButton} onClick={() => setEtapaAtiva('atividade')}>Atividade</button>
                 <button style={styles.smallButton} onClick={() => setEtapaAtiva('permissoes')}>Permissões</button>
               </div>
             ) : (
@@ -1230,155 +1264,114 @@ export default function Usuarios({ currentUser, selectionRequest = null }) {
         >Atualizar utilizador</button>
       ) : null}
 
-      {etapaAtiva === 'sessoes' ? (
+      {etapaAtiva === 'atividade' ? (
         <div style={styles.card}>
-          <style>{`.osflow-trow:hover td { background: ${theme.colors.primary}18 !important; }`}</style>
           <div style={styles.tableHeader}>
-            <h3 style={{ ...styles.subtitle, margin: 0 }}>Sessões</h3>
-            <span style={styles.muted}>Total: {sessoesUsuario.length} registos</span>
+            <h3 style={{ ...styles.subtitle, margin: 0 }}>Atividade do utilizador</h3>
+            <span style={styles.muted}>
+              {atividadeTab === 'registos'
+                ? `${atividadeCounts.auditoria} registos`
+                : atividadeTab === 'sessoes'
+                  ? `${atividadeCounts.sessoes} registos`
+                  : `${atividadeCounts.navegacao} eventos`}
+            </span>
           </div>
-          <select
-            style={{ ...styles.input, maxWidth: '420px', marginBottom: theme.spacing.sm }}
-            value={usuarioSelecionadoId || ''}
-            onChange={(event) => selecionarUtilizadorPorId(event.target.value)}
-          >
-            <option value="">Selecionar utilizador...</option>
-            {usuarios.map((usuario) => (
-              <option key={usuario.id} value={usuario.id}>
-                {`${usuario.nome || ''} ${usuario.apelido || ''}`.trim()} - {usuario.email}
-              </option>
+
+          <div style={{ ...styles.listActions, marginTop: 0, paddingTop: 0, borderTop: 'none', marginBottom: theme.spacing.sm }}>
+            {USER_ACTIVITY_TABS.map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                style={{
+                  ...styles.smallButton,
+                  ...(atividadeTab === tab.key ? { background: theme.colors.primary, color: theme.colors.textLight, borderColor: theme.colors.primary } : {}),
+                }}
+                onClick={() => setAtividadeTab(tab.key)}
+              >
+                {tab.label}
+              </button>
             ))}
-          </select>
-          {!usuarioSelecionadoMeta ? <p style={styles.muted}>Selecione um utilizador na lista para visualizar sessões.</p> : null}
-          {loadingTimeline ? <p style={styles.muted}>A carregar sessões...</p> : null}
+          </div>
+
+          {!usuarioSelecionadoMeta ? <p style={styles.muted}>Selecione um utilizador na lista para visualizar a atividade.</p> : null}
+          {loadingTimeline ? <p style={styles.muted}>A carregar {atividadeTab === 'registos' ? 'registos' : atividadeTab === 'sessoes' ? 'sessões' : 'navegação'}...</p> : null}
+
           {usuarioSelecionadoMeta && !loadingTimeline ? (
-            (() => {
-              const PAGE_SIZE = 50;
-              const sorted = [...sessoesUsuario].sort((a, b) => (b.login_at || '').localeCompare(a.login_at || ''));
-              const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-              const page = Math.min(paginaSessoes, totalPages - 1);
-              const pageItems = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-              const hasIp = sorted.some((s) => s.ip_address);
-              const hasDevice = sorted.some((s) => s.device);
-              if (!sorted.length) return <p style={styles.muted}>Nenhum registo encontrado.</p>;
-              return (
+            atividadeTab === 'sessoes' ? (
+              sessoesUsuario.length ? (
                 <>
                   <div style={styles.tableWrap}>
                     <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>Estado</th>
-                          <th style={styles.th}>Login</th>
-                          <th style={styles.th}>Última atividade</th>
-                          <th style={styles.th}>Logout</th>
-                          {hasIp ? <th style={styles.th}>IP</th> : null}
-                          {hasDevice ? <th style={styles.th}>Dispositivo</th> : null}
+                      <thead><tr><th style={styles.th}>Estado</th><th style={styles.th}>Login</th><th style={styles.th}>Última atividade</th><th style={styles.th}>Logout</th><th style={styles.th}>Dispositivo</th></tr></thead>
+                      <tbody>{sessoesUsuario.map((sessao, idx) => (
+                        <tr key={sessao.id} className="osflow-trow" style={{ background: idx % 2 === 0 ? theme.colors.surface : theme.colors.surfaceSoft }}>
+                          <td style={styles.td}>{sessao.status || 'active'}</td>
+                          <td style={styles.td}>{sessao.login_at ? new Date(sessao.login_at).toLocaleString('pt-PT') : 'n/d'}</td>
+                          <td style={styles.td}>{sessao.last_activity_at ? new Date(sessao.last_activity_at).toLocaleString('pt-PT') : 'n/d'}</td>
+                          <td style={styles.td}>{sessao.logout_at ? new Date(sessao.logout_at).toLocaleString('pt-PT') : '—'}</td>
+                          <td style={styles.td}>{sessao.device || '—'}</td>
                         </tr>
-                      </thead>
-                      <tbody>
-                        {pageItems.map((sessao, idx) => (
-                          <tr
-                            key={sessao.id}
-                            className="osflow-trow"
-                            style={{ background: idx % 2 === 0 ? theme.colors.surface : theme.colors.surfaceSoft }}
-                          >
-                            <td style={styles.td}>{sessao.status || 'active'}</td>
-                            <td style={styles.td}>{sessao.login_at ? new Date(sessao.login_at).toLocaleString('pt-PT') : 'n/d'}</td>
-                            <td style={styles.td}>{sessao.last_activity_at ? new Date(sessao.last_activity_at).toLocaleString('pt-PT') : 'n/d'}</td>
-                            <td style={styles.td}>{sessao.logout_at ? new Date(sessao.logout_at).toLocaleString('pt-PT') : '—'}</td>
-                            {hasIp ? <td style={styles.td}>{sessao.ip_address || '—'}</td> : null}
-                            {hasDevice ? <td style={styles.td}>{sessao.device || '—'}</td> : null}
-                          </tr>
-                        ))}
-                      </tbody>
+                      ))}</tbody>
                     </table>
                   </div>
-                  {totalPages > 1 ? (
-                    <div style={styles.pagination}>
-                      <button style={styles.pageBtn} disabled={page === 0} onClick={() => setPaginaSessoes(page - 1)}>‹ Anterior</button>
-                      <span style={styles.muted}>Página {page + 1} de {totalPages} · registos {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)}</span>
-                      <button style={styles.pageBtn} disabled={page >= totalPages - 1} onClick={() => setPaginaSessoes(page + 1)}>Seguinte ›</button>
-                    </div>
-                  ) : null}
+                  <div style={styles.pagination}>
+                    <button style={styles.pageBtn} disabled={paginaSessoes <= 0 || loadingTimeline} onClick={() => carregarPaginaAtividade(paginaSessoes)}>‹ Anterior</button>
+                    <span style={styles.muted}>Página {paginaSessoes + 1} · {atividadeCounts.sessoes} sessões</span>
+                    <button style={styles.pageBtn} disabled={!atividadeHasMore.sessoes || loadingTimeline} onClick={() => carregarPaginaAtividade(paginaSessoes + 2)}>Seguinte ›</button>
+                  </div>
                 </>
-              );
-            })()
+              ) : <p style={styles.muted}>Nenhuma sessão encontrada.</p>
+            ) : atividadeTab === 'navegacao' ? (
+              navegacaoUsuario.length ? (
+                <>
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead><tr><th style={styles.th}>Data/Hora</th><th style={styles.th}>Ação</th><th style={styles.th}>Detalhes</th></tr></thead>
+                      <tbody>{navegacaoUsuario.map((evento, idx) => (
+                        <tr key={evento.id} className="osflow-trow" style={{ background: idx % 2 === 0 ? theme.colors.surface : theme.colors.surfaceSoft }}>
+                          <td style={styles.td}>{evento.created_at ? new Date(evento.created_at).toLocaleString('pt-PT') : 'n/d'}</td>
+                          <td style={styles.td}>{evento.acao || '—'}</td>
+                          <td style={styles.td}>{evento.detalhes || '—'}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                  <div style={styles.pagination}>
+                    <button style={styles.pageBtn} disabled={paginaNavegacao <= 0 || loadingTimeline} onClick={() => carregarPaginaAtividade(paginaNavegacao)}>‹ Anterior</button>
+                    <span style={styles.muted}>Página {paginaNavegacao + 1} · {atividadeCounts.navegacao} eventos</span>
+                    <button style={styles.pageBtn} disabled={!atividadeHasMore.navegacao || loadingTimeline} onClick={() => carregarPaginaAtividade(paginaNavegacao + 2)}>Seguinte ›</button>
+                  </div>
+                </>
+              ) : <p style={styles.muted}>Nenhum evento de navegação encontrado.</p>
+            ) : (
+              auditoriaUsuario.length ? (
+                <>
+                  <div style={styles.tableWrap}>
+                    <table style={styles.table}>
+                      <thead><tr><th style={styles.th}>Data/Hora</th><th style={styles.th}>Evento</th><th style={styles.th}>Módulo</th><th style={styles.th}>Estado</th><th style={styles.th}>Entidade</th></tr></thead>
+                      <tbody>{auditoriaUsuario.map((evento, idx) => (
+                        <tr key={evento.id} className="osflow-trow" style={{ background: idx % 2 === 0 ? theme.colors.surface : theme.colors.surfaceSoft }}>
+                          <td style={styles.td}>{evento.created_at ? new Date(evento.created_at).toLocaleString('pt-PT') : 'n/d'}</td>
+                          <td style={styles.td}>{evento.event_type || '—'}</td>
+                          <td style={styles.td}>{evento.modulo || '—'}</td>
+                          <td style={styles.td}>{evento.status || '—'}</td>
+                          <td style={styles.td}>{evento.entidade || evento.entidade_id || '—'}</td>
+                        </tr>
+                      ))}</tbody>
+                    </table>
+                  </div>
+                  <div style={styles.pagination}>
+                    <button style={styles.pageBtn} disabled={paginaAuditoria <= 0 || loadingTimeline} onClick={() => carregarPaginaAtividade(paginaAuditoria)}>‹ Anterior</button>
+                    <span style={styles.muted}>Página {paginaAuditoria + 1} · {atividadeCounts.auditoria} registos</span>
+                    <button style={styles.pageBtn} disabled={!atividadeHasMore.auditoria || loadingTimeline} onClick={() => carregarPaginaAtividade(paginaAuditoria + 2)}>Seguinte ›</button>
+                  </div>
+                </>
+              ) : <p style={styles.muted}>Nenhum registo de auditoria encontrado.</p>
+            )
           ) : null}
         </div>
       ) : null}
 
-      {etapaAtiva === 'auditoria' ? (
-        <div style={styles.card}>
-          <style>{`.osflow-trow:hover td { background: ${theme.colors.primary}18 !important; }`}</style>
-          <div style={styles.tableHeader}>
-            <h3 style={{ ...styles.subtitle, margin: 0 }}>Auditoria</h3>
-            <span style={styles.muted}>Total: {auditoriaUsuario.length} registos</span>
-          </div>
-          <select
-            style={{ ...styles.input, maxWidth: '420px', marginBottom: theme.spacing.sm }}
-            value={usuarioSelecionadoId || ''}
-            onChange={(event) => selecionarUtilizadorPorId(event.target.value)}
-          >
-            <option value="">Selecionar utilizador...</option>
-            {usuarios.map((usuario) => (
-              <option key={usuario.id} value={usuario.id}>
-                {`${usuario.nome || ''} ${usuario.apelido || ''}`.trim()} - {usuario.email}
-              </option>
-            ))}
-          </select>
-          {!usuarioSelecionadoMeta ? <p style={styles.muted}>Selecione um utilizador no dropdown para visualizar auditoria.</p> : null}
-          {loadingTimeline ? <p style={styles.muted}>A carregar auditoria...</p> : null}
-          {usuarioSelecionadoMeta && !loadingTimeline ? (
-            (() => {
-              const PAGE_SIZE = 50;
-              const sorted = [...auditoriaUsuario].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
-              const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
-              const page = Math.min(paginaAuditoria, totalPages - 1);
-              const pageItems = sorted.slice(page * PAGE_SIZE, page * PAGE_SIZE + PAGE_SIZE);
-              if (!sorted.length) return <p style={styles.muted}>Nenhum registo encontrado.</p>;
-              return (
-                <>
-                  <div style={styles.tableWrap}>
-                    <table style={styles.table}>
-                      <thead>
-                        <tr>
-                          <th style={styles.th}>Data/Hora</th>
-                          <th style={styles.th}>Evento</th>
-                          <th style={styles.th}>Módulo</th>
-                          <th style={styles.th}>Estado</th>
-                          <th style={styles.th}>Entidade</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {pageItems.map((evento, idx) => (
-                          <tr
-                            key={evento.id}
-                            className="osflow-trow"
-                            style={{ background: idx % 2 === 0 ? theme.colors.surface : theme.colors.surfaceSoft }}
-                          >
-                            <td style={styles.td}>{evento.created_at ? new Date(evento.created_at).toLocaleString('pt-PT') : 'n/d'}</td>
-                            <td style={styles.td}>{evento.event_type || '—'}</td>
-                            <td style={styles.td}>{evento.modulo || '—'}</td>
-                            <td style={styles.td}>{evento.status || '—'}</td>
-                            <td style={styles.td}>{evento.entidade || evento.entidade_id || '—'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  {totalPages > 1 ? (
-                    <div style={styles.pagination}>
-                      <button style={styles.pageBtn} disabled={page === 0} onClick={() => setPaginaAuditoria(page - 1)}>‹ Anterior</button>
-                      <span style={styles.muted}>Página {page + 1} de {totalPages} · registos {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, sorted.length)}</span>
-                      <button style={styles.pageBtn} disabled={page >= totalPages - 1} onClick={() => setPaginaAuditoria(page + 1)}>Seguinte ›</button>
-                    </div>
-                  ) : null}
-                </>
-              );
-            })()
-          ) : null}
-        </div>
-      ) : null}
     </div>
   );
 }

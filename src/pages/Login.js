@@ -8,6 +8,7 @@ import Card from "../components/ui/Card";
 import { registrarLogin } from "../modules/audit/services";
 import {
   createAuthUserFromAdminFlow,
+  getAppRedirectBaseUrl,
   loadAuthorizationProfileByAuthUserId,
   markUserAccountActive,
   reconcilePendingActivation,
@@ -399,9 +400,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
   }
 
   function getPasswordRecoveryRedirectUrl() {
-    if (typeof window === "undefined") return undefined;
-
-    return window.location.origin;
+    return getAppRedirectBaseUrl();
   }
 
   async function recuperarPassword() {

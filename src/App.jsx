@@ -36,6 +36,7 @@ import {
   updateSessionActivity,
   getLastActivityTimestamp,
   expireSessionOnTimeout,
+  resolveTransactionalAuthContext,
 } from "./modules/auth/services";
 import { AuthProvider } from "./modules/auth/context";
 import { TenantProvider } from "./modules/tenant";
@@ -84,25 +85,7 @@ function getInitialView() {
 }
 
 function getPasswordRecoveryUrlContext() {
-  if (typeof window === "undefined") {
-    return { isRecovery: false, code: "", accessToken: "", refreshToken: "" };
-  }
-
-  const searchParams = new URLSearchParams(window.location.search || "");
-  const hashParams = new URLSearchParams(String(window.location.hash || "").replace(/^#/, ""));
-  const type = String(hashParams.get("type") || searchParams.get("type") || "").toLowerCase();
-  const activation = String(hashParams.get("activation") || searchParams.get("activation") || "").toLowerCase();
-  const code = String(searchParams.get("code") || "").trim();
-  const accessToken = String(hashParams.get("access_token") || "").trim();
-  const refreshToken = String(hashParams.get("refresh_token") || "").trim();
-
-  return {
-    isRecovery: type === "recovery" || type === "invite" || Boolean(code) || Boolean(accessToken && refreshToken),
-    isActivation: activation === "1" || activation === "true",
-    code,
-    accessToken,
-    refreshToken
-  };
+  return resolveTransactionalAuthContext();
 }
 
 export default function App() {
@@ -236,7 +219,7 @@ export default function App() {
     }, IDLE_CHECK_INTERVAL_MS);
 
     return () => window.clearInterval(intervalId);
-  }, [user]);
+  }, [user, perfil?.empresa_id]);
 
   function reportAuthError(error, origem) {
     console.error(`[${origem}]`, error);
@@ -533,7 +516,10 @@ export default function App() {
     async function bootstrapAuthSession() {
       bootstrapInFlightRef.current = true;
       try {
-        if (recoveryPendingRef.current) {
+        const shouldPrioritizeRecovery = recoveryPendingRef.current || recoveryUrlContext.isRecovery;
+        if (shouldPrioritizeRecovery) {
+          recoveryPendingRef.current = true;
+          recoveryModeRef.current = true;
           const recoverySession = await resolveRecoverySession();
           const nextRecoveryUserId = recoverySession.user.id;
           recoveryUserIdRef.current = nextRecoveryUserId;
@@ -656,7 +642,7 @@ export default function App() {
 
       if (event === "SIGNED_IN") {
         // Só navega para o cockpit num login genuíno; ignora revalidações de token/foco.
-        if (recoveryPendingRef.current || recoveryModeRef.current) {
+        if (recoveryPendingRef.current || recoveryModeRef.current || recoveryUrlContext.isRecovery) {
           setUser(null);
           setPerfil(null);
           setAuthzReady(true);
@@ -683,7 +669,7 @@ export default function App() {
           return;
       }
 
-      if (recoveryPendingRef.current || recoveryModeRef.current) {
+      if (recoveryPendingRef.current || recoveryModeRef.current || recoveryUrlContext.isRecovery) {
         setUser(null);
         setPerfil(null);
         setAuthzReady(true);

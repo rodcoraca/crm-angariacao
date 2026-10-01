@@ -17,5 +17,7 @@ export {
 	createAuthUserFromAdminFlow,
 	markUserAccountActive,
 	reconcilePendingActivation,
-	repairUserAuthAssociations
+	repairUserAuthAssociations,
+	getAppRedirectBaseUrl,
+	resolveTransactionalAuthContext
 } from "./authService";

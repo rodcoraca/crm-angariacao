@@ -428,6 +428,55 @@ export async function loadUserProfileByLoginEmail(email) {
   return { data, error };
 }
 
+export function getAppRedirectBaseUrl({
+  location = typeof window !== "undefined" ? window.location : null,
+  env = typeof process !== "undefined" ? process.env : {}
+} = {}) {
+  const configuredUrl = String(env?.REACT_APP_APP_URL || "").trim();
+  if (configuredUrl) {
+    return configuredUrl.replace(/\/$/, "");
+  }
+
+  if (location?.origin) {
+    const hostname = String(location.hostname || "").toLowerCase();
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return String(location.origin || "http://localhost:3000").replace(/\/$/, "");
+    }
+
+    return String(location.origin).replace(/\/$/, "");
+  }
+
+  return "https://app.osflow.pt";
+}
+
+export function resolveTransactionalAuthContext({
+  location = typeof window !== "undefined" ? window.location : null,
+  search,
+  hash
+} = {}) {
+  const queryString = typeof search === "string" ? search : (location?.search || "");
+  const fragmentString = typeof hash === "string" ? hash : (location?.hash || "");
+  const searchParams = new URLSearchParams(queryString.startsWith("?") ? queryString.slice(1) : queryString);
+  const hashParams = new URLSearchParams(fragmentString.startsWith("#") ? fragmentString.slice(1) : fragmentString);
+
+  const type = String(hashParams.get("type") || searchParams.get("type") || "").toLowerCase();
+  const activation = String(hashParams.get("activation") || searchParams.get("activation") || "").toLowerCase();
+  const code = String(searchParams.get("code") || hashParams.get("code") || "").trim();
+  const accessToken = String(hashParams.get("access_token") || searchParams.get("access_token") || "").trim();
+  const refreshToken = String(hashParams.get("refresh_token") || searchParams.get("refresh_token") || "").trim();
+
+  return {
+    type,
+    activation,
+    code,
+    accessToken,
+    refreshToken,
+    isRecovery: (type === "recovery" || type === "invite") || Boolean(code) || Boolean(accessToken && refreshToken),
+    isActivation: activation === "1" || activation === "true",
+    shouldPrioritizePersistentSession: false
+  };
+}
+
 export async function requestPasswordReset(email, redirectTo) {
   const normalizedEmail = normalizeIdentifier(email);
   if (!normalizedEmail) {
