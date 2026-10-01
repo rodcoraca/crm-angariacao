@@ -161,6 +161,34 @@ describe('collectImovirtualPaginatedListings', () => {
       region: 'Porto',
       freguesia: 'Matosinhos'
     });
+
+    expect(mapNextDataItemToListing({
+      id: '503',
+      href: '/pt/anuncio/503',
+      location: {
+        address: {
+          city: null,
+          county: null,
+          municipality: null,
+          province: null
+        },
+        reverseGeocoding: {
+          locations: [
+            { locationLevel: 'district', name: 'Porto' },
+            { locationLevel: 'council', name: 'Vila Nova de Gaia' },
+            { locationLevel: 'parish', name: 'Santa Marinha e São Pedro da Afurada' },
+            { locationLevel: 'neighborhood', name: 'Afurada - Arrábida - Cavaco' }
+          ]
+        }
+      }
+    })).toMatchObject({
+      district: 'Porto',
+      municipality: 'Vila Nova de Gaia',
+      county: 'Vila Nova de Gaia',
+      city: 'Vila Nova de Gaia',
+      region: 'Porto',
+      freguesia: 'Santa Marinha e São Pedro da Afurada'
+    });
   });
 
 });
