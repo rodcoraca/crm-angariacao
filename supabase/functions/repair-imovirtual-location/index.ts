@@ -215,7 +215,16 @@ async function fetchListing(url: string, externalId: string) {
       hasProvince: /province|distrito/i.test(html),
       hasCounty: /county|concelho|município|municipio/i.test(html),
       hasCity: /city|cidade/i.test(html),
-      hasParish: /parish|freguesia/i.test(html)
+      hasParish: /parish|freguesia/i.test(html),
+      matched: !!matched,
+      matchedKeys: matched && typeof matched === "object" ? Object.keys(matched).slice(0, 80) : [],
+      matchedLocation: matched && typeof matched === "object" ? (matched as any).location ?? null : null,
+      matchedProvince: matched && typeof matched === "object" ? (matched as any).province ?? null : null,
+      matchedCounty: matched && typeof matched === "object" ? (matched as any).county ?? null : null,
+      matchedCity: matched && typeof matched === "object" ? (matched as any).city ?? null : null,
+      matchedParish: matched && typeof matched === "object"
+        ? ((matched as any).parish ?? (matched as any).freguesia ?? null)
+        : null
     };
 
     return {
