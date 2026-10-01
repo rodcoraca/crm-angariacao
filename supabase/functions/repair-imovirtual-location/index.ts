@@ -283,6 +283,7 @@ Deno.serve(async (request) => {
     .from("provider_leads")
     .select("id,external_id,url,location,city,district,freguesia,concelho,raw_data")
     .eq("provider", "imovirtual")
+    .or("location.is.null,location.eq.,city.is.null,city.eq.,district.is.null,district.eq.")
     .order("id", { ascending: true })
     .limit(batchSize);
 
