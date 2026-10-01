@@ -31,6 +31,8 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Build production
+        env:
+          CI: false
         run: npm run build
 
       - name: Configure SSH
