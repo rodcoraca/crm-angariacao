@@ -117,16 +117,36 @@ function findObjectByExternalId(value: unknown, externalId: string, seen = new S
 
 function extractJsonLdObjects(html: string) {
   const objects: unknown[] = [];
-  const regex = /<script\b[^>]*type=["']application\\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+  const opening = "<script";
+  const closing = "</script>";
 
-  for (const match of html.matchAll(regex)) {
-    try {
-      const parsed = JSON.parse(match[1]);
-      if (Array.isArray(parsed)) objects.push(...parsed);
-      else objects.push(parsed);
-    } catch {
-      // Ignore malformed JSON-LD blocks.
+  let cursor = 0;
+  while (cursor < html.length) {
+    const scriptStart = html.indexOf(opening, cursor);
+    if (scriptStart < 0) break;
+
+    const scriptEnd = html.indexOf(closing, scriptStart);
+    if (scriptEnd < 0) break;
+
+    const tagEnd = html.indexOf(">", scriptStart);
+    if (tagEnd < 0 || tagEnd > scriptEnd) {
+      cursor = scriptEnd + closing.length;
+      continue;
     }
+
+    const tag = html.slice(scriptStart, tagEnd + 1);
+    if (/type=["']application\/ld\+json["']/i.test(tag)) {
+      const body = html.slice(tagEnd + 1, scriptEnd);
+      try {
+        const parsed = JSON.parse(body);
+        if (Array.isArray(parsed)) objects.push(...parsed);
+        else objects.push(parsed);
+      } catch {
+        // Ignore malformed JSON-LD blocks.
+      }
+    }
+
+    cursor = scriptEnd + closing.length;
   }
 
   return objects;
