@@ -2,4 +2,7 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/osflowpt/public_html/
-    - /bin/cp -R build/* $DEPLOYPATH
+    - source /home/osflowpt/nodevenv/public_html/18/bin/activate
+    - npm ci --no-audit --no-fund
+    - npm run build
+    - /bin/cp -R build/. "$DEPLOYPATH"
