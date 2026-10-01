@@ -124,4 +124,43 @@ describe('collectImovirtualPaginatedListings', () => {
     expect(result.pagesProcessed).toBe(3);
     expect(result.stopReason).toBe('empty_page');
   });
+  it('mapeia localização tanto no formato top-level como no formato nested', async () => {
+    const { mapNextDataItemToListing } = await import('./parsers.js');
+
+    expect(mapNextDataItemToListing({
+      id: '501',
+      href: '/pt/anuncio/501',
+      province: 'Porto',
+      county: 'Vila Nova de Gaia',
+      city: 'Canidelo'
+    })).toMatchObject({
+      district: 'Porto',
+      municipality: 'Vila Nova de Gaia',
+      county: 'Vila Nova de Gaia',
+      city: 'Canidelo',
+      region: 'Porto',
+      freguesia: null
+    });
+
+    expect(mapNextDataItemToListing({
+      id: '502',
+      href: '/pt/anuncio/502',
+      location: {
+        address: {
+          province: { name: 'Porto' },
+          county: { name: 'Matosinhos' },
+          city: { name: 'Matosinhos e Leça da Palmeira' },
+          parish: { name: 'Matosinhos' }
+        }
+      }
+    })).toMatchObject({
+      district: 'Porto',
+      municipality: 'Matosinhos',
+      county: 'Matosinhos',
+      city: 'Matosinhos e Leça da Palmeira',
+      region: 'Porto',
+      freguesia: 'Matosinhos'
+    });
+  });
+
 });
