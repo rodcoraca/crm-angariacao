@@ -208,7 +208,21 @@ async function fetchListing(url: string, externalId: string) {
       return { ok: true, source: "json_ld", location: jsonLdLocation };
     }
 
-    return { ok: false, error: "Localizacao nao encontrada no anuncio." };
+    const htmlSignals = {
+      htmlLength: html.length,
+      hasNextData: html.includes("__NEXT_DATA__"),
+      hasExternalId: html.includes(externalId),
+      hasProvince: /province|distrito/i.test(html),
+      hasCounty: /county|concelho|município|municipio/i.test(html),
+      hasCity: /city|cidade/i.test(html),
+      hasParish: /parish|freguesia/i.test(html)
+    };
+
+    return {
+      ok: false,
+      error: "Localizacao nao encontrada no anuncio.",
+      diagnostics: htmlSignals
+    };
   } catch (error) {
     return {
       ok: false,
