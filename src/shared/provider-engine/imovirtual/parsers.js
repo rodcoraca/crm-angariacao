@@ -26,13 +26,45 @@ function getLocationPath(item) {
   const location = item?.location || {};
   const address = location?.address || {};
 
+  const district =
+    address?.province?.name
+    || location?.province?.name
+    || item?.province?.name
+    || item?.province
+    || null;
+
+  const municipality =
+    address?.county?.name
+    || location?.county?.name
+    || item?.county?.name
+    || item?.county
+    || null;
+
+  const city =
+    address?.city?.name
+    || location?.city?.name
+    || item?.city?.name
+    || item?.city
+    || null;
+
+  const freguesia =
+    address?.parish?.name
+    || address?.freguesia?.name
+    || location?.parish?.name
+    || location?.freguesia?.name
+    || item?.parish?.name
+    || item?.parish
+    || item?.freguesia?.name
+    || item?.freguesia
+    || null;
+
   return {
-    district: address?.province?.name || null,
-    municipality: address?.county?.name || null,
-    county: address?.county?.name || null,
-    city: address?.city?.name || null,
-    region: address?.province?.name || null,
-    freguesia: address?.parish?.name || address?.freguesia?.name || null
+    district,
+    municipality,
+    county: municipality,
+    city,
+    region: district,
+    freguesia
   };
 }
 
