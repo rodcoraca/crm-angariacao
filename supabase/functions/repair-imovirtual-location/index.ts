@@ -34,6 +34,16 @@ function firstText(...values: unknown[]) {
 function getLocationPath(item: any) {
   const location = item?.location || {};
   const address = location?.address || {};
+  const reverseLocations = Array.isArray(location?.reverseGeocoding?.locations)
+    ? location.reverseGeocoding.locations
+    : [];
+
+  const reverseByLevel = (level: string) =>
+    reverseLocations.find((entry: any) => String(entry?.locationLevel || "").toLowerCase() === level);
+
+  const reverseDistrict = reverseByLevel("district");
+  const reverseCouncil = reverseByLevel("council");
+  const reverseParish = reverseByLevel("parish");
 
   const district = firstText(
     address?.province?.name,
@@ -41,7 +51,8 @@ function getLocationPath(item: any) {
     item?.province?.name,
     item?.province,
     item?.district,
-    item?.region
+    item?.region,
+    reverseDistrict?.name
   );
 
   const municipality = firstText(
@@ -52,14 +63,16 @@ function getLocationPath(item: any) {
     item?.municipality?.name,
     item?.municipality,
     item?.concelho?.name,
-    item?.concelho
+    item?.concelho,
+    reverseCouncil?.name
   );
 
   const city = firstText(
     address?.city?.name,
     location?.city?.name,
     item?.city?.name,
-    item?.city
+    item?.city,
+    reverseCouncil?.name
   );
 
   const freguesia = firstText(
@@ -70,7 +83,8 @@ function getLocationPath(item: any) {
     item?.parish?.name,
     item?.parish,
     item?.freguesia?.name,
-    item?.freguesia
+    item?.freguesia,
+    reverseParish?.name
   );
 
   return {
