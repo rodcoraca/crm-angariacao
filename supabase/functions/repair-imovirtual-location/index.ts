@@ -264,13 +264,12 @@ Deno.serve(async (request) => {
     .select("empresa_id,roles(code)")
     .eq("user_id", callerData.user.id);
 
-  const isGlobalAdmin = !rolesError && (roles || []).some((row: any) =>
-    String(row?.roles?.code || "").trim().toUpperCase() === "ADMIN" &&
-    !row?.empresa_id
+  const isAdmin = !rolesError && (roles || []).some((row: any) =>
+    String(row?.roles?.code || "").trim().toUpperCase() === "ADMIN"
   );
 
-  if (!isGlobalAdmin) {
-    return jsonResponse(403, { success: false, message: "Apenas ADMIN global pode executar este repair." });
+  if (!isAdmin) {
+    return jsonResponse(403, { success: false, message: "Apenas utilizadores ADMIN podem executar este repair." });
   }
 
   const body = await request.json().catch(() => ({}));
