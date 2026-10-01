@@ -24,7 +24,10 @@ import {
   resolveEmpresaId,
   warnMissingEmpresaId
 } from "../../../utils/empresaScope.js";
-import { removeRadarLeadMetadataFromObservation } from "../../radar/contracts/radarLeadMetadata";
+import {
+  mergeRadarLeadMetadataIntoObservation,
+  removeRadarLeadMetadataFromObservation
+} from "../../radar/contracts/radarLeadMetadata";
 
 export function calcularDataLembrete(opcao, dataPersonalizada, hoje = new Date()) {
   if (opcao === "personalizada") return dataPersonalizada || "";
@@ -323,14 +326,14 @@ export async function salvarLeadFluxo({ nome, telefone, tipo, origem, observacao
   }
 }
 
-export function prepararAtualizacaoLead({ form, telefoneNormalizado, telefoneNaoDisponivel }) {
+export function prepararAtualizacaoLead({ form, telefoneNormalizado, telefoneNaoDisponivel, observacoesExistentes }) {
   return {
     nome: form.nome,
     telefone: telefoneNormalizado,
     telefone_nao_disponivel: telefoneNaoDisponivel,
     tipo: form.tipo,
     origem: form.origem,
-    observacoes: form.observacoes,
+    observacoes: mergeRadarLeadMetadataIntoObservation(form.observacoes, observacoesExistentes),
     status: form.status,
     data_visita: form.status === "agendamento" ? (form.data_visita || null) : null,
     hora_visita: form.status === "agendamento" ? (form.hora_visita || null) : null,
@@ -396,7 +399,8 @@ export async function salvarFichaLead({ leadId, form, user }) {
   const updatePayload = prepararAtualizacaoLead({
     form,
     telefoneNormalizado,
-    telefoneNaoDisponivel
+    telefoneNaoDisponivel,
+    observacoesExistentes: leadAtual?.observacoes
   });
 
   try {

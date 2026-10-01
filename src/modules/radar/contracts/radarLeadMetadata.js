@@ -124,6 +124,35 @@ export function removeRadarLeadMetadataFromObservation(observation) {
   return text.slice(0, metadataStart).trimEnd();
 }
 
+export function mergeRadarLeadMetadataIntoObservation(editableObservation, existingObservation) {
+  const editableText = removeRadarLeadMetadataFromObservation(editableObservation);
+  const existingText = toText(existingObservation, "");
+  const metadataStart = existingText.search(/(?:\[RADAR_METADATA\]|Origem:\s*Radar)/i);
+  if (metadataStart < 0) return editableText;
+
+  const metadata = parseRadarLeadMetadataFromObservation(existingText);
+  const hasMeaningfulMetadata = Boolean(metadata && (
+    (metadata.provider && metadata.provider !== "Radar") ||
+    metadata.externalId ||
+    metadata.url ||
+    metadata.publisherName ||
+    metadata.publisherContact ||
+    metadata.publishedAt
+  ));
+  if (!hasMeaningfulMetadata) return editableText;
+
+  const importedAtLine = existingText.match(/^\s*(Importado via Radar\s*\([^)]+\))\s*$/im)?.[1] || "";
+  const editableWithoutImportedAt = editableText
+    .replace(/^\s*Importado via Radar\s*\([^)]+\)\s*(?:\r?\n)?/im, "")
+    .trim();
+  const editableWithImportedAt = importedAtLine
+    ? [importedAtLine, editableWithoutImportedAt].filter(Boolean).join("\n\n")
+    : editableText;
+  const metadataBlock = existingText.slice(metadataStart).trim();
+
+  return [editableWithImportedAt, metadataBlock].filter(Boolean).join("\n\n");
+}
+
 function parseImportedAtFromObservation(observation) {
   const text = toText(observation, "");
   if (!text) return null;
