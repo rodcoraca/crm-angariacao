@@ -9,16 +9,18 @@ WITH normalized AS (
     id,
 
     NULLIF(BTRIM(COALESCE(
-      NULLIF(raw_data ->> 'city', ''),
       NULLIF(raw_data -> 'location' -> 'address' -> 'city' ->> 'name', ''),
-      NULLIF(raw_data -> 'location' -> 'city' ->> 'name', '')
+      NULLIF(raw_data -> 'location' -> 'city' ->> 'name', ''),
+      NULLIF(raw_data -> 'city' ->> 'name', ''),
+      NULLIF(raw_data ->> 'city', '')
     )), '') AS city_value,
 
     NULLIF(BTRIM(COALESCE(
-      NULLIF(raw_data ->> 'district', ''),
-      NULLIF(raw_data ->> 'province', ''),
       NULLIF(raw_data -> 'location' -> 'address' -> 'province' ->> 'name', ''),
-      NULLIF(raw_data -> 'location' -> 'province' ->> 'name', '')
+      NULLIF(raw_data -> 'location' -> 'province' ->> 'name', ''),
+      NULLIF(raw_data -> 'province' ->> 'name', ''),
+      NULLIF(raw_data ->> 'province', ''),
+      NULLIF(raw_data ->> 'district', '')
     )), '') AS district_value
   FROM public.provider_leads
   WHERE provider = 'imovirtual'
@@ -30,19 +32,16 @@ SET
       THEN n.city_value
     ELSE p.city
   END,
-
   district = CASE
     WHEN p.district IS NULL OR BTRIM(p.district) = '' OR UPPER(BTRIM(p.district)) = 'N/A'
       THEN n.district_value
     ELSE p.district
   END,
-
   location = CASE
     WHEN p.location IS NULL OR BTRIM(p.location) = '' OR UPPER(BTRIM(p.location)) = 'N/A'
       THEN NULLIF(CONCAT_WS(', ', n.city_value, n.district_value), '')
     ELSE p.location
   END,
-
   updated_at = now()
 FROM normalized AS n
 WHERE p.id = n.id
