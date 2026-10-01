@@ -282,7 +282,7 @@ Deno.serve(async (request) => {
 
   let query = supabaseAdmin
     .from("provider_leads")
-    .select("id,external_id,url,location,city,district,raw_data")
+    .select("id,external_id,url,location,city,district,freguesia,concelho,raw_data")
     .eq("provider", "imovirtual")
     .order("id", { ascending: true })
     .limit(batchSize);
