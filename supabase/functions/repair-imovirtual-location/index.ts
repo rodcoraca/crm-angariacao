@@ -341,7 +341,8 @@ Deno.serve(async (request) => {
       result.errors.push({
         id: row.id,
         externalId: String(row.external_id),
-        error: fetched.error || "Falha ao obter localização."
+        error: fetched.error || "Falha ao obter localização.",
+        ...(fetched.diagnostics ? { diagnostics: fetched.diagnostics } : {})
       });
       return;
     }
