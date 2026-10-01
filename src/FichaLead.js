@@ -19,6 +19,7 @@ export default function FichaLead({ leadId, user, voltar }) {
   const {
     lead,
     form,
+    providerLead,
     agentes,
     loading,
     salvando,
@@ -330,7 +331,7 @@ export default function FichaLead({ leadId, user, voltar }) {
   const badgeType = badgeTipoFicha(theme, form.tipo);
   const podeGerir = canManageLead(lead);
   const podeTransferir = canTransferLead(lead);
-  const radarImportInfo = resolveRadarLeadImportInfo(lead, form);
+  const radarImportInfo = resolveRadarLeadImportInfo(lead, form, providerLead);
   const origemOptions = criarOpcoesDropdownOrigemLead({
     includeSemOrigem: true,
     includeOutro: false,

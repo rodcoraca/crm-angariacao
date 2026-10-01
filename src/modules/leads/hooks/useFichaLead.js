@@ -15,6 +15,7 @@ import { notifyError, notifySuccess } from "../../../components/ui/feedbackBus";
 export function useFichaLead({ leadId, user }) {
   const [lead, setLead] = useState(null);
   const [form, setForm] = useState(null);
+  const [providerLead, setProviderLead] = useState(null);
   const [agentes, setAgentes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -37,6 +38,7 @@ export function useFichaLead({ leadId, user }) {
 
     setLead(result.lead);
     setForm(result.form);
+    setProviderLead(result.providerLead || null);
 
     const agentesData = await carregarAgentesParaFicha(result.lead?.agente_id, user);
     setAgentes(agentesData);
@@ -114,6 +116,7 @@ export function useFichaLead({ leadId, user }) {
   return {
     lead,
     form,
+    providerLead,
     agentes,
     loading,
     salvando,

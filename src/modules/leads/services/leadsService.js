@@ -6,6 +6,7 @@ import {
   fetchLeadByTelefone,
   fetchLeadByTelefoneExcludingId,
   fetchLeadsByTipo,
+  fetchProviderLeadByCrmLeadId,
   insertLead,
   updateLeadById
 } from "../repositories/leadsRepository";
@@ -204,8 +205,21 @@ export async function carregarFichaLead(leadId, user = null) {
 
   const telefoneNaoDisponivel = data.telefone_nao_disponivel === true;
 
+  let providerLead = null;
+  try {
+    const { data: listing, error: providerLeadError } = await fetchProviderLeadByCrmLeadId(leadId, empresaId);
+    if (providerLeadError) {
+      console.warn("[FichaLead] Falha ao carregar provider_leads:", providerLeadError);
+    } else {
+      providerLead = listing?.provider_leads || null;
+    }
+  } catch (providerLeadException) {
+    console.warn("[FichaLead] Falha ao carregar provider_leads:", providerLeadException);
+  }
+
   return {
     lead: data,
+    providerLead,
     form: {
       nome: data.nome || "",
       telefone: telefoneNaoDisponivel ? "" : (data.telefone || ""),

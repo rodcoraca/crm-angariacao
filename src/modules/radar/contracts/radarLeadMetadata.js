@@ -172,20 +172,21 @@ function parseImportedAtFromObservation(observation) {
   return null;
 }
 
-export function resolveRadarLeadImportInfo(lead = {}, form = {}) {
+export function resolveRadarLeadImportInfo(lead = {}, form = {}, providerLead = null) {
   const observation = toText(lead?.observacoes || form?.observacoes, "");
   const metadata = parseRadarLeadMetadataFromObservation(observation);
-  const origemText = toText(form?.origem || lead?.origem || metadata?.provider, "");
-  const isRadarImported = Boolean(metadata) || /radar/i.test(origemText);
+  const origemText = toText(form?.origem || lead?.origem || providerLead?.provider || metadata?.provider, "");
+  const isRadarImported = Boolean(providerLead) || Boolean(metadata) || /radar/i.test(origemText);
 
   if (!isRadarImported) return null;
 
-  const provider = toText(metadata?.provider || form?.provider || lead?.provider || origemText, "Radar");
+  const provider = toText(providerLead?.provider || metadata?.provider || form?.provider || lead?.provider || origemText, "Radar");
   const externalId = toText(
-    metadata?.externalId || lead?.external_id || form?.external_id || lead?.provider_lead_id || lead?.providerLeadId,
+    providerLead?.external_id || metadata?.externalId || lead?.external_id || form?.external_id || lead?.provider_lead_id || lead?.providerLeadId,
     ""
   );
   const importedAt =
+    toIso(providerLead?.imported_at, null) ||
     parseImportedAtFromObservation(observation) ||
     toIso(lead?.imported_at || lead?.created_at || form?.created_at || null, null) ||
     null;
@@ -194,7 +195,8 @@ export function resolveRadarLeadImportInfo(lead = {}, form = {}) {
     isRadarImported: true,
     provider,
     externalId,
-    url: toText(metadata?.url || lead?.url_original || lead?.url, ""),
+    // provider_leads.url (persistente) é a fonte primária; [RADAR_METADATA] é fallback legado
+    url: toText(providerLead?.url || metadata?.url || lead?.url_original || lead?.url, ""),
     importedAt,
     status: "✓ Importada pelo Radar"
   };

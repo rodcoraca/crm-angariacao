@@ -52,6 +52,14 @@ export function fetchLeadAgenteIds(empresaId = null) {
     .not("agente_id", "is", null), empresaId);
 }
 
+export function fetchProviderLeadByCrmLeadId(leadId, empresaId = null) {
+  return applyEmpresaScope(supabase
+    .from("empresa_provider_listings")
+    .select("crm_lead_id, provider_leads(url, provider, external_id, imported_at, published_at, score, status)")
+    .eq("crm_lead_id", leadId), empresaId)
+    .maybeSingle();
+}
+
 export function updateLeadById(leadId, payload, empresaId = null) {
   return applyEmpresaScope(supabase
     .from("leads")

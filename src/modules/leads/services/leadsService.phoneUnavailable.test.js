@@ -4,6 +4,7 @@ jest.mock("../repositories/leadsRepository", () => ({
   fetchLeadByTelefoneExcludingId: jest.fn(),
   fetchLeadsByTipo: jest.fn(),
   fetchDashboardLeads: jest.fn(),
+  fetchProviderLeadByCrmLeadId: jest.fn(),
   insertLead: jest.fn(),
   updateLeadById: jest.fn()
 }));
@@ -42,6 +43,7 @@ const {
   fetchLeadById,
   fetchLeadByTelefone,
   fetchLeadByTelefoneExcludingId,
+  fetchProviderLeadByCrmLeadId,
   insertLead,
   updateLeadById
 } = require("../repositories/leadsRepository");
@@ -110,6 +112,7 @@ describe("leadsService phone-unavailable save flow", () => {
     fetchLeadByTelefone.mockResolvedValue({ data: null, error: null });
     fetchLeadByTelefoneExcludingId.mockResolvedValue({ data: null, error: null });
     fetchLeadLembreteAtivo.mockResolvedValue({ data: null, error: null });
+    fetchProviderLeadByCrmLeadId.mockResolvedValue({ data: null, error: null });
     insertLead.mockResolvedValue({ data: { id: "lead-created" }, error: null });
     updateLeadById.mockResolvedValue({ data: { id: "lead-1" }, error: null });
   });

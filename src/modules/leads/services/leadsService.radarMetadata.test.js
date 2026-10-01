@@ -4,6 +4,7 @@ jest.mock("../repositories/leadsRepository", () => ({
   fetchLeadByTelefoneExcludingId: jest.fn(),
   fetchLeadsByTipo: jest.fn(),
   fetchDashboardLeads: jest.fn(),
+  fetchProviderLeadByCrmLeadId: jest.fn(),
   insertLead: jest.fn(),
   updateLeadById: jest.fn()
 }));
@@ -31,6 +32,7 @@ jest.mock("./leadPermissionService", () => ({
 const {
   fetchLeadById,
   fetchLeadByTelefoneExcludingId,
+  fetchProviderLeadByCrmLeadId,
   updateLeadById
 } = require("../repositories/leadsRepository");
 const { fetchLeadLembreteAtivo } = require("../repositories/leadLembretesRepository");
@@ -94,6 +96,7 @@ describe("leadsService Radar metadata preservation", () => {
     fetchLeadById.mockResolvedValue({ data: { ...baseLead }, error: null });
     fetchLeadByTelefoneExcludingId.mockResolvedValue({ data: null, error: null });
     fetchLeadLembreteAtivo.mockResolvedValue({ data: null, error: null });
+    fetchProviderLeadByCrmLeadId.mockResolvedValue({ data: null, error: null });
     updateLeadById.mockResolvedValue({ data: { id: "lead-1" }, error: null });
   });
 
