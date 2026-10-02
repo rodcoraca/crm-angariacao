@@ -887,6 +887,13 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
           ) : <EmptyState title="Sem lembretes para hoje." style={{ width: "100%", boxSizing: "border-box", textAlign: "left", padding: "16px" }} />}
         </section>
 
+        {futureAgendaItems.length ? <div className="cockpit-future-agenda-line cockpit-future-agenda-section">
+          <div className="cockpit-future-agenda-hint">
+            <div><strong>Você tem lembretes futuros</strong><span>{futureAgendaItems.length} lembretes agendados</span></div>
+            <button type="button" onClick={() => setAgendaModalOpen(true)}>Abrir agenda →</button>
+          </div>
+        </div> : null}
+
         <section className="cockpit-postit-panel cockpit-postit-section" aria-label="Post-it">
           <div className="cockpit-panel__header">
             <div>
@@ -924,12 +931,7 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
           )}
         </section>
 
-        {futureAgendaItems.length ? <div className="cockpit-future-agenda-line cockpit-future-agenda-section">
-          <div className="cockpit-future-agenda-hint">
-            <div><strong>Você tem lembretes futuros</strong><span>{futureAgendaItems.length} lembretes agendados</span></div>
-            <button type="button" onClick={() => setAgendaModalOpen(true)}>Abrir agenda →</button>
-          </div>
-        </div> : null}
+
 
         <Modal
           open={agendaModalOpen}
