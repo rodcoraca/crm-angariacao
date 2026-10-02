@@ -61,4 +61,14 @@ describe("queryAgendaLembretesFuturos", () => {
     expect(mockQuery.gte).toHaveBeenCalledWith("data_lembrete", "2026-09-23");
     expect(mockQuery.lte).toHaveBeenCalledWith("data_lembrete", "2026-10-22");
   });
+
+  it("permite todos os lembretes futuros sem limite superior de data ou quantidade", () => {
+    queryAgendaLembretesFuturos("id,lead_id", "2026-09-23", null, null, "empresa-1", "usuario-a");
+
+    expect(mockQuery.eq).toHaveBeenCalledWith("empresa_id", "empresa-1");
+    expect(mockQuery.eq).toHaveBeenCalledWith("criado_por", "usuario-a");
+    expect(mockQuery.gte).toHaveBeenCalledWith("data_lembrete", "2026-09-23");
+    expect(mockQuery.lte).not.toHaveBeenCalled();
+    expect(mockQuery.limit).not.toHaveBeenCalled();
+  });
 });
