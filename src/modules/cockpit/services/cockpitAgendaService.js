@@ -58,8 +58,6 @@ export async function fetchCockpitAgenda(user = null) {
   inicioHoje.setHours(0, 0, 0, 0);
   const inicioAmanha = new Date(inicioHoje);
   inicioAmanha.setDate(inicioAmanha.getDate() + 1);
-  const fimFuturo = new Date(inicioHoje);
-  fimFuturo.setDate(fimFuturo.getDate() + 31);
 
   const dataHoje = [
     inicioHoje.getFullYear(),
@@ -72,11 +70,12 @@ export async function fetchCockpitAgenda(user = null) {
     String(data.getDate()).padStart(2, "0")
   ].join("-");
   const dataAmanha = formatarDataLocal(inicioAmanha);
-  const dataFimFuturo = formatarDataLocal(fimFuturo);
 
   // A RLS de lead_lembretes já limita os resultados ao perfil autenticado.
   // Não duplicamos esse filtro no cliente, evitando perder lembretes quando
   // o objeto de sessão não contém o perfil no formato esperado.
+  // "Lembretes futuros" representa todos os lembretes ativos a partir de amanhã:
+  // não existe limite superior de data nem limite artificial de quantidade.
   const lembretesQuery = queryAgendaLembretesHoje(
     camposLembrete,
     dataHoje,
@@ -86,8 +85,8 @@ export async function fetchCockpitAgenda(user = null) {
   const lembretesFuturosQuery = queryAgendaLembretesFuturos(
     camposLembrete,
     dataAmanha,
-    dataFimFuturo,
-    100,
+    null,
+    null,
     empresaId
   );
 
