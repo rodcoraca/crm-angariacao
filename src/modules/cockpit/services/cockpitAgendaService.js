@@ -1,7 +1,6 @@
 import { queryAgendaLembretesFuturos, queryAgendaLembretesHoje, queryAgendaVisitasHoje } from "../repositories";
 import { fetchRows } from "./sharedQueries";
 import { resolveEmpresaId } from "../../../utils/empresaScope";
-import { resolverContratoIdentidade } from "../../leads/utils/identityContract";
 import { listarCompromissosPorPeriodo } from "../../servicos/services/compromissosService";
 
 function normalizarHora(value) {
@@ -48,7 +47,6 @@ function mapCompromissoParaAgendaItem(compromisso) {
 
 export async function fetchCockpitAgenda(user = null) {
   const empresaId = await resolveEmpresaId(user);
-  const usuarioId = resolverContratoIdentidade(user).usuarioId;
   if (!empresaId) {
     return { visitasHoje: [], lembretesHoje: [], compromissosHoje: [] };
   }
@@ -68,15 +66,30 @@ export async function fetchCockpitAgenda(user = null) {
     String(inicioHoje.getMonth() + 1).padStart(2, "0"),
     String(inicioHoje.getDate()).padStart(2, "0")
   ].join("-");
-  const dataAmanha = inicioAmanha.toISOString().slice(0, 10);
-  const dataFimFuturo = fimFuturo.toISOString().slice(0, 10);
+  const formatarDataLocal = (data) => [
+    data.getFullYear(),
+    String(data.getMonth() + 1).padStart(2, "0"),
+    String(data.getDate()).padStart(2, "0")
+  ].join("-");
+  const dataAmanha = formatarDataLocal(inicioAmanha);
+  const dataFimFuturo = formatarDataLocal(fimFuturo);
 
-  const lembretesQuery = usuarioId
-    ? queryAgendaLembretesHoje(camposLembrete, dataHoje, limite, empresaId, usuarioId)
-    : null;
-  const lembretesFuturosQuery = usuarioId
-    ? queryAgendaLembretesFuturos(camposLembrete, dataAmanha, dataFimFuturo, 100, empresaId, usuarioId)
-    : null;
+  // A RLS de lead_lembretes já limita os resultados ao perfil autenticado.
+  // Não duplicamos esse filtro no cliente, evitando perder lembretes quando
+  // o objeto de sessão não contém o perfil no formato esperado.
+  const lembretesQuery = queryAgendaLembretesHoje(
+    camposLembrete,
+    dataHoje,
+    limite,
+    empresaId
+  );
+  const lembretesFuturosQuery = queryAgendaLembretesFuturos(
+    camposLembrete,
+    dataAmanha,
+    dataFimFuturo,
+    100,
+    empresaId
+  );
 
   const [visitasHoje, lembretesHoje, lembretesFuturos, compromissosHojeResult] = await Promise.all([
     fetchRows(queryAgendaVisitasHoje(camposAgenda, inicioHoje.toISOString(), inicioAmanha.toISOString(), limite, empresaId)),
