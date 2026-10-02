@@ -113,18 +113,19 @@ export function queryAgendaLembretesHoje(camposLembrete, dataHoje, limite, empre
   return query;
 }
 
-export function queryAgendaLembretesFuturos(camposLembrete, dataInicio, dataFim, limite, empresaId = null, usuarioId = null) {
+export function queryAgendaLembretesFuturos(camposLembrete, dataInicio, dataFim = null, limite = null, empresaId = null, usuarioId = null) {
   let query = applyEmpresaScope(supabase
     .from("lead_lembretes")
     .select(`${camposLembrete},lead:lead_id (id,nome,telefone)`)
     .eq("estado", "ativo")
     .gte("data_lembrete", dataInicio)
-    .lte("data_lembrete", dataFim)
     .order("data_lembrete", { ascending: true })
-    .order("hora_lembrete", { ascending: true, nullsFirst: false })
-    .limit(limite), empresaId);
+    .order("hora_lembrete", { ascending: true, nullsFirst: false }), empresaId);
 
+  if (dataFim) query = query.lte("data_lembrete", dataFim);
+  if (limite) query = query.limit(limite);
   if (usuarioId) query = query.eq("criado_por", usuarioId);
+
   return query;
 }
 
@@ -141,6 +142,7 @@ export function queryRiscoImoveis() {
       "morada",
       "concelho",
       "distrito",
+      "valor_pretendido",
       "cmi",
       "caderneta_predial",
       "plantas",
