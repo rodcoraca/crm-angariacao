@@ -59,7 +59,7 @@ export async function fetchCockpitAgenda(user = null) {
   const inicioAmanha = new Date(inicioHoje);
   inicioAmanha.setDate(inicioAmanha.getDate() + 1);
   const fimFuturo = new Date(inicioHoje);
-  fimFuturo.setDate(fimFuturo.getDate() + 30);
+  fimFuturo.setDate(fimFuturo.getDate() + 31);
 
   const dataHoje = [
     inicioHoje.getFullYear(),
