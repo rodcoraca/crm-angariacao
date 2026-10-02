@@ -461,19 +461,21 @@ export async function salvarFichaLead({ leadId, form, user }) {
 
     if (form.lembrete_ativo) {
       if (lembreteAtivoAtual) {
-        await alterarLeadLembrete({
+        const resultadoLembrete = await alterarLeadLembrete({
           lembreteId: lembreteAtivoAtual.id,
           user,
           dataLembrete: dataLembrete,
           horaLembrete: form.hora_lembrete
         });
+        if (resultadoLembrete?.error) throw resultadoLembrete.error;
       } else {
-        await criarLeadLembrete({
+        const resultadoLembrete = await criarLeadLembrete({
           leadId,
           user,
           dataLembrete: dataLembrete,
           horaLembrete: form.hora_lembrete
         });
+        if (resultadoLembrete?.error) throw resultadoLembrete.error;
       }
     } else if (lembreteAtivoAtual) {
       await concluirLeadLembrete({
