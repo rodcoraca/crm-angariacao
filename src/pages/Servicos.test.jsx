@@ -165,7 +165,7 @@ describe("Servicos", () => {
     expect(screen.queryByText("Serviços existentes")).toBeNull();
   });
 
-  it("publica um rascunho e torna a escala não editável", async () => {
+  it("publica um rascunho e mantém a escala editável após a publicação", async () => {
     const linhas = Array.from({ length: 10 }, (_, index) => ({
       data: `2026-09-${String(7 + Math.floor(index / 2)).padStart(2, "0")}`,
       hora_inicio: index % 2 === 0 ? "09:00" : "14:00",
@@ -182,8 +182,8 @@ describe("Servicos", () => {
     fireEvent.click(screen.getByRole("button", { name: "Publicar escala" }));
 
     await waitFor(() => expect(mockPublicarEscalaServico).toHaveBeenCalledWith({ user: mockUser, escalaId: "escala-1" }));
-    await waitFor(() => expect(screen.getByText("PUBLICADA — não editável")).toBeTruthy());
-    expect(screen.queryByRole("button", { name: "Guardar alterações" })).toBeNull();
+    await waitFor(() => expect(screen.getByText("PUBLICADA — versão oficial editável")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Guardar alterações" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Publicar escala" })).toBeNull();
   });
 });

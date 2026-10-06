@@ -352,7 +352,6 @@ export default function Servicos() {
   }, [usuariosEmpresa, participacaoLocal, excecoesPorUsuario, semanaReferencia, user, carregarEscalaPersistida]);
 
   const handleAlterarSlot = useCallback((dia, periodo, usuarioId) => {
-    if (escalaMeta?.estado === "publicada") return;
     const usuario = usuariosEmpresa.find((item) => String(item.id) === String(usuarioId));
     if (!usuario) return;
 
@@ -361,10 +360,9 @@ export default function Servicos() {
         ? { ...linha, [periodo]: { id: usuario.id, nome: getNomeCompletoUsuario(usuario) } }
         : linha
     )));
-  }, [escalaMeta?.estado, usuariosEmpresa]);
+  }, [usuariosEmpresa]);
 
   const guardarEscalaEditada = useCallback(async () => {
-    if (escalaMeta?.estado === "publicada") return;
     const linhasParaPersistir = construirLinhasPersistencia(escalaGerada, semanaReferencia);
     if (linhasParaPersistir.length !== POSICOES_ESCALA.length) {
       notifyError("A escala precisa de dez slots preenchidos.");
@@ -378,7 +376,7 @@ export default function Servicos() {
     }
 
     await carregarEscalaPersistida();
-    notifySuccess("Escala alterada e guardada com sucesso.");
+    notifySuccess(escalaMeta?.estado === "publicada" ? "Alteração guardada na escala publicada com sucesso." : "Escala alterada e guardada com sucesso.");
   }, [escalaGerada, escalaMeta?.estado, semanaReferencia, user, carregarEscalaPersistida]);
 
   const publicarEscala = useCallback(async () => {
@@ -570,7 +568,7 @@ export default function Servicos() {
             <Button type="button" variant="primary" onClick={gerarEscala}>
               Gerar escala
             </Button>
-            {escalaGerada.length > 0 && escalaMeta?.estado === "rascunho" ? (
+            {escalaGerada.length > 0 && escalaMeta?.id ? (
               <Button type="button" variant="secondary" onClick={guardarEscalaEditada}>
                 Guardar alterações
               </Button>
@@ -585,7 +583,7 @@ export default function Servicos() {
 
         {escalaMeta?.estado === "publicada" ? (
           <div style={{ marginTop: theme.spacing.sm, color: theme.colors.success, fontWeight: 600 }}>
-            PUBLICADA — não editável
+            PUBLICADA — versão oficial editável
           </div>
         ) : escalaMeta?.estado === "rascunho" ? (
           <div style={{ marginTop: theme.spacing.sm, color: theme.colors.muted }}>Rascunho editável</div>
@@ -611,34 +609,30 @@ export default function Servicos() {
                   <tr key={diaEscala.dia}>
                     <td style={{ padding: "10px", borderBottom: `1px solid ${theme.colors.border}`, fontWeight: 600 }}>{diaEscala.dia}</td>
                     <td style={{ padding: "10px", borderBottom: `1px solid ${theme.colors.border}` }}>
-                      {escalaMeta?.estado === "publicada" ? diaEscala.manha?.nome || "—" : (
-                        <select
-                          aria-label={`${diaEscala.dia} Manhã`}
-                          value={diaEscala.manha?.id || ""}
-                          onChange={(event) => handleAlterarSlot(diaEscala.dia, "manha", event.target.value)}
-                          style={{ width: "100%", padding: "6px 8px", color: theme.colors.text }}
-                        >
-                          <option value="">Selecionar comercial</option>
-                          {usuariosEmpresa.map((usuario) => (
-                            <option key={usuario.id} value={usuario.id}>{getNomeCompletoUsuario(usuario)}</option>
-                          ))}
-                        </select>
-                      )}
+                      <select
+                        aria-label={`${diaEscala.dia} Manhã`}
+                        value={diaEscala.manha?.id || ""}
+                        onChange={(event) => handleAlterarSlot(diaEscala.dia, "manha", event.target.value)}
+                        style={{ width: "100%", padding: "6px 8px", color: theme.colors.text }}
+                      >
+                        <option value="">Selecionar comercial</option>
+                        {usuariosEmpresa.map((usuario) => (
+                          <option key={usuario.id} value={usuario.id}>{getNomeCompletoUsuario(usuario)}</option>
+                        ))}
+                      </select>
                     </td>
                     <td style={{ padding: "10px", borderBottom: `1px solid ${theme.colors.border}` }}>
-                      {escalaMeta?.estado === "publicada" ? diaEscala.tarde?.nome || "—" : (
-                        <select
-                          aria-label={`${diaEscala.dia} Tarde`}
-                          value={diaEscala.tarde?.id || ""}
-                          onChange={(event) => handleAlterarSlot(diaEscala.dia, "tarde", event.target.value)}
-                          style={{ width: "100%", padding: "6px 8px", color: theme.colors.text }}
-                        >
-                          <option value="">Selecionar comercial</option>
-                          {usuariosEmpresa.map((usuario) => (
-                            <option key={usuario.id} value={usuario.id}>{getNomeCompletoUsuario(usuario)}</option>
-                          ))}
-                        </select>
-                      )}
+                      <select
+                        aria-label={`${diaEscala.dia} Tarde`}
+                        value={diaEscala.tarde?.id || ""}
+                        onChange={(event) => handleAlterarSlot(diaEscala.dia, "tarde", event.target.value)}
+                        style={{ width: "100%", padding: "6px 8px", color: theme.colors.text }}
+                      >
+                        <option value="">Selecionar comercial</option>
+                        {usuariosEmpresa.map((usuario) => (
+                          <option key={usuario.id} value={usuario.id}>{getNomeCompletoUsuario(usuario)}</option>
+                        ))}
+                      </select>
                     </td>
                   </tr>
                 ))}
