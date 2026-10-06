@@ -103,7 +103,7 @@ export default function Plantoes() {
     const inicio = normalizarSabado(event.target.value);
     setPeriodoInicio(inicio);
     if (new Date(`${periodoFim}T00:00:00Z`) < new Date(`${inicio}T00:00:00Z`)) {
-      setPeriodoFim(adicionarSabados(inicio, 4));
+      setPeriodoFim(inicio);
     }
     setEscala(null);
     setLinhas([]);
@@ -111,8 +111,9 @@ export default function Plantoes() {
 
   function alterarFim(event) {
     const fim = normalizarSabado(event.target.value);
-    const minimo = adicionarSabados(periodoInicio, 4);
-    setPeriodoFim(new Date(`${fim}T00:00:00Z`) < new Date(`${minimo}T00:00:00Z`) ? minimo : fim);
+    const inicio = new Date(`${periodoInicio}T00:00:00Z`);
+    const fimData = new Date(`${fim}T00:00:00Z`);
+    setPeriodoFim(fimData < inicio ? periodoInicio : fim);
   }
 
   function alternarParticipacao(usuario) {
@@ -131,7 +132,11 @@ export default function Plantoes() {
 
   const guardarLinhas = useCallback(async (linhasParaGuardar = linhas) => {
     const validas = linhasParaGuardar.filter((linha) => linha.usuario_id && sabados.includes(linha.data));
-    if (validas.length < 4 || validas.length !== sabados.length) {
+    if (sabados.length === 0) {
+      notifyError("Selecione pelo menos um sábado.");
+      return null;
+    }
+    if (validas.length < 1 || validas.length !== sabados.length) {
       notifyError("Cada sábado do período precisa de um comercial.");
       return null;
     }
@@ -150,8 +155,8 @@ export default function Plantoes() {
   }, [carregarEscala, linhas, periodoFim, periodoInicio, sabados, user]);
 
   async function gerarPlantao() {
-    if (sabados.length < 4) {
-      notifyError("O período deve conter pelo menos 4 sábados.");
+    if (sabados.length < 1) {
+      notifyError("Selecione pelo menos um sábado.");
       return;
     }
     if (participantes.length === 0) {

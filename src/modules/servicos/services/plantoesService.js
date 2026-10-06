@@ -532,7 +532,7 @@ function validarPeriodoPlantao(periodoInicio, periodoFim) {
   for (const cursor = new Date(inicio); cursor <= fim; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
     if (cursor.getUTCDay() === 6) sabados += 1;
   }
-  return sabados >= 4;
+  return sabados >= 1;
 }
 
 export async function listarEscalaPlantaoPorPeriodo({ user, periodoInicio, periodoFim }) {
@@ -566,10 +566,10 @@ export async function substituirEscalaPlantao({ user, periodoInicio, periodoFim,
   const empresaId = await resolveEmpresaId(user);
   if (!hasEmpresaId(empresaId)) return { data: null, error: buildMissingEmpresaError() };
   if (!validarPeriodoPlantao(periodoInicio, periodoFim)) {
-    return { data: null, error: new Error("O período deve conter pelo menos 4 sábados.") };
+    return { data: null, error: new Error("Selecione pelo menos um sábado.") };
   }
-  if (!Array.isArray(linhas) || linhas.length < 4) {
-    return { data: null, error: new Error("O plantão deve conter pelo menos 4 sábados.") };
+  if (!Array.isArray(linhas) || linhas.length < 1) {
+    return { data: null, error: new Error("O plantão deve conter pelo menos um sábado.") };
   }
 
   try {

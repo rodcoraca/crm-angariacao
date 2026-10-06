@@ -37,7 +37,7 @@ describe("Plantoes", () => {
     mockPublicarEscalaPlantao.mockResolvedValue({ data: "escala-1", error: null });
   });
 
-  it("mantém participação local, gera pelo menos quatro sábados com nomes e publica como read-only", async () => {
+  it("mantém participação local, gera plantões para o período selecionado e publica como read-only", async () => {
     render(<Plantoes />);
     expect(await screen.findByText("João Silva")).toBeTruthy();
 
@@ -63,6 +63,36 @@ describe("Plantoes", () => {
 
     expect(await screen.findByText("RASCUNHO EDITÁVEL")).toBeTruthy();
     expect(screen.getAllByText(/João Silva|Ana Costa/).length).toBeGreaterThan(0);
+  });
+
+  it("gera um plantão quando o período contém apenas um sábado", async () => {
+    render(<Plantoes />);
+    expect(await screen.findByText("João Silva")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Primeiro sábado"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("Último sábado"), { target: { value: "2026-08-01" } });
+    const checkbox = screen.getAllByRole("checkbox")[0];
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole("button", { name: "Gerar plantão" }));
+
+    await waitFor(() => expect(mockSubstituirEscalaPlantao).toHaveBeenCalledTimes(1));
+    expect(mockSubstituirEscalaPlantao.mock.calls[0][0].linhas).toHaveLength(1);
+  });
+
+  it("gera 8 plantões quando o período contém 8 sábados", async () => {
+    render(<Plantoes />);
+    expect(await screen.findByText("João Silva")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Primeiro sábado"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("Último sábado"), { target: { value: "2026-09-19" } });
+    const checkboxes = screen.getAllByRole("checkbox");
+    fireEvent.click(checkboxes[0]);
+    fireEvent.click(checkboxes[1]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Gerar plantão" }));
+
+    await waitFor(() => expect(mockSubstituirEscalaPlantao).toHaveBeenCalledTimes(1));
+    expect(mockSubstituirEscalaPlantao.mock.calls[0][0].linhas).toHaveLength(8);
   });
 
   it("publica o rascunho e remove as ações de edição", async () => {
