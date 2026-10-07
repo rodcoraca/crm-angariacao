@@ -3,7 +3,7 @@ import { hasPermission as hasCompatiblePermission } from "./legacyPermissionComp
 export const PROTECTED_VIEW_RULES = {
   home: { permission: "crm.view" },
   radar: { permission: "radar.view" },
-  radar_imovirtual: { permission: "radar.view" },
+  radar_imovirtual: { permission: "radar.view" },\n  cacador: { permission: "radar.view" },
   fluxo: { permission: "crm.view" },
   dashboard: { permission: "dashboard.view" },
   quente: { permission: "leads.hot.view" },
