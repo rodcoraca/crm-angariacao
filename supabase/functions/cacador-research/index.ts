@@ -141,6 +141,11 @@ Deno.serve(async (request: Request) => {
     const changed = compareSnapshot(previous, current);
 
     await supabase.from("provider_leads").update({
+      title: current.title ?? lead.title,
+      price: current.price ?? lead.price,
+      owner_name: current.ownerName ?? lead.owner_name,
+      is_private_owner: current.isPrivateOwner,
+      url: current.url || lead.url,
       cacador_last_research_at: researchedAt,
       cacador_research_status: changed ? "changed" : "active",
       cacador_research_error: null,
