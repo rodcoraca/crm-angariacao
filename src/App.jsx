@@ -4,7 +4,8 @@ import { supabase } from "./supabase";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import Radar from "./pages/Radar";
-import RadarImovirtual from "./pages/RadarImovirtual";\nimport Cacador from "./pages/Cacador";
+import RadarImovirtual from "./pages/RadarImovirtual";
+import Cacador from "./pages/Cacador";
 import AdministracaoDocumentacao from "./pages/AdministracaoDocumentacao";
 import Forbidden from "./pages/Forbidden";
 import Fluxo from "./pages/Fluxo";
@@ -1089,7 +1090,8 @@ export default function App() {
   const screens = {
     home: canAccessView("home") ? <Home user={user} onOpenSearchResult={abrirResultadoPesquisaCockpit} onOpenLead={abrirFichaLead} /> : <Forbidden requestedView="home" requiredPermission={getRequiredPermission("home")} />,
     radar: canAccessView("radar") ? <Radar selectionRequest={radarSelectionRequest} /> : <Forbidden requestedView="radar" requiredPermission={getRequiredPermission("radar")} />,
-    radar_imovirtual: canAccessView("radar_imovirtual") ? <RadarImovirtual /> : <Forbidden requestedView="radar_imovirtual" requiredPermission={getRequiredPermission("radar_imovirtual")} />,\n    cacador: canAccessView("cacador") ? <Cacador /> : <Forbidden requestedView="cacador" requiredPermission={getRequiredPermission("cacador")} />,
+    radar_imovirtual: canAccessView("radar_imovirtual") ? <RadarImovirtual /> : <Forbidden requestedView="radar_imovirtual" requiredPermission={getRequiredPermission("radar_imovirtual")} />,
+    cacador: canAccessView("cacador") ? <Cacador /> : <Forbidden requestedView="cacador" requiredPermission={getRequiredPermission("cacador")} />,
     admin_documentacao: canAccessView("admin_documentacao") ? <AdministracaoDocumentacao selectedDoc={docSelecionado} /> : <Forbidden requestedView="admin_documentacao" requiredPermission={getRequiredPermission("admin_documentacao")} />,
     empresas_admin: canAccessView("empresas_admin") ? <EmpresasAdmin /> : <Forbidden requestedView="empresas_admin" requiredPermission={getRequiredPermission("empresas_admin")} />,
     forbidden: <Forbidden requestedView={forbiddenState.requestedView} requiredPermission={forbiddenState.requiredPermission} />,
