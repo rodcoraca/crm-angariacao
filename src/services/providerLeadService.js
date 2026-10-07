@@ -24,7 +24,8 @@ export async function createLead(lead) {
   if (validationError) return { data: null, error: new Error(validationError) };
 
   try {
-    const payload = { ...lead, status: lead.status || NEW_LEAD_STATUS, detected_at: lead.detected_at || new Date().toISOString() };\n    payload.market_first_seen_at = payload.market_first_seen_at || payload.detected_at;
+    const payload = { ...lead, status: lead.status || NEW_LEAD_STATUS, detected_at: lead.detected_at || new Date().toISOString() };
+    payload.market_first_seen_at = payload.market_first_seen_at || payload.detected_at;
     console.info("[ImovirtualSync] supabaseUrl", supabase.supabaseUrl || "indisponível");
     console.info("[ImovirtualSync] tabela", PROVIDER_LEADS_TABLE);
     console.info("[ImovirtualSync] payload insert", payload);
