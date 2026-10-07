@@ -118,6 +118,20 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
             );
           })()
         ) : null}
+        {podeVerRota("cacador") ? (() => {
+          const menuStyles = getMenuStyles(activeView === "cacador");
+          return (
+            <SidebarItem
+              collapsed={collapsed}
+              onClick={() => handleSelectView("cacador")}
+              style={menuStyles.style}
+              collapsedStyle={menuStyles.collapsedStyle}
+            >
+              {collapsed ? "C" : "Caçador"}
+            </SidebarItem>
+          );
+        })() : null}
+
 
         {podeVerRota('fluxo') ? (
           (() => {
