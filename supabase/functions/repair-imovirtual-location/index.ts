@@ -261,7 +261,7 @@ Deno.serve(async (request) => {
     return jsonResponse(500, { success: false, message: "Supabase não configurado." });
   }
 
-  const token = (request.headers.get("Authorization") || "").replace(/^Bearer\\s+/i, "").trim();
+  const token = (request.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
   if (!token) return jsonResponse(401, { success: false, message: "Authorization obrigatório." });
 
   const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey, {
