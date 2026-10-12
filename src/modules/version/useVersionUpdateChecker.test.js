@@ -17,8 +17,11 @@ function responseFor(version) {
 
 describe("useVersionUpdateChecker", () => {
   let fetchMock;
+  let originalBuildVersion;
 
   beforeEach(() => {
+    originalBuildVersion = process.env.REACT_APP_BUILD_VERSION;
+    process.env.REACT_APP_BUILD_VERSION = "one";
     jest.useFakeTimers();
     fetchMock = jest.fn();
     global.fetch = fetchMock;
@@ -29,6 +32,8 @@ describe("useVersionUpdateChecker", () => {
   afterEach(() => {
     jest.useRealTimers();
     delete global.fetch;
+    if (originalBuildVersion === undefined) delete process.env.REACT_APP_BUILD_VERSION;
+    else process.env.REACT_APP_BUILD_VERSION = originalBuildVersion;
   });
 
   test("regista a versão inicial e ignora a mesma versão", async () => {
@@ -38,6 +43,24 @@ describe("useVersionUpdateChecker", () => {
     await act(async () => { jest.advanceTimersByTime(VERSION_CHECK_INTERVAL_MS); });
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(notify).not.toHaveBeenCalled();
+  });
+
+  test("notifica logo no início se o bundle aberto já estiver desatualizado", async () => {
+    fetchMock.mockResolvedValue(responseFor("two"));
+    render(<TestComponent />);
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toMatch(/^\/version\.json\?t=/);
+    expect(fetchMock).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({
+      cache: "no-store",
+      headers: { "Cache-Control": "no-cache" }
+    }));
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({
+      message: "Está disponível uma nova versão do OSFlow.",
+      actionLabel: "Atualizar",
+      onAction: expect.any(Function)
+    }));
   });
 
   test("notifica uma única vez quando a versão muda", async () => {
