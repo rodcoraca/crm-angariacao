@@ -2,6 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "./theme/ThemeContext";
 import { formatarNomeApresentacao } from "./utils/nomes";
 import Button from "./components/Button";
+import RadarButton from "./components/ui/Button";
+import Modal from "./components/ui/Modal";
+import { notifyError, notifySuccess } from "./components/ui/feedbackBus";
+import { getRadarService } from "./modules/radar/services/radarService";
 import Input from "./Input";
 import { LEAD_STATUSES } from "./modules/leads/statusCatalog";
 import Card from "./components/Card";
@@ -37,6 +41,11 @@ export default function FichaLead({ leadId, user, voltar }) {
   const { isDirty, isDirtyNow, markDirty, markClean, reset } = useDirtyForm();
   const [isEditing, setIsEditing] = useState(true);
   const [historicoLembretes, setHistoricoLembretes] = useState([]);
+  const [radarAdjustmentOpen, setRadarAdjustmentOpen] = useState(false);
+  const [radarMaintenanceAction, setRadarMaintenanceAction] = useState(null);
+  const [radarMaintenanceReason, setRadarMaintenanceReason] = useState("");
+  const [radarMaintenanceSaving, setRadarMaintenanceSaving] = useState(false);
+  const [radarAdjustmentState, setRadarAdjustmentState] = useState(null);
   const isEditingRef = useRef(true);
 
   useEffect(() => {
@@ -69,6 +78,62 @@ export default function FichaLead({ leadId, user, voltar }) {
   }, []);
 
   const isEditingNow = useCallback(() => isEditingRef.current, []);
+
+  function abrirAjusteRadar() {
+    setRadarMaintenanceAction(null);
+    setRadarMaintenanceReason("");
+    setRadarAdjustmentOpen(true);
+  }
+
+  function fecharAjusteRadar() {
+    if (radarMaintenanceSaving) return;
+    setRadarAdjustmentOpen(false);
+    setRadarMaintenanceAction(null);
+    setRadarMaintenanceReason("");
+  }
+
+  async function confirmarAjusteRadar() {
+    const opportunityId = providerLead?.id;
+    const reason = radarMaintenanceReason.trim();
+
+    if (!opportunityId || !radarMaintenanceAction) {
+      notifyError("Não foi possível identificar o imóvel original no Radar.");
+      return;
+    }
+    if (!reason) {
+      notifyError("Indique o motivo da operação.");
+      return;
+    }
+
+    setRadarMaintenanceSaving(true);
+    try {
+      const service = getRadarService();
+      const result = radarMaintenanceAction === "professional"
+        ? await service.updateProfessionalClassification(opportunityId, user, reason)
+        : await service.deactivateOpportunity(opportunityId, user, reason);
+
+      if (!result?.ok) {
+        notifyError(result?.message || "Não foi possível concluir o ajuste.");
+        return;
+      }
+
+      setRadarAdjustmentState((current) => ({
+        isPrivateOwner: radarMaintenanceAction === "professional" ? false : current?.isPrivateOwner,
+        isActive: radarMaintenanceAction === "inactive" ? false : current?.isActive
+      }));
+      notifySuccess(radarMaintenanceAction === "professional"
+        ? "Anunciante alterado para profissional."
+        : "Oportunidade inativada.");
+
+      setRadarAdjustmentOpen(false);
+      setRadarMaintenanceAction(null);
+      setRadarMaintenanceReason("");
+    } catch (error) {
+      notifyError(error?.message || "Não foi possível concluir o ajuste.");
+    } finally {
+      setRadarMaintenanceSaving(false);
+    }
+  }
 
   async function guardarFicha({ voltarAposGuardar = true } = {}) {
     const result = await salvar();
@@ -332,6 +397,13 @@ export default function FichaLead({ leadId, user, voltar }) {
   const podeGerir = canManageLead(lead);
   const podeTransferir = canTransferLead(lead);
   const radarImportInfo = resolveRadarLeadImportInfo(lead, form, providerLead);
+  const radarPrivateOwner = radarAdjustmentState?.isPrivateOwner
+    ?? (providerLead?.is_private_owner_override === false
+      ? false
+      : providerLead?.is_private_owner_override === true
+        ? true
+        : providerLead?.is_private_owner === true);
+  const radarListingActive = radarAdjustmentState?.isActive ?? providerLead?.listing_is_active === true;
   const origemOptions = criarOpcoesDropdownOrigemLead({
     includeSemOrigem: true,
     includeOutro: false,
@@ -368,6 +440,18 @@ export default function FichaLead({ leadId, user, voltar }) {
             >
               Ver anúncio original ↗
             </Button>
+          ) : null}
+          {providerLead?.id && radarListingActive ? (
+            <Button
+              color="light"
+              style={styles.radarLink}
+              onClick={abrirAjusteRadar}
+            >
+              Ajustar oportunidade no Radar
+            </Button>
+          ) : null}
+          {providerLead?.id && !radarListingActive ? (
+            <p style={styles.radarLine}>Esta oportunidade está inativa no Radar.</p>
           ) : null}
         </div>
       ) : null}
@@ -566,6 +650,62 @@ export default function FichaLead({ leadId, user, voltar }) {
           {salvando ? "A guardar..." : "Guardar alterações"}
         </Button>
       </div>
+
+      <Modal
+        open={radarAdjustmentOpen}
+        title={radarMaintenanceAction === "professional" ? "Alterar para profissional" : radarMaintenanceAction === "inactive" ? "Inativar oportunidade" : "Ajustar oportunidade"}
+        onClose={fecharAjusteRadar}
+      >
+        {!radarMaintenanceAction ? (
+          <div style={{ display: "grid", gap: theme.spacing.sm }}>
+            {radarPrivateOwner ? (
+              <RadarButton variant="ghost" onClick={() => setRadarMaintenanceAction("professional")}>
+                Alterar para profissional
+              </RadarButton>
+            ) : null}
+            <RadarButton variant="danger" onClick={() => setRadarMaintenanceAction("inactive")}>
+              Inativar oportunidade
+            </RadarButton>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gap: theme.spacing.sm }}>
+            <p style={{ margin: 0, fontWeight: 600 }}>
+              {radarMaintenanceAction === "professional" ? "Particular → Profissional" : "A oportunidade ficará inativa e deixará de ser considerada disponível. O registo não será apagado."}
+            </p>
+            <label style={{ display: "grid", gap: theme.spacing.xs }}>
+              Motivo obrigatório
+              <textarea
+                value={radarMaintenanceReason}
+                onChange={(event) => setRadarMaintenanceReason(event.target.value)}
+                rows={4}
+                required
+                style={{
+                  width: "100%",
+                  resize: "vertical",
+                  borderRadius: theme.borderRadius.md,
+                  border: `1px solid ${theme.colors.border}`,
+                  padding: theme.spacing.sm,
+                  background: theme.colors.inputBackground,
+                  color: theme.colors.text,
+                  font: "inherit"
+                }}
+              />
+            </label>
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: theme.spacing.sm }}>
+              <RadarButton variant="ghost" onClick={() => setRadarMaintenanceAction(null)} disabled={radarMaintenanceSaving}>
+                Cancelar
+              </RadarButton>
+              <RadarButton
+                variant={radarMaintenanceAction === "inactive" ? "danger" : "primary"}
+                onClick={confirmarAjusteRadar}
+                loading={radarMaintenanceSaving}
+              >
+                {radarMaintenanceAction === "inactive" ? "Inativar oportunidade" : "Guardar alteração"}
+              </RadarButton>
+            </div>
+          </div>
+        )}
+      </Modal>
     </Card>
   );
 }
