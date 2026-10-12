@@ -1,9 +1,8 @@
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawnSync } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const projectRoot = path.resolve(__dirname, "..");
-const buildDirectory = path.join(projectRoot, "build");
 
 function getGitCommit() {
   try {
@@ -20,7 +19,29 @@ function getGitCommit() {
 }
 
 const version = getGitCommit() || `build-${new Date().toISOString().replace(/[-:.]/g, "")}`;
-const outputPath = path.join(buildDirectory, "version.json");
+const reactScripts = path.join(projectRoot, "node_modules", "react-scripts", "bin", "react-scripts.js");
 
+if (!fs.existsSync(reactScripts)) {
+  console.error("react-scripts não encontrado. Execute npm install antes do build.");
+  process.exit(1);
+}
+
+// Injeta no bundle exatamente a mesma versão que será publicada em /version.json.
+const build = spawnSync(process.execPath, [reactScripts, "build"], {
+  cwd: projectRoot,
+  env: { ...process.env, REACT_APP_BUILD_VERSION: version },
+  stdio: "inherit"
+});
+
+if (build.error) {
+  console.error(build.error);
+  process.exit(1);
+}
+if (build.status !== 0) {
+  process.exit(build.status || 1);
+}
+
+const buildDirectory = path.join(projectRoot, "build");
+const outputPath = path.join(buildDirectory, "version.json");
 fs.writeFileSync(outputPath, `${JSON.stringify({ version }, null, 2)}\n`, "utf8");
 console.log(`Generated ${path.relative(projectRoot, outputPath)} (${version})`);
