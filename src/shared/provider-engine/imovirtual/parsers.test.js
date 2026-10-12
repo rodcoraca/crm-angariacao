@@ -47,4 +47,43 @@ describe('Imovirtual publication date normalization', () => {
     expect(mapNextDataItemToListing({ ...baseItem }).publishedAt).toBeNull();
     expect(mapNextDataItemToListing({ ...baseItem, dateCreated: 'invalid' }).publishedAt).toBeNull();
   });
+
+  it('maps location fields provided at the top level', () => {
+    expect(mapNextDataItemToListing({
+      ...baseItem,
+      province: 'Porto',
+      county: 'Vila Nova de Gaia',
+      city: 'Canidelo'
+    })).toMatchObject({
+      district: 'Porto',
+      municipality: 'Vila Nova de Gaia',
+      county: 'Vila Nova de Gaia',
+      city: 'Canidelo',
+      region: 'Porto'
+    });
+  });
+
+  it('falls back to reverseGeocoding when address fields are empty', () => {
+    expect(mapNextDataItemToListing({
+      ...baseItem,
+      location: {
+        address: { city: null, county: null, municipality: null, province: null, parish: null },
+        reverseGeocoding: {
+          locations: [
+            { locationLevel: 'district', name: 'Porto' },
+            { locationLevel: 'council', name: 'Vila Nova de Gaia' },
+            { locationLevel: 'parish', name: 'Santa Marinha e São Pedro da Afurada' }
+          ]
+        }
+      }
+    })).toMatchObject({
+      district: 'Porto',
+      municipality: 'Vila Nova de Gaia',
+      county: 'Vila Nova de Gaia',
+      city: 'Vila Nova de Gaia',
+      region: 'Porto',
+      freguesia: 'Santa Marinha e São Pedro da Afurada'
+    });
+  });
+
 });
