@@ -34,7 +34,7 @@ describe("fetchProviderLeadByCrmLeadId", () => {
     fetchProviderLeadByCrmLeadId("lead-1", "empresa-1");
 
     expect(mockQuery.select).toHaveBeenCalledWith(
-      expect.stringContaining("provider_leads(url, provider, external_id, imported_at, published_at, score, status)")
+      expect.stringContaining("provider_leads(id, url, provider, external_id, imported_at, published_at, score, status, is_private_owner)")
     );
   });
 
