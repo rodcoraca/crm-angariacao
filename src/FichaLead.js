@@ -443,8 +443,16 @@ export default function FichaLead({ leadId, user, voltar }) {
           ) : null}
           {providerLead?.id && radarListingActive ? (
             <Button
-              color="light"
-              style={styles.radarLink}
+              variant="primary"
+              size="lg"
+              leftIcon="✎"
+              style={{
+                ...styles.radarLink,
+                fontWeight: 700,
+                padding: "12px 18px",
+                border: `2px solid ${theme.colors.primary}`,
+                boxShadow: "0 4px 12px rgba(15, 23, 42, 0.18)"
+              }}
               onClick={abrirAjusteRadar}
             >
               Ajustar oportunidade no Radar
