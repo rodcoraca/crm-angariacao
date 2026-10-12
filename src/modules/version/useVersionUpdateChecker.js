@@ -22,12 +22,32 @@ export default function useVersionUpdateChecker() {
 
       requestInFlightRef.current = true;
       try {
-        const response = await fetch("/version.json", { cache: "no-store" });
+        // O parâmetro único também evita versões antigas servidas por caches intermédios.
+        const response = await fetch(`/version.json?t=${Date.now()}`, {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" }
+        });
         if (!response.ok) return;
 
         const remoteVersion = readVersion(await response.json());
         if (!remoteVersion || disposed) return;
 
+        // Em produção, compara a versão publicada com a versão incorporada neste bundle.
+        // Assim também deteta uma atualização que ocorreu antes da primeira verificação.
+        const buildVersion = process.env.REACT_APP_BUILD_VERSION?.trim();
+        if (buildVersion) {
+          if (remoteVersion !== buildVersion && !updateNotifiedRef.current) {
+            updateNotifiedRef.current = true;
+            notify({
+              message: "Está disponível uma nova versão do OSFlow.",
+              actionLabel: "Atualizar",
+              onAction: () => window.location.reload()
+            });
+          }
+          return;
+        }
+
+        // Fallback para desenvolvimento local, onde não existe versão de build injetada.
         if (initialVersionRef.current === null) {
           initialVersionRef.current = remoteVersion;
           return;
