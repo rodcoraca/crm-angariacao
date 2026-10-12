@@ -211,7 +211,13 @@ export async function carregarFichaLead(leadId, user = null) {
     if (providerLeadError) {
       console.warn("[FichaLead] Falha ao carregar provider_leads:", providerLeadError);
     } else {
-      providerLead = listing?.provider_leads || null;
+      providerLead = listing?.provider_leads
+        ? {
+          ...listing.provider_leads,
+          listing_is_active: listing.is_active,
+          is_private_owner_override: listing.is_private_owner_override
+        }
+        : null;
     }
   } catch (providerLeadException) {
     console.warn("[FichaLead] Falha ao carregar provider_leads:", providerLeadException);

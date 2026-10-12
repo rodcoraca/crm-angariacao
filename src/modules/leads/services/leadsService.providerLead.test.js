@@ -59,11 +59,16 @@ describe("carregarFichaLead provider_leads wiring", () => {
     fetchProviderLeadByCrmLeadId.mockResolvedValue({
       data: {
         crm_lead_id: "lead-1",
+        provider_lead_id: "provider-lead-1",
+        is_active: true,
+        is_private_owner_override: null,
         provider_leads: {
+          id: "provider-lead-1",
           url: "https://example.com/imovel/persisted",
           provider: "Imovirtual",
           external_id: "LIST-123",
-          imported_at: "2026-09-20T08:00:00.000Z"
+          imported_at: "2026-09-20T08:00:00.000Z",
+          is_private_owner: true
         }
       },
       error: null
@@ -73,7 +78,13 @@ describe("carregarFichaLead provider_leads wiring", () => {
 
     expect(result.error).toBeNull();
     expect(fetchProviderLeadByCrmLeadId).toHaveBeenCalledWith("lead-1", "empresa-1");
-    expect(result.providerLead).toEqual(expect.objectContaining({ url: "https://example.com/imovel/persisted" }));
+    expect(result.providerLead).toEqual(expect.objectContaining({
+      id: "provider-lead-1",
+      url: "https://example.com/imovel/persisted",
+      is_private_owner: true,
+      listing_is_active: true,
+      is_private_owner_override: null
+    }));
 
     const importInfo = resolveRadarLeadImportInfo(result.lead, result.form, result.providerLead);
     expect(importInfo.url).toBe("https://example.com/imovel/persisted");
