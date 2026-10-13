@@ -195,6 +195,7 @@ function PaginationControls({ currentPage, totalPages, onPageChange, compact = t
 
 export default function Radar({ selectionRequest = null }) {
   const tableRef = useRef(null);
+  const importingRequestsRef = useRef(new Set());
   const detailRef = useRef(null);
   const opportunityRowRefs = useRef(new Map());
   const lastOpenedOpportunityIdRef = useRef(null);
@@ -624,21 +625,34 @@ export default function Radar({ selectionRequest = null }) {
   }, [filtroPrecoMax, filtroPrecoMin, filtroTipologia, isProviderSyncRunning, reload, waitForRenderCommit]);
 
   const handleImportOpportunity = useCallback(async (opportunity) => {
-    const result = await importSelectedToLeads({ opportunity, user });
+    const opportunityId = String(opportunity?.id || "").trim();
 
-    if (result?.ok) {
-      notifySuccess(result.message || "Lead importada com sucesso.");
-      await reload();
-      closeDetail();
+    // Bloqueio síncrono na camada da página: o estado React só é atualizado
+    // após o render, pelo que não deve ser a única defesa contra duplo clique.
+    if (!opportunityId || importingRequestsRef.current.has(opportunityId)) {
       return;
     }
 
-    if (result?.duplicate || result?.processing) {
-      notifyInfo(result.message);
-      return;
-    }
+    importingRequestsRef.current.add(opportunityId);
+    try {
+      const result = await importSelectedToLeads({ opportunity, user });
 
-    notifyError(result?.message || "Não foi possível importar para Leads.");
+      if (result?.ok) {
+        notifySuccess(result.message || "Lead importada com sucesso.");
+        await reload();
+        closeDetail();
+        return;
+      }
+
+      if (result?.duplicate || result?.processing) {
+        notifyInfo(result.message);
+        return;
+      }
+
+      notifyError(result?.message || "Não foi possível importar para Leads.");
+    } finally {
+      importingRequestsRef.current.delete(opportunityId);
+    }
   }, [closeDetail, importSelectedToLeads, reload, user]);
 
   const openAdjustment = useCallback(() => {
@@ -913,7 +927,7 @@ export default function Radar({ selectionRequest = null }) {
               size="sm"
               variant="secondary"
               style={nowrapButtonStyle}
-              disabled={importingId === row.id || isImported || row.rawOpportunity?.is_inactive === true}
+              disabled={Boolean(importingId) || isImported || row.rawOpportunity?.is_inactive === true}
               onClick={() => handleImportOpportunity(row.rawOpportunity || null)}
             >
               {importingId === row.id ? "A importar..." : isImported ? "IMPORTADO" : "Importar Lead"}

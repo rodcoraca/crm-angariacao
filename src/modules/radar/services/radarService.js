@@ -321,8 +321,8 @@ export class RadarService {
       source: opportunity?.source || opportunity?.origem || null
     });
 
-    const opportunitySource = String(opportunity?.origem || opportunity?.source || "").toLowerCase();
-    const isProviderOpportunity = ["imovirtual", "custojusto"].includes(opportunitySource);
+    const opportunitySource = String(opportunity?.origem || opportunity?.source || "").trim().toLowerCase();
+    const isProviderOpportunity = ["imovirtual", "custojusto", "olx"].includes(opportunitySource);
     const empresaId = isProviderOpportunity ? await resolveEmpresaId(user) : null;
     const importedBy = user?.perfil_id || user?.id || null;
 
@@ -343,6 +343,13 @@ export class RadarService {
       }
 
       if (claim?.status === "already_imported") {
+        if (claim?.crm_lead_id) {
+          this.updateLocalOpportunity(opportunity?.id, {
+            imported: true,
+            estado: "importado",
+            crm_lead_id: claim.crm_lead_id
+          });
+        }
         return { ok: false, duplicate: true, message: "Este Lead já foi importado." };
       }
 
@@ -359,13 +366,8 @@ export class RadarService {
     const result = await salvarLeadFluxo(payload);
 
     if (result?.error) {
-      if (isProviderOpportunity) {
-        await supabase.rpc("radar_fail_lead_import", {
-          p_empresa_id: empresaId,
-          p_provider_lead_id: opportunity.id,
-          p_error: "Falha ao criar o Lead CRM"
-        });
-      }
+      // A operação pode ter criado a Lead antes de ocorrer um erro posterior (por exemplo, na auditoria).
+      // Mantemos a reserva para que a recuperação idempotente possa reconciliar o resultado sem duplicar.
       return {
         ok: false,
         message: result.error.message || "Falha ao importar oportunidade para Leads.",
@@ -390,13 +392,7 @@ export class RadarService {
     }
 
     if (!result?.id) {
-      if (isProviderOpportunity) {
-        await supabase.rpc("radar_fail_lead_import", {
-          p_empresa_id: empresaId,
-          p_provider_lead_id: opportunity.id,
-          p_error: "Lead CRM criada sem ID"
-        });
-      }
+      // Sem ID não é possível provar que a criação falhou; não libertar a reserva para nova criação.
       return {
         ok: false,
         message: "Falha ao obter o ID da Lead criada.",
@@ -413,15 +409,34 @@ export class RadarService {
       });
 
       if (completionError || completion?.status !== "completed") {
-        await supabase.rpc("radar_fail_lead_import", {
+        // A Lead já foi criada. Pedimos à RPC de reserva para reconciliar o registo através da auditoria;
+        // a migration DB-084 torna esta operação idempotente e devolve already_imported quando a encontra.
+        const { data: recovery, error: recoveryError } = await supabase.rpc("radar_claim_lead_import", {
           p_empresa_id: empresaId,
           p_provider_lead_id: opportunity.id,
-          p_error: "Falha ao concluir a importação"
+          p_user_id: importedBy
         });
+
+        if (!recoveryError && recovery?.status === "already_imported" && recovery?.crm_lead_id) {
+          this.updateLocalOpportunity(opportunity?.id, {
+            imported: true,
+            estado: "importado",
+            imported_at: new Date().toISOString(),
+            importado_em: new Date().toISOString(),
+            crm_lead_id: recovery.crm_lead_id
+          });
+          return {
+            ok: true,
+            message: "Importação reconciliada: a Lead já existia no CRM."
+          };
+        }
+
+        // Não chamar radar_fail_lead_import: a Lead já existe e libertar a reserva permitiria duplicá-la.
         return {
           ok: false,
-          message: "Falha ao concluir a importação do Lead.",
-          error: completionError
+          processing: recovery?.status === "processing",
+          message: "A Lead foi criada, mas o estado da importação ainda não foi confirmado. Não volte a importar esta oportunidade; tente atualizar o Radar após alguns instantes.",
+          error: completionError || recoveryError || new Error("A importação aguarda reconciliação.")
         };
       }
     }
