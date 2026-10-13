@@ -110,7 +110,7 @@ export async function listarUtilizadoresIdentityAccess({ currentUser = null } = 
     .order("nome", { ascending: true });
 }
 
-async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilter = null, currentUser = null }) {
+export async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilter = null, currentUser = null }) {
   const empresaId = resolveEmpresaIdFromContext(currentUser);
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
