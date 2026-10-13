@@ -31,13 +31,6 @@ jest.mock("../../../supabase", () => ({
 jest.mock("../../audit/services", () => ({
   auditMutation: jest.fn()
 }));
-jest.mock("../../../utils/empresaScope.js", () => ({
-  buildMissingEmpresaError: jest.fn(() => new Error("empresa_id em falta")),
-  hasEmpresaId: jest.fn((value) => Boolean(value)),
-  resolveEmpresaId: jest.fn(async () => "company-id"),
-  warnMissingEmpresaId: jest.fn()
-}));
-
 const opportunity = {
   id: "provider-lead-id",
   origem: "olx",
