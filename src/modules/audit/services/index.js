@@ -10,7 +10,8 @@ export {
 
 export {
   listarUtilizadoresIdentityAccess,
-  listarAtividadeUtilizador
+  listarAtividadeUtilizador,
+  listarTimelineIdentityAccess
 } from "./identityAccessLogService.js";
 
 export { registrarNavegacao } from "./telemetryService.js";

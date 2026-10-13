@@ -47,17 +47,20 @@ function mapSessionLogs(rows = []) {
   }));
 }
 
-async function fetchNavigationLogs({ page, pageSize, userFilter }) {
+async function fetchNavigationLogs({ page, pageSize, userFilter, empresaId }) {
   const offset = (page - 1) * pageSize;
 
-  let query = supabase
+  let query = applyEmpresaScope(supabase
     .from("logs_navegacao")
     .select("id,usuario_id,acao,detalhes,created_at", { count: 'exact' })
+  , empresaId)
     .order("created_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
-  if (userFilter?.auth_user_id) {
-    query = query.eq("usuario_id", userFilter.auth_user_id);
+  // logs_navegacao.usuario_id guarda o ID do perfil (usuarios.id),
+  // não o ID de autenticação (usuarios.auth_user_id).
+  if (userFilter?.id) {
+    query = query.eq("usuario_id", userFilter.id);
   }
 
   return query;
@@ -110,7 +113,7 @@ export async function listarUtilizadoresIdentityAccess({ currentUser = null } = 
     .order("nome", { ascending: true });
 }
 
-async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilter = null, currentUser = null }) {
+export async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilter = null, currentUser = null }) {
   const empresaId = resolveEmpresaIdFromContext(currentUser);
   if (!hasEmpresaId(empresaId)) {
     warnMissingEmpresaId();
@@ -118,7 +121,7 @@ async function listarTimelineIdentityAccess({ page = 1, pageSize = 50, userFilte
   }
 
   const [navResult, auditResult, sessionResult] = await Promise.all([
-    fetchNavigationLogs({ page, pageSize, userFilter }),
+    fetchNavigationLogs({ page, pageSize, userFilter, empresaId }),
     fetchAuditLogs({ page, pageSize, userFilter, empresaId }),
     fetchSessionLogs({ page, pageSize, userFilter, empresaId })
   ]);
@@ -163,7 +166,7 @@ export async function listarAtividadeUtilizador({ perfilId = null, authUserId = 
   const [sessionResult, auditResult, navResult] = await Promise.all([
     fetchSessionLogs({ page, pageSize, userFilter, empresaId }),
     fetchAuditLogs({ page, pageSize, userFilter, empresaId }),
-    fetchNavigationLogs({ page, pageSize, userFilter }),
+    fetchNavigationLogs({ page, pageSize, userFilter, empresaId }),
   ]);
 
   const error = sessionResult.error || auditResult.error || navResult.error || null;
