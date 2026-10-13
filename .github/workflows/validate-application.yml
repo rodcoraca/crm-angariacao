@@ -27,4 +27,4 @@ jobs:
       - name: Run tests
         run: npm test -- --watchAll=false --runInBand
       - name: Build production bundle
-        run: npm run build
+        run: CI=false npm run build
