@@ -19,5 +19,6 @@ export {
 	reconcilePendingActivation,
 	repairUserAuthAssociations,
 	getAppRedirectBaseUrl,
+	buildActivationRedirectUrl,
 	resolveTransactionalAuthContext
 } from "./authService";

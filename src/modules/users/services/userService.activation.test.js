@@ -171,4 +171,25 @@ describe("user activation service", () => {
     expect(edgeSource).toContain("const resolvedAuthUserId = usuarioId");
     expect(edgeSource).not.toContain("profile?.auth_user_id || authUserId ||");
   });
+
+  test("keeps activation redirect validation in both edge functions", () => {
+    const sendInviteSource = readFileSync(
+      join(process.cwd(), "supabase/functions/send-user-invite/index.ts"),
+      "utf8"
+    );
+    const reactivateSource = readFileSync(
+      join(process.cwd(), "supabase/functions/reactivate-user/index.ts"),
+      "utf8"
+    );
+
+    for (const edgeSource of [sendInviteSource, reactivateSource]) {
+      expect(edgeSource).toContain('url.searchParams.set("activation", "1")');
+      expect(edgeSource).toContain('protocol === "https:"');
+      expect(edgeSource).toContain("url.username || url.password");
+      expect(edgeSource).toContain('["", "3000", "3001"]');
+    }
+
+    expect(sendInviteSource).toContain('const DEFAULT_ACTIVATION_REDIRECT = "https://app.osflow.pt/"');
+    expect(reactivateSource).toContain('const DEFAULT_ACTIVATION_REDIRECT = "https://app.osflow.pt/?activation=1"');
+  });
 });

@@ -41,10 +41,33 @@ function isAllowedRedirect(value: string) {
 
   try {
     const url = new URL(value);
-    return ["app.osflow.pt", "localhost", "127.0.0.1"].includes(url.hostname);
+    const hostname = url.hostname.toLowerCase();
+    const protocol = url.protocol.toLowerCase();
+    const port = url.port;
+
+    if (url.username || url.password) return false;
+    if (!["http:", "https:"].includes(protocol)) return false;
+
+    if (hostname === "app.osflow.pt") {
+      return protocol === "https:" && (port === "" || port === "443");
+    }
+
+    return ["localhost", "127.0.0.1"].includes(hostname)
+      && ["", "3000", "3001"].includes(port);
   } catch (_error) {
     return false;
   }
+}
+
+function ensureActivationRedirect(value: string) {
+  const redirectTo = text(value) || DEFAULT_ACTIVATION_REDIRECT;
+  if (!isAllowedRedirect(redirectTo)) {
+    throw new Error("invalid_redirect");
+  }
+
+  const url = new URL(redirectTo);
+  url.searchParams.set("activation", "1");
+  return url.toString();
 }
 
 const DEFAULT_ACTIVATION_REDIRECT = "https://app.osflow.pt/?activation=1";
@@ -196,7 +219,13 @@ Deno.serve(async (request) => {
     usuarioId = text(body?.usuarioId) || null;
     const requestedEmail = email(body?.targetEmail);
     const requestedRedirect = text(body?.redirectTo);
-    const redirectTo = requestedRedirect || DEFAULT_ACTIVATION_REDIRECT;
+    let redirectTo: string;
+    try {
+      redirectTo = ensureActivationRedirect(requestedRedirect);
+    } catch (_error) {
+      await writeAudit(adminClient, { operatorId, usuarioId, authUserId, action, status: "error", previousEmail, targetEmail, previousStatus, error: "invalid_redirect" });
+      return jsonResponse(400, { success: false, error: "invalid_redirect" });
+    }
 
     if (!usuarioId) {
       return jsonResponse(400, { success: false, error: "missing_usuario_id" });
@@ -235,11 +264,6 @@ Deno.serve(async (request) => {
     if (!targetEmail || !isEmail(targetEmail)) {
       await writeAudit(adminClient, { operatorId, empresaId, usuarioId, authUserId, action, status: "error", previousEmail, targetEmail, previousStatus, error: "invalid_target_email" });
       return jsonResponse(400, { success: false, error: "invalid_target_email" });
-    }
-
-    if (!isAllowedRedirect(redirectTo)) {
-      await writeAudit(adminClient, { operatorId, empresaId, usuarioId, authUserId, action, status: "error", previousEmail, targetEmail, previousStatus, error: "invalid_redirect" });
-      return jsonResponse(400, { success: false, error: "invalid_redirect" });
     }
 
     const { data: authResult, error: authLookupError } = await adminClient.auth.admin.getUserById(authUserId);

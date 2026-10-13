@@ -10,7 +10,6 @@ import {
   createAuthUserFromAdminFlow,
   getAppRedirectBaseUrl,
   loadAuthorizationProfileByAuthUserId,
-  markUserAccountActive,
   reconcilePendingActivation,
   requestPasswordReset,
   resolveLoginEmail,
@@ -216,15 +215,6 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
         return;
       }
 
-      if (accountStatus === "pending_activation") {
-        const activationReconciliation = await reconcilePendingActivation(authUser, perfil);
-        if (activationReconciliation.error) {
-          reportError(activationReconciliation.error, "Login.reconcilePendingActivation");
-        } else if (activationReconciliation.data) {
-          perfil = activationReconciliation.data;
-        }
-      }
-
       const usuarioSessao = montarUsuarioSessao(authUser, perfil, authSession?.expires_at || null);
 
       try {
@@ -371,9 +361,22 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
           return;
         }
 
-        const activationResult = await markUserAccountActive(profile.id, { activationCompleted: true });
+        const activationResult = await reconcilePendingActivation(
+          sessionData.session.user,
+          profile,
+          { onboardingCompleted: true }
+        );
         if (activationResult.error) {
           reportError(activationResult.error, "Login.atualizarPasswordRecuperacao.activation");
+          notifyError("A password foi definida, mas não foi possível concluir a ativação da conta.");
+          return;
+        }
+        if (!activationResult.updated) {
+          const activationError = {
+            code: "activation_not_applied",
+            message: "A ativação não foi aplicada."
+          };
+          reportError(activationError, "Login.atualizarPasswordRecuperacao.activation");
           notifyError("A password foi definida, mas não foi possível concluir a ativação da conta.");
           return;
         }

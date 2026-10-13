@@ -449,6 +449,38 @@ export function getAppRedirectBaseUrl({
   return "https://app.osflow.pt";
 }
 
+const ACTIVATION_REDIRECT_PRODUCTION_HOST = "app.osflow.pt";
+const ACTIVATION_REDIRECT_LOCAL_HOSTS = new Set(["localhost", "127.0.0.1"]);
+const ACTIVATION_REDIRECT_LOCAL_PORTS = new Set(["", "3000", "3001"]);
+
+function isAllowedActivationRedirect(url) {
+  const hostname = String(url?.hostname || "").toLowerCase();
+  const protocol = String(url?.protocol || "").toLowerCase();
+  const port = String(url?.port || "");
+
+  if (url?.username || url?.password) return false;
+  if (!["http:", "https:"].includes(protocol)) return false;
+
+  if (hostname === ACTIVATION_REDIRECT_PRODUCTION_HOST) {
+    return protocol === "https:" && (port === "" || port === "443");
+  }
+
+  return ACTIVATION_REDIRECT_LOCAL_HOSTS.has(hostname)
+    && ACTIVATION_REDIRECT_LOCAL_PORTS.has(port);
+}
+
+export function buildActivationRedirectUrl(redirectTo) {
+  const candidate = normalizeIdentifier(redirectTo) || getAppRedirectBaseUrl();
+  const url = new URL(candidate);
+
+  if (!isAllowedActivationRedirect(url)) {
+    throw new Error("Destino de ativação não autorizado.");
+  }
+
+  url.searchParams.set("activation", "1");
+  return url.toString();
+}
+
 export function resolveTransactionalAuthContext({
   location = typeof window !== "undefined" ? window.location : null,
   search,
@@ -511,6 +543,7 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
   }
 
   try {
+    const activationRedirectTo = buildActivationRedirectUrl(redirectTo);
     const {
       data: { session },
       error: sessionError
@@ -527,7 +560,7 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
 
     console.log(
       "REDIRECT:",
-      redirectTo || null
+      activationRedirectTo
     );
 
     console.log(
@@ -567,7 +600,7 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
       usuarioId: usuarioId || undefined,
       authUserId: authUserId || undefined,
       empresaId: empresaId || undefined,
-      redirectTo: redirectTo || undefined,
+      redirectTo: activationRedirectTo,
       nome: nome || undefined,
       username: username || undefined,
       empresa: empresa || undefined
@@ -776,7 +809,11 @@ export async function alterarPasswordUtilizador({ authUserId, password }) {
   return { data: result.data?.data || null, error: null };
 }
 
-export async function markUserAccountActive(profileId, { activationCompleted = false } = {}) {
+export async function markUserAccountActive(profileId, {
+  activationCompleted = false,
+  authUserId = "",
+  empresaId = ""
+} = {}) {
   if (!profileId) {
     return {
       data: null,
@@ -797,7 +834,7 @@ export async function markUserAccountActive(profileId, { activationCompleted = f
     };
   }
 
-  return supabase
+  let query = supabase
     .from(USERS_TABLE)
     .update({
       account_status: "active",
@@ -808,16 +845,97 @@ export async function markUserAccountActive(profileId, { activationCompleted = f
     })
     .eq("id", profileId)
     .eq("account_status", "pending_activation")
-    .select("id,account_status,activated_at")
-    .maybeSingle();
+    .eq("ativo", true)
+    .is("activated_at", null);
+
+  if (authUserId) {
+    query = query.eq("auth_user_id", authUserId);
+  }
+
+  if (empresaId) {
+    query = query.eq("empresa_id", empresaId);
+  }
+
+  const result = await query.select(USER_PROFILE_SELECT).maybeSingle();
+
+  if (result.error) {
+    return result;
+  }
+
+  if (!result.data) {
+    return {
+      data: null,
+      error: {
+        code: "activation_not_applied",
+        message: "A ativação não foi aplicada porque o perfil já não está pendente ou não corresponde ao contexto autenticado."
+      }
+    };
+  }
+
+  return result;
 }
 
-export async function reconcilePendingActivation(authUser, profile) {
-  if (!authUser?.id || !profile?.id) {
+export async function reconcilePendingActivation(authUser, profile, { onboardingCompleted = false } = {}) {
+  if (!authUser?.id) {
     return { data: profile || null, error: null, updated: false };
   }
 
-  return { data: profile, error: null, updated: false };
+  if (!profile?.id) {
+    return {
+      data: null,
+      error: {
+        code: "missing_profile",
+        message: "Perfil de utilizador não encontrado para concluir a ativação."
+      },
+      updated: false
+    };
+  }
+
+  const authUserId = normalizeIdentifier(authUser.id);
+  const profileAuthUserId = normalizeIdentifier(profile.auth_user_id);
+  const authEmpresaId = normalizeIdentifier(authUser.user_metadata?.empresa_id);
+  const profileEmpresaId = normalizeIdentifier(profile.empresa_id);
+  const accountStatus = String(profile.account_status || "").trim().toLowerCase();
+  const emailConfirmed = Boolean(authUser.email_confirmed_at || authUser.confirmed_at);
+
+  if (
+    !onboardingCompleted
+    || !emailConfirmed
+    || !profileAuthUserId
+    || profileAuthUserId !== authUserId
+    || !profileEmpresaId
+    || (authEmpresaId && authEmpresaId !== profileEmpresaId)
+    || accountStatus !== "pending_activation"
+    || profile.ativo === false
+    || profile.activated_at
+  ) {
+    return { data: profile, error: null, updated: false };
+  }
+
+  const activationResult = await markUserAccountActive(profile.id, {
+    activationCompleted: true,
+    authUserId,
+    empresaId: profile.empresa_id || ""
+  });
+
+  if (activationResult.error) {
+    return {
+      data: profile,
+      error: activationResult.error,
+      updated: false
+    };
+  }
+
+  return {
+    data: {
+      ...profile,
+      ...(activationResult.data || {}),
+      account_status: "active",
+      ativo: true
+    },
+    error: null,
+    updated: true
+  };
 }
 
 export async function createAuthUserFromAdminFlow({ email, password, metadata = {}, existingAuthUserId = null }) {

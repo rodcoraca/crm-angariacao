@@ -50,6 +50,42 @@ function normalizeEmail(value: unknown) {
     .toLowerCase();
 }
 
+const DEFAULT_ACTIVATION_REDIRECT = "https://app.osflow.pt/";
+const PRODUCTION_REDIRECT_HOST = "app.osflow.pt";
+const LOCAL_REDIRECT_HOSTS = new Set(["localhost", "127.0.0.1"]);
+const LOCAL_REDIRECT_PORTS = new Set(["", "3000", "3001"]);
+
+function isAllowedRedirect(value: string) {
+  try {
+    const url = new URL(value);
+    const hostname = url.hostname.toLowerCase();
+    const protocol = url.protocol.toLowerCase();
+    const port = url.port;
+
+    if (url.username || url.password) return false;
+    if (!["http:", "https:"].includes(protocol)) return false;
+
+    if (hostname === PRODUCTION_REDIRECT_HOST) {
+      return protocol === "https:" && (port === "" || port === "443");
+    }
+
+    return LOCAL_REDIRECT_HOSTS.has(hostname) && LOCAL_REDIRECT_PORTS.has(port);
+  } catch (_error) {
+    return false;
+  }
+}
+
+function ensureActivationRedirect(value: unknown) {
+  const redirectTo = String(value || "").trim() || DEFAULT_ACTIVATION_REDIRECT;
+  if (!isAllowedRedirect(redirectTo)) {
+    throw new Error("invalid_redirect");
+  }
+
+  const url = new URL(redirectTo);
+  url.searchParams.set("activation", "1");
+  return url.toString();
+}
+
 type AuthAdminUser = {
   id: string;
   email?: string | null;
@@ -726,15 +762,18 @@ Deno.serve(async (req: Request) => {
     //   - Supabase determines whether the invite can be sent
     //   - we return the actual result/error
     //
+    let activationRedirectTo: string;
+    try {
+      activationRedirectTo = ensureActivationRedirect(redirectTo);
+    } catch (_error) {
+      return logAndRespond("invalid_redirect", 400, {
+        success: false,
+        error: "invalid_redirect"
+      });
+    }
+
     const inviteOptions = {
-      ...(redirectTo
-        ? {
-            redirectTo:
-              String(
-                redirectTo
-              )
-          }
-        : {}),
+      redirectTo: activationRedirectTo,
 
       data: {
         nome,
@@ -753,8 +792,7 @@ Deno.serve(async (req: Request) => {
           ),
         emailConfirmed,
         redirectTo:
-          redirectTo ||
-          null
+          activationRedirectTo
       }
     );
 
