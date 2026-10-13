@@ -97,6 +97,19 @@ describe("RadarService importação idempotente", () => {
     expect(supabase.rpc).not.toHaveBeenCalledWith("radar_fail_lead_import", expect.anything());
   });
 
+  test("não liberta a reserva quando o resultado da criação é incerto", async () => {
+    supabase.rpc.mockResolvedValueOnce({ data: { status: "claimed" }, error: null });
+    salvarLeadFluxo.mockResolvedValue({ error: { message: "falha após a mutação" } });
+
+    const service = new RadarService({});
+    const result = await service.importOpportunityToLeads(opportunity, user);
+
+    expect(result.ok).toBe(false);
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+    expect(supabase.rpc).toHaveBeenCalledWith("radar_claim_lead_import", expect.any(Object));
+    expect(supabase.rpc).not.toHaveBeenCalledWith("radar_fail_lead_import", expect.anything());
+  });
+
   test("não cria a Lead quando a reserva informa que já está em processamento", async () => {
     supabase.rpc.mockResolvedValueOnce({ data: { status: "processing" }, error: null });
 
