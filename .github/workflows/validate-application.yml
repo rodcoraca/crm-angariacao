@@ -13,6 +13,8 @@ jobs:
   test-and-build:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      TZ: Europe/Lisbon
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
