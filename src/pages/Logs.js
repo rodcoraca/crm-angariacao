@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { listarAtividadeUtilizador, listarUtilizadoresIdentityAccess } from '../modules/audit/services';
+import { listarTimelineIdentityAccess, listarUtilizadoresIdentityAccess } from '../modules/audit/services';
 const PAGE_SIZE = 50;
 
 export default function Logs({ modo = 'geral', onModoChange, currentUser = null }) {
@@ -47,7 +47,7 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
       selectedUser
     });
 
-    const { data, error, hasMore: nextHasMore, count } = await listarAtividadeUtilizador({
+    const { data, error, hasMore: nextHasMore, count } = await listarTimelineIdentityAccess({
       perfilId: selectedUser?.id || null,
       authUserId: selectedUser?.auth_user_id || null,
       page: targetPage,
