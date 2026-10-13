@@ -322,7 +322,7 @@ export class RadarService {
     });
 
     const opportunitySource = String(opportunity?.origem || opportunity?.source || "").toLowerCase();
-    const isProviderOpportunity = ["imovirtual", "custojusto"].includes(opportunitySource);
+    const isProviderOpportunity = ["imovirtual", "custojusto", "idealista", "olx"].includes(opportunitySource);
     const empresaId = isProviderOpportunity ? await resolveEmpresaId(user) : null;
     const importedBy = user?.perfil_id || user?.id || null;
 
