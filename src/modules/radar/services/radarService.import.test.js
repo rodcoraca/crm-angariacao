@@ -1,6 +1,7 @@
 import { RadarService } from "./radarService";
 import { salvarLeadFluxo } from "../../leads/services";
 import { supabase } from "../../../supabase";
+import { appendRadarMetadataBlockOnce, buildRadarLeadMetadata } from "../contracts/radarLeadMetadata";
 
 jest.mock("../repositories/RadarRepository", () => ({
   RadarRepository: jest.fn().mockImplementation(() => ({ setProvider: jest.fn() }))
@@ -45,6 +46,18 @@ const user = { id: "user-id", perfil_id: "user-id", empresa_id: "company-id" };
 describe("RadarService importação idempotente", () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    appendRadarMetadataBlockOnce.mockImplementation((value) => value);
+    buildRadarLeadMetadata.mockImplementation((value) => ({
+      provider: value.provider,
+      externalId: value.externalId,
+      url: value.url,
+      publisherName: value.publisherName,
+      publisherContact: value.publisherContact,
+      publishedAt: value.publishedAt,
+      capturedAt: value.capturedAt,
+      score: value.score,
+      status: value.status
+    }));
   });
 
   test("reserva e conclui uma importação OLX", async () => {
