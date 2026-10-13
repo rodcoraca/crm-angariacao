@@ -48,8 +48,9 @@ export default function Logs({ modo = 'geral', onModoChange, currentUser = null 
     });
 
     const { data, error, hasMore: nextHasMore, count } = await listarTimelineIdentityAccess({
-      perfilId: selectedUser?.id || null,
-      authUserId: selectedUser?.auth_user_id || null,
+      userFilter: selectedUser
+        ? { id: selectedUser.id, auth_user_id: selectedUser.auth_user_id }
+        : null,
       page: targetPage,
       pageSize: PAGE_SIZE,
       currentUser
