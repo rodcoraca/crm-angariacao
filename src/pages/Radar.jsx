@@ -1000,7 +1000,12 @@ export default function Radar({ selectionRequest = null }) {
     if (filtroCidade && String(filtroCidade).trim()) labels.push(`Concelho: ${String(filtroCidade).trim()}`);
     if (filtroDistrito && filtroDistrito !== "todos") labels.push(`Distrito: ${filtroDistrito}`);
     if (filtroOrigem && filtroOrigem !== "todos") labels.push(`Origem: ${filtroOrigem}`);
-    if (filtroEstado && filtroEstado !== "todos") labels.push(`Estado: ${filtroEstado}`);
+    if (filtroEstado && filtroEstado !== "todos") {
+      const estadoLabel = filtroEstado === "nao_novo_nao_importado"
+        ? "Não novos / Não importados"
+        : filtroEstado;
+      labels.push(`Estado: ${estadoLabel}`);
+    }
     if (filtroParticulares && filtroParticulares !== "todos") labels.push(`Particulares: ${filtroParticulares === "particulares" ? "Particulares" : "Não particulares"}`);
     if (filtroData && filtroData !== "todos") labels.push(`Data: ${filtroData === "24h" ? "Últimas 24h" : filtroData === "7d" ? "Últimos 7d" : filtroData === "15d" ? "Últimos 15d" : "30 dias+"}`);
     if (filtroTipologia && String(filtroTipologia).trim() && String(filtroTipologia).trim() !== "todos") labels.push(`Tipologia: ${String(filtroTipologia).trim()}`);
@@ -1122,6 +1127,7 @@ export default function Radar({ selectionRequest = null }) {
                 <option value="todos">Todos</option>
                 <option value="novo">Novo</option>
                 <option value="importado">Importado</option>
+                <option value="nao_novo_nao_importado">Não novos / Não importados</option>
               </select>
             </label>
 
