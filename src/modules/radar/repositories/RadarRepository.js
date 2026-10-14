@@ -238,14 +238,22 @@ export class RadarRepository {
     const empresaId = await resolveEmpresaId();
     if (!empresaId) return { districts: [], cities: [], providers: [] };
 
+    // Em seleção múltipla, as listas de distrito/origem não são restringidas pelos próprios
+    // critérios, para permitir adicionar valores; os restantes critérios só são enviados
+    // quando têm um único valor, único caso suportado pelo contrato da função.
+    const single = (values) => (Array.isArray(values) && values.length === 1 ? values[0] : null);
+    const estado = single(filters.estados);
+    const privateValue = single(filters.private_owner_values);
+    const dateRange = single(filters.date_ranges);
+
     const { data, error } = await supabase.rpc("radar_get_filter_options", {
       p_empresa_id:  empresaId,
-      p_district:    (filters.district && filters.district !== "todos")  ? filters.district  : null,
-      p_provider:    (filters.provider && filters.provider !== "todos")  ? filters.provider  : null,
-      p_estado:      (filters.estado   && filters.estado   !== "todos")  ? filters.estado    : null,
-      p_is_private:  filters.is_private_owner ?? null,
-      p_date_after:  filters.date_after  ?? null,
-      p_date_before: filters.date_before ?? null
+      p_district:    null,
+      p_provider:    null,
+      p_estado:      estado === "novo" || estado === "importado" ? estado : null,
+      p_is_private:  privateValue === null ? null : privateValue === "true",
+      p_date_after:  dateRange?.after ?? null,
+      p_date_before: dateRange?.before ?? null
     });
 
     if (error) {

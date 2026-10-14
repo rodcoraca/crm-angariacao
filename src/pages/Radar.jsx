@@ -24,6 +24,7 @@ import { createRadarStyles } from "./radarStyles";
 import { runImovirtualSync } from "../providers/services/providers/providerSyncRunner";
 import SyncProgressModal from "../components/radar/SyncProgressModal";
 import SyncPreparationModal from "../components/radar/SyncPreparationModal";
+import MultiSelectDropdown from "../components/radar/MultiSelectDropdown";
 import { getProviderSyncStatuses } from "../providers/services/providers/providerSyncService";
 import { providerSyncEngine, SyncState } from "../shared/provider-engine/sync/ProviderSyncEngine";
 import { useNavigationGuard } from "../shared/navigation";
@@ -55,6 +56,28 @@ function getProviderLabel(providerValue) {
   return text || "Desconhecido";
 }
 
+const ESTADO_OPTIONS = [
+  { value: "novo", label: "Novo" },
+  { value: "importado", label: "Importado" },
+  { value: "nao_novo_nao_importado", label: "Não novos / Não importados" }
+];
+const PARTICULARES_OPTIONS = [
+  { value: "particulares", label: "Particulares" },
+  { value: "nao_particulares", label: "Não particulares" }
+];
+const DATA_OPTIONS = [
+  { value: "24h", label: "Últimas 24h" },
+  { value: "7d", label: "Últimos 7d" },
+  { value: "15d", label: "Últimos 15d" },
+  { value: "30d_plus", label: "30 dias+" }
+];
+const TIPOLOGIA_OPTIONS = ["T0", "T1", "T2", "T3", "T4", "T5+", "V1", "V2", "V3", "V4", "V5+"]
+  .map((value) => ({ value, label: value }));
+const toLabelMap = (options) => Object.fromEntries(options.map((option) => [option.value, option.label]));
+const ESTADO_LABELS = toLabelMap(ESTADO_OPTIONS);
+const PARTICULARES_LABELS = toLabelMap(PARTICULARES_OPTIONS);
+const DATA_LABELS = toLabelMap(DATA_OPTIONS);
+
 function buildSQLFilters({
   filtroCidade,
   filtroEstado,
@@ -67,17 +90,16 @@ function buildSQLFilters({
   filtroPrecoMax
 }) {
   const f = {};
-  const normalizedProvider = String(filtroOrigem || "").trim().toLowerCase();
+  const list = (value) => (Array.isArray(value) ? value : []);
 
   if (filtroCidade && String(filtroCidade).trim()) f.city = String(filtroCidade).trim();
-  if (filtroDistrito && filtroDistrito !== "todos") f.district = filtroDistrito;
-  if (normalizedProvider && normalizedProvider !== "todos") f.provider = normalizedProvider;
-  if (filtroEstado && filtroEstado !== "todos") f.estado = filtroEstado;
-  if (filtroParticulares === "particulares") f.is_private_owner = true;
-  else if (filtroParticulares === "nao_particulares") f.is_private_owner = false;
-  if (filtroTipologia && String(filtroTipologia).trim() && String(filtroTipologia).trim() !== "todos") {
-    f.tipologia = String(filtroTipologia).trim();
+  if (list(filtroDistrito).length > 0) f.districts = list(filtroDistrito);
+  if (list(filtroOrigem).length > 0) f.providers = list(filtroOrigem).map((item) => String(item).trim().toLowerCase());
+  if (list(filtroEstado).length > 0) f.estados = list(filtroEstado);
+  if (list(filtroParticulares).length > 0) {
+    f.private_owner_values = list(filtroParticulares).map((item) => (item === "particulares" ? "true" : "false"));
   }
+  if (list(filtroTipologia).length > 0) f.tipologias = list(filtroTipologia);
 
   const precoMin = String(filtroPrecoMin ?? "").trim();
   if (precoMin && !Number.isNaN(Number(precoMin))) {
@@ -90,10 +112,15 @@ function buildSQLFilters({
   }
 
   const agora = new Date();
-  if (filtroData === "24h") f.date_after = new Date(agora - 24 * 60 * 60 * 1000).toISOString();
-  else if (filtroData === "7d") f.date_after = new Date(agora - 7 * 24 * 60 * 60 * 1000).toISOString();
-  else if (filtroData === "15d") f.date_after = new Date(agora - 15 * 24 * 60 * 60 * 1000).toISOString();
-  else if (filtroData === "30d_plus") f.date_before = new Date(agora - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const daysAgo = (days) => new Date(agora - days * 24 * 60 * 60 * 1000).toISOString();
+  const dateRanges = list(filtroData).map((period) => {
+    if (period === "24h") return { after: daysAgo(1) };
+    if (period === "7d") return { after: daysAgo(7) };
+    if (period === "15d") return { after: daysAgo(15) };
+    if (period === "30d_plus") return { before: daysAgo(30) };
+    return null;
+  }).filter(Boolean);
+  if (dateRanges.length > 0) f.date_ranges = dateRanges;
   return f;
 }
 
@@ -220,14 +247,14 @@ export default function Radar({ selectionRequest = null }) {
     setPage
   } = useRadar();
   const [filtroCidade, setFiltroCidade] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState("todos");
-  const [filtroOrigem, setFiltroOrigem] = useState("todos");
-  const [filtroDistrito, setFiltroDistrito] = useState("todos");
-  const [filtroTipologia, setFiltroTipologia] = useState("");
+  const [filtroEstado, setFiltroEstado] = useState([]);
+  const [filtroOrigem, setFiltroOrigem] = useState([]);
+  const [filtroDistrito, setFiltroDistrito] = useState([]);
+  const [filtroTipologia, setFiltroTipologia] = useState([]);
   const [filtroPrecoMin, setFiltroPrecoMin] = useState("");
   const [filtroPrecoMax, setFiltroPrecoMax] = useState("");
-  const [filtroParticulares, setFiltroParticulares] = useState("todos");
-  const [filtroData, setFiltroData] = useState("todos");
+  const [filtroParticulares, setFiltroParticulares] = useState([]);
+  const [filtroData, setFiltroData] = useState([]);
   const [timelineVisibleCount, setTimelineVisibleCount] = useState(5);
   const [selectedOpportunityId, setSelectedOpportunityId] = useState(null);
 
@@ -723,6 +750,21 @@ export default function Radar({ selectionRequest = null }) {
     };
   }, [snapshot]);
 
+  const applyMultiFilter = (key, value) => {
+    const current = { filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData, filtroTipologia, filtroPrecoMin, filtroPrecoMax };
+    const setters = {
+      filtroEstado: setFiltroEstado,
+      filtroOrigem: setFiltroOrigem,
+      filtroDistrito: setFiltroDistrito,
+      filtroParticulares: setFiltroParticulares,
+      filtroData: setFiltroData,
+      filtroTipologia: setFiltroTipologia
+    };
+    setters[key](value);
+    setPage(1);
+    reload({ page: 1, pageSize, filters: buildSQLFilters({ ...current, [key]: value }) });
+  };
+
   const tabela = useMemo(() => {
     return mapRadarTableViewModel(snapshot?.rows || []);
   }, [snapshot]);
@@ -998,18 +1040,13 @@ export default function Radar({ selectionRequest = null }) {
     const labels = [];
 
     if (filtroCidade && String(filtroCidade).trim()) labels.push(`Concelho: ${String(filtroCidade).trim()}`);
-    if (filtroDistrito && filtroDistrito !== "todos") labels.push(`Distrito: ${filtroDistrito}`);
-    if (filtroOrigem && filtroOrigem !== "todos") labels.push(`Origem: ${filtroOrigem}`);
-    if (filtroEstado && filtroEstado !== "todos") {
-      const estadoLabel = filtroEstado === "nao_novo_nao_importado"
-        ? "Não novos / Não importados"
-        : filtroEstado;
-      labels.push(`Estado: ${estadoLabel}`);
-    }
-    if (filtroParticulares && filtroParticulares !== "todos") labels.push(`Particulares: ${filtroParticulares === "particulares" ? "Particulares" : "Não particulares"}`);
-    if (filtroData && filtroData !== "todos") labels.push(`Data: ${filtroData === "24h" ? "Últimas 24h" : filtroData === "7d" ? "Últimos 7d" : filtroData === "15d" ? "Últimos 15d" : "30 dias+"}`);
-    if (filtroTipologia && String(filtroTipologia).trim() && String(filtroTipologia).trim() !== "todos") labels.push(`Tipologia: ${String(filtroTipologia).trim()}`);
-    if (filtroPrecoMin && String(filtroPrecoMin).trim()) labels.push(`Preço mínimo: ${String(filtroPrecoMin).trim()}`);
+    const pick = (values, map) => values.map((value) => map[value] || value).join(", ");
+    if (filtroDistrito.length > 0) labels.push(`Distrito: ${filtroDistrito.join(", ")}`);
+    if (filtroOrigem.length > 0) labels.push(`Origem: ${filtroOrigem.map(getProviderLabel).join(", ")}`);
+    if (filtroEstado.length > 0) labels.push(`Estado: ${pick(filtroEstado, ESTADO_LABELS)}`);
+    if (filtroParticulares.length > 0) labels.push(`Particulares: ${pick(filtroParticulares, PARTICULARES_LABELS)}`);
+    if (filtroData.length > 0) labels.push(`Data: ${pick(filtroData, DATA_LABELS)}`);
+    if (filtroTipologia.length > 0) labels.push(`Tipologia: ${filtroTipologia.join(", ")}`);    if (filtroPrecoMin && String(filtroPrecoMin).trim()) labels.push(`Preço mínimo: ${String(filtroPrecoMin).trim()}`);
     if (filtroPrecoMax && String(filtroPrecoMax).trim()) labels.push(`Preço máximo: ${String(filtroPrecoMax).trim()}`);
 
     return labels;
@@ -1098,15 +1135,17 @@ export default function Radar({ selectionRequest = null }) {
             gap: '10px',
             marginBottom: '10px'
           }}>
-            <label style={styles.filterField}>
+            <div style={styles.filterField}>
               Distrito
-              <select value={filtroDistrito} onChange={(event) => { const v = event.target.value; setFiltroDistrito(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito: v, filtroParticulares, filtroData, filtroTipologia, filtroPrecoMin, filtroPrecoMax }) }); }} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                {filterOptions.distritos.map((distrito) => (
-                  <option key={distrito} value={distrito}>{distrito}</option>
-                ))}
-              </select>
-            </label>
+              <MultiSelectDropdown
+                label="Distrito"
+                theme={theme}
+                controlStyle={styles.filterControl}
+                options={filterOptions.distritos.map((distrito) => ({ value: distrito, label: distrito }))}
+                selected={filtroDistrito}
+                onChange={(next) => applyMultiFilter("filtroDistrito", next)}
+              />
+            </div>
 
             <label style={styles.filterField}>
               Concelho
@@ -1121,84 +1160,69 @@ export default function Radar({ selectionRequest = null }) {
               />
             </label>
 
-            <label style={styles.filterField}>
+            <div style={styles.filterField}>
               Estado
-              <select value={filtroEstado} onChange={(event) => { const v = event.target.value; setFiltroEstado(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado: v, filtroOrigem, filtroDistrito, filtroParticulares, filtroData, filtroTipologia, filtroPrecoMin, filtroPrecoMax }) }); }} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                <option value="novo">Novo</option>
-                <option value="importado">Importado</option>
-                <option value="nao_novo_nao_importado">Não novos / Não importados</option>
-              </select>
-            </label>
+              <MultiSelectDropdown
+                label="Estado"
+                theme={theme}
+                controlStyle={styles.filterControl}
+                options={ESTADO_OPTIONS}
+                selected={filtroEstado}
+                onChange={(next) => applyMultiFilter("filtroEstado", next)}
+              />
+            </div>
 
-            <label style={styles.filterField}>
+            <div style={styles.filterField}>
               Origem
-              <select value={filtroOrigem} onChange={(event) => {
-                const v = String(event.target.value || "").trim().toLowerCase();
+              <MultiSelectDropdown
+                label="Origem"
+                theme={theme}
+                controlStyle={styles.filterControl}
+                options={filterOptions.origens.map((origem) => ({
+                  value: String(origem || "").trim().toLowerCase(),
+                  label: getProviderLabel(origem)
+                }))}
+                selected={filtroOrigem}
+                onChange={(next) => applyMultiFilter("filtroOrigem", next)}
+              />
+            </div>
 
-                const nextFilters = buildSQLFilters({
-                  filtroCidade,
-                  filtroEstado,
-                  filtroOrigem: v,
-                  filtroDistrito,
-                  filtroParticulares,
-                  filtroData,
-                  filtroTipologia,
-                  filtroPrecoMin,
-                  filtroPrecoMax
-                });
-
-                setFiltroOrigem(v);
-                setPage(1);
-                reload({ page: 1, pageSize, filters: nextFilters });
-              }} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                {filterOptions.origens.map((origem) => {
-                  const optionValue = String(origem || "").trim().toLowerCase();
-                  return (
-                    <option key={optionValue} value={optionValue}>{getProviderLabel(origem)}</option>
-                  );
-                })}
-              </select>
-            </label>
-
-            <label style={styles.filterField}>
+            <div style={styles.filterField}>
               Particulares
-              <select value={filtroParticulares} onChange={(e) => { const v = e.target.value; setFiltroParticulares(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares: v, filtroData, filtroTipologia, filtroPrecoMin, filtroPrecoMax }) }); }} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                <option value="particulares">Particulares</option>
-                <option value="nao_particulares">Não particulares</option>
-              </select>
-            </label>
+              <MultiSelectDropdown
+                label="Particulares"
+                theme={theme}
+                controlStyle={styles.filterControl}
+                options={PARTICULARES_OPTIONS}
+                selected={filtroParticulares}
+                onChange={(next) => applyMultiFilter("filtroParticulares", next)}
+              />
+            </div>
 
-            <label style={styles.filterField}>
+            <div style={styles.filterField}>
               Data
-              <select value={filtroData} onChange={(e) => { const v = e.target.value; setFiltroData(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData: v, filtroTipologia, filtroPrecoMin, filtroPrecoMax }) }); }} style={styles.filterControl}>
-                <option value="todos">Tudo</option>
-                <option value="24h">Últimas 24h</option>
-                <option value="7d">Últimos 7d</option>
-                <option value="15d">Últimos 15d</option>
-                <option value="30d_plus">30 dias+</option>
-              </select>
-            </label>
+              <MultiSelectDropdown
+                label="Data"
+                allLabel="Tudo"
+                theme={theme}
+                controlStyle={styles.filterControl}
+                options={DATA_OPTIONS}
+                selected={filtroData}
+                onChange={(next) => applyMultiFilter("filtroData", next)}
+              />
+            </div>
 
-            <label style={styles.filterField}>
+            <div style={styles.filterField}>
               Tipologia
-              <select value={filtroTipologia} onChange={(event) => { const v = event.target.value; setFiltroTipologia(v); setPage(1); reload({ page: 1, pageSize, filters: buildSQLFilters({ filtroCidade, filtroEstado, filtroOrigem, filtroDistrito, filtroParticulares, filtroData, filtroTipologia: v, filtroPrecoMin, filtroPrecoMax }) }); }} style={styles.filterControl}>
-                <option value="todos">Todos</option>
-                <option value="T0">T0</option>
-                <option value="T1">T1</option>
-                <option value="T2">T2</option>
-                <option value="T3">T3</option>
-                <option value="T4">T4</option>
-                <option value="T5+">T5+</option>
-                <option value="V1">V1</option>
-                <option value="V2">V2</option>
-                <option value="V3">V3</option>
-                <option value="V4">V4</option>
-                <option value="V5+">V5+</option>
-              </select>
-            </label>
+              <MultiSelectDropdown
+                label="Tipologia"
+                theme={theme}
+                controlStyle={styles.filterControl}
+                options={TIPOLOGIA_OPTIONS}
+                selected={filtroTipologia}
+                onChange={(next) => applyMultiFilter("filtroTipologia", next)}
+              />
+            </div>
 
             <label style={styles.filterField}>
               Preço mínimo
@@ -1235,13 +1259,13 @@ export default function Radar({ selectionRequest = null }) {
               variant="ghost"
               style={nowrapButtonStyle}
               onClick={() => {
-                setFiltroDistrito("todos");
+                setFiltroDistrito([]);
                 setFiltroCidade("");
-                setFiltroEstado("todos");
-                setFiltroOrigem("todos");
-                setFiltroParticulares("todos");
-                setFiltroData("todos");
-                setFiltroTipologia("todos");
+                setFiltroEstado([]);
+                setFiltroOrigem([]);
+                setFiltroParticulares([]);
+                setFiltroData([]);
+                setFiltroTipologia([]);
                 setFiltroPrecoMin("");
                 setFiltroPrecoMax("");
                 setPage(1);
