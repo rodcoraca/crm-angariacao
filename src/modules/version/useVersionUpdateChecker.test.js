@@ -22,6 +22,7 @@ describe("useVersionUpdateChecker", () => {
     jest.useFakeTimers();
     fetchMock = jest.fn();
     global.fetch = fetchMock;
+    window.localStorage.clear();
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
     notify.mockClear();
   });

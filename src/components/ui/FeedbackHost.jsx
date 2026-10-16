@@ -3,7 +3,7 @@ import { useTheme } from "../../theme/ThemeContext";
 import Button from "./Button";
 import Modal from "./Modal";
 import Toast from "./Toast";
-import { feedbackEvents } from "./feedbackBus";
+import { feedbackEvents, getLastPersistentToast } from "./feedbackBus";
 
 export default function FeedbackHost() {
   const theme = useTheme();
@@ -46,6 +46,11 @@ export default function FeedbackHost() {
 
     window.addEventListener(feedbackEvents.toast, onToast);
     window.addEventListener(feedbackEvents.confirm, onConfirm);
+
+    const lastPersistentToast = getLastPersistentToast();
+    if (lastPersistentToast) {
+      onToast({ detail: lastPersistentToast });
+    }
 
     return () => {
       window.removeEventListener(feedbackEvents.toast, onToast);

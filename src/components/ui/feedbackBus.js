@@ -1,5 +1,6 @@
 const TOAST_EVENT = "osflow:ui-toast";
 const CONFIRM_EVENT = "osflow:ui-confirm";
+let lastPersistentToast = null;
 
 function dispatchEvent(name, detail) {
   if (typeof window === "undefined") return;
@@ -8,7 +9,15 @@ function dispatchEvent(name, detail) {
 
 export function notify({ message, variant = "neutral", duration = 3200, actionLabel, onAction, persistent = false }) {
   if (!message) return;
-  dispatchEvent(TOAST_EVENT, { message, variant, duration, actionLabel, onAction, persistent });
+  const detail = { message, variant, duration, actionLabel, onAction, persistent };
+  if (persistent) {
+    lastPersistentToast = detail;
+  }
+  dispatchEvent(TOAST_EVENT, detail);
+}
+
+export function getLastPersistentToast() {
+  return lastPersistentToast;
 }
 
 export function notifySuccess(message) {
