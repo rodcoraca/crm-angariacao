@@ -6,9 +6,9 @@ function dispatchEvent(name, detail) {
   window.dispatchEvent(new CustomEvent(name, { detail }));
 }
 
-export function notify({ message, variant = "neutral", duration = 3200, actionLabel, onAction }) {
+export function notify({ message, variant = "neutral", duration = 3200, actionLabel, onAction, persistent = false }) {
   if (!message) return;
-  dispatchEvent(TOAST_EVENT, { message, variant, duration, actionLabel, onAction });
+  dispatchEvent(TOAST_EVENT, { message, variant, duration, actionLabel, onAction, persistent });
 }
 
 export function notifySuccess(message) {

@@ -19,15 +19,18 @@ export default function FeedbackHost() {
         message: detail.message,
           variant: detail.variant || "neutral",
           actionLabel: detail.actionLabel,
-          onAction: detail.onAction
+          onAction: detail.onAction,
+          persistent: detail.persistent === true
       };
 
       setToasts((prev) => [...prev, next]);
 
-      const timeout = Number(detail.duration) > 0 ? Number(detail.duration) : 3200;
-      window.setTimeout(() => {
-        setToasts((prev) => prev.filter((toast) => toast.id !== id));
-      }, timeout);
+      if (!next.persistent) {
+        const timeout = Number(detail.duration) > 0 ? Number(detail.duration) : 3200;
+        window.setTimeout(() => {
+          setToasts((prev) => prev.filter((toast) => toast.id !== id));
+        }, timeout);
+      }
     }
 
     function onConfirm(event) {
@@ -78,7 +81,7 @@ export default function FeedbackHost() {
               variant={toast.variant}
               actionLabel={toast.actionLabel}
               onAction={toast.onAction}
-              onClose={() => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
+              onClose={toast.persistent ? undefined : () => setToasts((prev) => prev.filter((item) => item.id !== toast.id))}
             />
           );
         })}

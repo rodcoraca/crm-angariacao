@@ -38,7 +38,8 @@ export default function useVersionUpdateChecker() {
           notify({
             message: "Está disponível uma nova versão do OSFlow.",
             actionLabel: "Atualizar",
-            onAction: () => window.location.reload()
+            onAction: () => window.location.reload(),
+            persistent: true
           });
         }
       } catch {
