@@ -157,7 +157,7 @@ function getVisiblePageNumbers(currentPage, totalPages) {
   return compact;
 }
 
-function PaginationControls({ currentPage, totalPages, onPageChange, compact = true }) {
+function PaginationControls({ currentPage, totalPages, onPageChange, compact = true, disabled = false, loading = false }) {
   const safeTotalPages = Math.max(1, Number(totalPages) || 1);
   const safeCurrentPage = Math.min(Math.max(1, Number(currentPage) || 1), safeTotalPages);
   const visiblePages = getVisiblePageNumbers(safeCurrentPage, safeTotalPages);
@@ -168,7 +168,7 @@ function PaginationControls({ currentPage, totalPages, onPageChange, compact = t
       <Button
         variant="ghost"
         style={buttonStyle}
-        disabled={safeCurrentPage === 1}
+        disabled={disabled || safeCurrentPage === 1}
         onClick={() => onPageChange(Math.max(1, safeCurrentPage - 1))}
       >
         ← Anterior
@@ -190,6 +190,7 @@ function PaginationControls({ currentPage, totalPages, onPageChange, compact = t
           <Button
             key={`page-${pageNumber}`}
             variant={isActive ? "primary" : "ghost"}
+            disabled={disabled}
             style={{
               minWidth: "36px",
               padding: "0 10px",
@@ -211,11 +212,12 @@ function PaginationControls({ currentPage, totalPages, onPageChange, compact = t
       <Button
         variant="ghost"
         style={buttonStyle}
-        disabled={safeCurrentPage >= safeTotalPages}
+        disabled={disabled || safeCurrentPage >= safeTotalPages}
         onClick={() => onPageChange(Math.min(safeTotalPages, safeCurrentPage + 1))}
       >
         Seguinte →
       </Button>
+      {loading ? <Loading label="A carregar página..." style={{ padding: "6px 0" }} /> : null}
     </div>
   );
 }
@@ -574,14 +576,14 @@ export default function Radar({ selectionRequest = null }) {
     const totalPages = Math.max(1, Number(snapshot?.pagination?.totalPages ?? 1) || 1);
     const safePage = Math.min(Math.max(1, Number(nextPage) || 1), totalPages);
 
-    if (safePage === page) {
+    if (safePage === page || loading || paginatingRef.current) {
       return;
     }
 
     paginatingRef.current = true;
     setPage(safePage);
     reloadWithCurrentFilters(safePage, pageSize);
-  }, [page, pageSize, reloadWithCurrentFilters, snapshot?.pagination?.totalPages]);
+  }, [loading, page, pageSize, reloadWithCurrentFilters, snapshot?.pagination?.totalPages]);
 
   const syncGuardRef = useRef(false);
 
@@ -1342,6 +1344,8 @@ export default function Radar({ selectionRequest = null }) {
                 currentPage={page}
                 totalPages={snapshot?.pagination?.totalPages ?? 1}
                 onPageChange={handlePageChange}
+                disabled={loading}
+                loading={loading && paginatingRef.current}
               />
             </div>
           </div>
@@ -1416,6 +1420,8 @@ export default function Radar({ selectionRequest = null }) {
                 currentPage={page}
                 totalPages={snapshot?.pagination?.totalPages ?? 1}
                 onPageChange={handlePageChange}
+                disabled={loading}
+                loading={loading && paginatingRef.current}
               />
             </div>
           ) : null}
