@@ -65,11 +65,12 @@ export default function useVersionUpdateChecker() {
         let pendingUpdateVersion = readPendingUpdateVersion();
         let updateConfirmed = false;
 
-        if (pendingUpdateVersion && loadedVersion === pendingUpdateVersion) {
+        if (pendingUpdateVersion && loadedVersion && loadedVersion === remoteVersion) {
           clearPendingUpdateVersion();
           clearPersistentToast(UPDATE_PERSISTENT_TOAST_ID);
           pendingUpdateVersion = null;
           updateConfirmed = true;
+          updateNotifiedRef.current = false;
         }
 
         if (initialVersionRef.current === null) {

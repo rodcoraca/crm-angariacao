@@ -65,6 +65,38 @@ describe("useVersionUpdateChecker", () => {
     }));
   });
 
+  test("volta a notificar depois de concluir uma atualização anterior", async () => {
+    setLoadedVersion("one");
+    fetchMock
+      .mockResolvedValueOnce(responseFor("two"))
+      .mockResolvedValueOnce(responseFor("two"))
+      .mockResolvedValueOnce(responseFor("three"));
+
+    render(<TestComponent />);
+    await act(async () => {});
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBe("two");
+
+    setLoadedVersion("two");
+    await act(async () => { jest.advanceTimersByTime(VERSION_CHECK_INTERVAL_MS); });
+
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBeNull();
+    expect(clearPersistentToast).toHaveBeenCalledWith("osflow:update-available");
+    expect(notify).toHaveBeenCalledTimes(1);
+
+    await act(async () => { jest.advanceTimersByTime(VERSION_CHECK_INTERVAL_MS); });
+
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBe("three");
+    expect(notify).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenLastCalledWith(expect.objectContaining({
+      message: "Está disponível uma nova versão do OSFlow.",
+      actionLabel: "Atualizar",
+      persistentId: "osflow:update-available",
+      onAction: expect.any(Function)
+    }));
+  });
+
   test("preserva o aviso persistente após recarregar antes de concluir a atualização", async () => {
     setLoadedVersion("one");
     window.localStorage.setItem("osflow:pending-update-version", "two");
@@ -91,6 +123,32 @@ describe("useVersionUpdateChecker", () => {
     expect(notify).not.toHaveBeenCalled();
   });
 
+  test("limpa uma pendente antiga quando a versão carregada coincide com a publicada", async () => {
+    setLoadedVersion("two");
+    window.localStorage.setItem("osflow:pending-update-version", "old-version");
+    fetchMock.mockResolvedValue(responseFor("two"));
+
+    render(<TestComponent />);
+    await act(async () => {});
+
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBeNull();
+    expect(clearPersistentToast).toHaveBeenCalledWith("osflow:update-available");
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  test("mantém a notificação quando a versão carregada é diferente da publicada", async () => {
+    setLoadedVersion("one");
+    window.localStorage.setItem("osflow:pending-update-version", "two");
+    fetchMock.mockResolvedValue(responseFor("three"));
+
+    render(<TestComponent />);
+    await act(async () => {});
+
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBe("three");
+    expect(clearPersistentToast).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
   test("mantém o aviso e atualiza a pendente quando uma versão posterior é publicada", async () => {
     setLoadedVersion("two");
     window.localStorage.setItem("osflow:pending-update-version", "two");
@@ -100,7 +158,7 @@ describe("useVersionUpdateChecker", () => {
     await act(async () => {});
 
     expect(window.localStorage.getItem("osflow:pending-update-version")).toBe("three");
-    expect(clearPersistentToast).toHaveBeenCalledTimes(1);
+    expect(clearPersistentToast).not.toHaveBeenCalled();
     expect(notify).toHaveBeenCalledTimes(1);
   });
 
