@@ -25,7 +25,13 @@ function slugify(value) {
 
 function validateEmpresaInput(form = {}) {
   const nome = String(form.nome || "").trim();
-  const estado = String(form.estado || "ativo").trim().toLowerCase();
+  const estadoInformado = String(form.estado || "ativo").trim().toLowerCase();
+  const estado = {
+    ativa: "ativo",
+    inativa: "inativo",
+    ativo: "ativo",
+    inativo: "inativo"
+  }[estadoInformado];
   const slug = slugify(form.slug || nome);
 
   if (!nome) {
@@ -36,7 +42,7 @@ function validateEmpresaInput(form = {}) {
     return { ok: false, message: "Slug da empresa é obrigatório." };
   }
 
-  if (!["ativo", "inativo"].includes(estado)) {
+  if (!estado) {
     return { ok: false, message: "Estado inválido." };
   }
 
