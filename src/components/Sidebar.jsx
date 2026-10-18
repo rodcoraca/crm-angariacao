@@ -75,7 +75,7 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
 
   return (
     <div style={{ ...sidebar, background: theme.colors.surface, borderRight: `1px solid ${theme.colors.border}`, ...(collapsed ? collapsedSidebar : {}) }}>
-      <div style={topRow}>
+      <div style={{ ...topRow, ...(collapsed ? collapsedTopRow : {}) }}>
         <SidebarLogo
           collapsed={collapsed}
           logoBox={logoBox}
@@ -362,6 +362,12 @@ const topRow = {
   alignItems: "center",
   justifyContent: "space-between",
   marginBottom: "8px"
+};
+
+const collapsedTopRow = {
+  flexDirection: "column",
+  justifyContent: "center",
+  gap: "8px"
 };
 
 const logoBox = {
