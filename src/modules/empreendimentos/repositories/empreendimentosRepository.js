@@ -19,6 +19,15 @@ export function fetchEmpreendimentosByCliente(clienteId, empresaId = null) {
   ).order("created_at", { ascending: false });
 }
 
+export function fetchEmpreendimentosByEmpresa(empresaId = null) {
+  return applyEmpresaScope(
+    supabase
+      .from(EMPREENDIMENTOS_TABLE)
+      .select("id, cliente_id"),
+    empresaId
+  );
+}
+
 export function fetchFicheirosByEmpreendimentoId(empreendimentoId, empresaId = null) {
   if (!empreendimentoId) {
     return Promise.resolve({ data: [], error: null });

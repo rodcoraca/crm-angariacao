@@ -33,6 +33,27 @@ export function queryCountImoveisIncompletos() {
     ].join(","));
 }
 
+export function queryCountEmpreendimentos(empresaId = null) {
+  return applyEmpresaScope(
+    supabase.from("empreendimentos").select("id", { count: "exact", head: true }),
+    empresaId
+  );
+}
+
+export function queryCountUnidades(empresaId = null) {
+  return applyEmpresaScope(
+    supabase.from("unidades").select("id", { count: "exact", head: true }),
+    empresaId
+  );
+}
+
+export function queryCountImoveisNaoPublicitados(empresaId = null) {
+  return applyEmpresaScope(
+    supabase.from("estoque_nao_publicitado").select("id", { count: "exact", head: true }),
+    empresaId
+  );
+}
+
 export function queryCountAtividadesHoje(inicioIso, fimIso) {
   return supabase
     .from("logs_navegacao")

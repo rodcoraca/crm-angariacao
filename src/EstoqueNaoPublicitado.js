@@ -5,12 +5,17 @@ import { useClientes } from "./modules/clientes";
 import { useEmpreendimentos } from "./modules/empreendimentos/hooks/useEmpreendimentos";
 import { useEmpreendimentoCondicoesPagamento } from "./modules/empreendimentos/hooks/useEmpreendimentoCondicoesPagamento";
 import { useUnidades } from "./modules/empreendimentos/hooks/useUnidades";
+import {
+  calcularCondicoesPagamentoPorUnidade,
+  formatarValorMonetario
+} from "./modules/empreendimentos/services/unidadesService";
 import Button from "./components/ui/Button";
 import Input from "./components/ui/Input";
 import Select from "./components/ui/Select";
 import EmptyState from "./components/ui/EmptyState";
 import Tooltip from "./components/ui/Tooltip";
-import { useEffect, useState } from "react";
+import EmpreendimentoApresentacao from "./components/empreendimentos/EmpreendimentoApresentacao";
+import { Fragment, useEffect, useState } from "react";
 
 const PRIVATE_CLIENT_FIELDS = [
   "telefone_fixo",
@@ -28,6 +33,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
   const [secaoAtual, setSecaoAtual] = useState(defaultSection);
   const [clienteDetalhe, setClienteDetalhe] = useState(null);
   const [empreendimentoDetalhe, setEmpreendimentoDetalhe] = useState(null);
+  const [mostrarApresentacaoEmpreendimento, setMostrarApresentacaoEmpreendimento] = useState(false);
 
   const {
     busca,
@@ -73,6 +79,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
     loading,
     error,
     filtrados: clientesFiltrados,
+    empreendimentosPorCliente,
     podeVer,
     podeCriar,
     podeEditar,
@@ -130,6 +137,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
     podeCriar: podeCriarCondicoes,
     podeEliminar: podeEliminarCondicoes,
     totalPercentual,
+    nomesEtapasDuplicados,
     atualizarCondicao,
     adicionarEtapa,
     removerEtapa,
@@ -165,6 +173,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
   } = unidadesState;
 
   const [mostrarFormularioUnidade, setMostrarFormularioUnidade] = useState(false);
+  const [unidadeCondicoesAbertaId, setUnidadeCondicoesAbertaId] = useState(null);
 
   useEffect(() => {
     setSecaoAtual(defaultSection);
@@ -177,8 +186,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
     }
 
     setEmpreendimentoDetalhe(null);
-    setMostrarFormulario(false);
-  }, [clienteDetalhe, setMostrarFormulario]);
+  }, [clienteDetalhe]);
 
   useEffect(() => {
     if (!empreendimentoDetalhe?.id) {
@@ -187,6 +195,10 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
 
     carregarDocumentosEmpreendimento(empreendimentoDetalhe.id);
   }, [empreendimentoDetalhe?.id, carregarDocumentosEmpreendimento]);
+
+  useEffect(() => {
+    setUnidadeCondicoesAbertaId(null);
+  }, [empreendimentoDetalhe?.id]);
 
   const {
     proprietario,
@@ -258,12 +270,21 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
   const abrirDetalheCliente = (cliente) => {
     setClienteDetalhe(cliente);
     setEmpreendimentoDetalhe(null);
+    setMostrarApresentacaoEmpreendimento(false);
     setMostrarFormulario(false);
+  };
+
+  const abrirCadastroEmpreendimento = (cliente) => {
+    setClienteDetalhe(cliente);
+    setEmpreendimentoDetalhe(null);
+    setMostrarApresentacaoEmpreendimento(false);
+    setMostrarFormulario(true);
   };
 
   const voltarParaListaClientes = () => {
     setClienteDetalhe(null);
     setEmpreendimentoDetalhe(null);
+    setMostrarApresentacaoEmpreendimento(false);
     setMostrarFormulario(false);
     voltarClientes();
   };
@@ -286,7 +307,28 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
     </div>
   );
 
-  const renderUnidades = () => (
+  const renderUnidades = () => {
+    const unidadeCondicoesSelecionada = unidades.find((unidade) => unidade.id === unidadeCondicoesAbertaId) || null;
+    const resumoCondicoesSelecionada = unidadeCondicoesSelecionada
+      ? calcularCondicoesPagamentoPorUnidade({ precoVenda: unidadeCondicoesSelecionada.preco_venda, condicoes })
+      : null;
+    const estadoFinanceiroSelecionado = resumoCondicoesSelecionada
+      ? obterEstadoFinanceiro(resumoCondicoesSelecionada)
+      : null;
+    const menuItemButton = {
+      border: "none",
+      borderRadius: 6,
+      background: "transparent",
+      color: "var(--os-color-text)",
+      cursor: "pointer",
+      fontFamily: "inherit",
+      fontSize: 13,
+      padding: "7px 8px",
+      textAlign: "left",
+      whiteSpace: "nowrap"
+    };
+
+    return (
     <div style={{ ...cardNovo, marginTop: 24 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
         <div>
@@ -303,6 +345,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: 12 }}>
             <Input label="Fração" value={formUnidade.fracao || ""} onChange={(e) => setFieldUnidade("fracao", e.target.value)} />
             <Input label="Tipologia" value={formUnidade.tipologia || ""} onChange={(e) => setFieldUnidade("tipologia", e.target.value)} />
+            <Input label="Preço de venda (€)" type="number" min="0" step="0.01" value={formUnidade.preco_venda ?? ""} onChange={(e) => setFieldUnidade("preco_venda", e.target.value)} />
             <Input label="Área Bruta Privativa (m²)" type="number" step="0.01" value={formUnidade.area_bruta_privativa ?? ""} onChange={(e) => setFieldUnidade("area_bruta_privativa", e.target.value)} />
             <Input label="Área Total (m²)" type="number" step="0.01" value={formUnidade.area_total ?? ""} onChange={(e) => setFieldUnidade("area_total", e.target.value)} />
             <Input label="Área Dependente (m²)" type="number" step="0.01" value={formUnidade.area_dependente ?? ""} onChange={(e) => setFieldUnidade("area_dependente", e.target.value)} />
@@ -335,42 +378,55 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
       ) : null}
 
       {!loadingUnidades && unidades.length > 0 ? (
-        <div style={{ overflowX: "auto", marginTop: 12 }}>
-          <table style={table}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 16, flexWrap: "wrap", marginTop: 12 }}>
+          <div style={{ flex: "1 1 560px", minWidth: 0 }}>
+          <table style={{ ...table, tableLayout: "fixed" }}>
             <thead>
               <tr>
-                <th style={th}>Fração</th>
-                <th style={th}>Tipologia</th>
-                <th style={th}>Área Bruta Privativa</th>
-                <th style={th}>Área Total</th>
-                <th style={th}>Área Dependente</th>
-                <th style={th}>Varanda</th>
-                <th style={th}>Terraço</th>
-                <th style={th}>Garagem</th>
-                <th style={th}>Planta</th>
-                <th style={th}>Ações</th>
+                <th style={{ ...thCompact, width: "12%" }}>Fração</th>
+                <th style={{ ...thCompact, width: "13%" }}>Tipologia</th>
+                <th style={{ ...thCompact, width: "13%" }}>Área</th>
+                <th style={{ ...thCompact, width: "15%" }}>Preço</th>
+                <th style={{ ...thCompact, width: "23%" }}>Condições</th>
+                <th style={{ ...thCompact, width: "12%" }}>Planta</th>
+                <th style={{ ...thCompact, width: "15%", whiteSpace: "nowrap" }}>Ações</th>
               </tr>
             </thead>
             <tbody>
               {unidades.map((unidade) => {
                 const planta = unidade?.planta || null;
+                const resumoCondicoes = calcularCondicoesPagamentoPorUnidade({ precoVenda: unidade.preco_venda, condicoes });
+                const condicoesAbertas = unidadeCondicoesAbertaId === unidade.id;
+                const estadoFinanceiro = obterEstadoFinanceiro(resumoCondicoes);
 
                 return (
-                  <tr key={unidade.id}>
-                    <td style={td}>{unidade.fracao || "—"}</td>
-                    <td style={td}>{unidade.tipologia || "—"}</td>
-                    <td style={td}>{unidade.area_bruta_privativa != null ? `${unidade.area_bruta_privativa} m²` : "—"}</td>
-                    <td style={td}>{unidade.area_total != null ? `${unidade.area_total} m²` : "—"}</td>
-                    <td style={td}>{unidade.area_dependente != null ? `${unidade.area_dependente} m²` : "—"}</td>
-                    <td style={td}>{unidade.varanda ? "Sim" : "Não"}</td>
-                    <td style={td}>{unidade.terraco ? "Sim" : "Não"}</td>
-                    <td style={td}>{unidade.lugares_garagem ?? "—"}</td>
-                    <td style={td}>
+                  <Fragment key={unidade.id}>
+                  <tr key={unidade.id} style={{ ...tr, backgroundColor: condicoesAbertas ? "rgba(37, 99, 235, 0.06)" : undefined }}>
+                    <td data-testid={`unidade-identidade-${unidade.id}`} style={{ ...tdCompact, borderLeft: `4px solid ${getUnidadeAccentColor(unidade.id)}` }}>
+                      <strong>{unidade.fracao || "—"}</strong>
+                    </td>
+                    <td style={tdCompact}>{unidade.tipologia || "—"}</td>
+                    <td style={tdCompact}>{unidade.area_bruta_privativa != null ? `${unidade.area_bruta_privativa} m²` : "—"}</td>
+                    <td style={tdCompact}>{formatarValorMonetario(unidade.preco_venda)}</td>
+                    <td style={tdCompact}>
+                      <div style={{ display: "grid", gap: 4 }}>
+                          <button
+                            type="button"
+                            aria-label={`Condições de pagamento da fração ${unidade.fracao || "selecionada"}`}
+                            onClick={() => setUnidadeCondicoesAbertaId(condicoesAbertas ? null : unidade.id)}
+                            style={{ border: 0, padding: 0, background: "transparent", color: "var(--os-color-primary)", cursor: "pointer", fontWeight: 700, textAlign: "left", whiteSpace: "nowrap" }}
+                          >Condições de pagamento</button>
+                        <span>{resumoCondicoes.etapas.length} etapa(s)</span>
+                        <span style={getEstadoBadgeStyle(estadoFinanceiro.tipo)}>{estadoFinanceiro.label}</span>
+                        {resumoCondicoes.totais_parciais ? <small style={{ color: "var(--os-color-muted)" }}>Total parcial</small> : null}
+                      </div>
+                    </td>
+                    <td style={tdCompact}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
                         {planta ? (
                           <>
                             <a href={planta.url} target="_blank" rel="noreferrer" style={{ color: "var(--os-color-primary)", textDecoration: "none", fontWeight: 600 }}>
-                              {planta.nome || "Abrir planta"}
+                              Planta{planta.nome ? `: ${planta.nome}` : ""}
                             </a>
                             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                               <label style={{ fontSize: "0.75rem", color: "var(--os-color-primary)", cursor: "pointer", fontWeight: 600 }}>
@@ -389,10 +445,11 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
                                 />
                                 Substituir
                               </label>
-                              <Button size="sm" variant="ghost" onClick={() => deletePlanta(planta)} disabled={!podeEliminarUnidades}>Eliminar</Button>
                             </div>
                           </>
                         ) : (
+                          <>
+                          <span style={{ fontSize: "0.75rem", color: "var(--os-color-muted)" }}>Sem planta</span>
                           <label style={{ fontSize: "0.75rem", color: "var(--os-color-primary)", cursor: "pointer", fontWeight: 600 }}>
                             <input
                               type="file"
@@ -409,25 +466,127 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
                             />
                             + Adicionar planta
                           </label>
+                          </>
                         )}
                       </div>
                     </td>
-                    <td style={td}>
-                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                        <Button size="sm" variant="ghost" onClick={() => { setMostrarFormularioUnidade(true); iniciarEdicaoUnidade(unidade); }} disabled={!podeEditarUnidades}>Editar</Button>
-                        <Button size="sm" variant="light" onClick={() => { setMostrarFormularioUnidade(true); duplicarUnidade(unidade); }} disabled={!podeDuplicarUnidades}>Duplicar</Button>
-                        <Button size="sm" variant="danger" onClick={() => excluirUnidade(unidade)} disabled={!podeEliminarUnidades}>Eliminar</Button>
+                    <td style={{ ...tdCompact, whiteSpace: "nowrap" }}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap" }}>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          style={{ minHeight: 34, padding: "6px 9px", whiteSpace: "nowrap" }}
+                          onClick={() => { setMostrarFormularioUnidade(true); iniciarEdicaoUnidade(unidade); }}
+                          disabled={!podeEditarUnidades}
+                        >Editar</Button>
+                        <details style={{ position: "relative" }}>
+                          <summary
+                            aria-label="Mais ações"
+                            title="Mais ações"
+                            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 34, height: 34, padding: 0, border: "1px solid var(--os-color-border)", borderRadius: 8, background: "var(--os-color-surface)", color: "var(--os-color-text)", cursor: "pointer", fontSize: 20, lineHeight: 1, listStyle: "none", whiteSpace: "nowrap" }}
+                          >⋯</summary>
+                          <div role="menu" style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 20, display: "grid", gap: 4, minWidth: 170, padding: 6, border: "1px solid var(--os-color-border)", borderRadius: 10, background: "var(--os-color-surface)", boxShadow: "0 8px 20px rgba(0,0,0,0.12)" }}>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              aria-controls={`condicoes-unidade-${unidade.id}`}
+                              onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); setUnidadeCondicoesAbertaId(condicoesAbertas ? null : unidade.id); }}
+                              style={menuItemButton}
+                            >{condicoesAbertas ? "Fechar condições" : "Condições"}</button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); setMostrarFormularioUnidade(true); duplicarUnidade(unidade); }}
+                              disabled={!podeDuplicarUnidades}
+                              style={menuItemButton}
+                            >Duplicar</button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); excluirUnidade(unidade); }}
+                              disabled={!podeEliminarUnidades}
+                              style={{ ...menuItemButton, color: "var(--os-color-danger)" }}
+                            >Eliminar</button>
+                            {planta ? (
+                              <button
+                                type="button"
+                                role="menuitem"
+                                onClick={(event) => { event.currentTarget.closest("details")?.removeAttribute("open"); deletePlanta(planta); }}
+                                disabled={!podeEliminarUnidades}
+                                style={{ ...menuItemButton, color: "var(--os-color-danger)" }}
+                              >Eliminar planta</button>
+                            ) : null}
+                          </div>
+                        </details>
                       </div>
                     </td>
                   </tr>
+                  </Fragment>
                 );
               })}
             </tbody>
           </table>
+          </div>
+          {unidadeCondicoesSelecionada && resumoCondicoesSelecionada ? (
+            <aside id={`condicoes-unidade-${unidadeCondicoesSelecionada.id}`} style={{ flex: "1 1 320px", minWidth: 0, maxWidth: 380, border: "1px solid var(--os-color-border)", borderRadius: 12, padding: 10, background: "var(--os-color-surface-soft)", boxSizing: "border-box" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                <div style={{ minWidth: 0, display: "flex", flexWrap: "wrap", alignItems: "baseline", gap: "2px 8px" }}>
+                  <strong>Fração {unidadeCondicoesSelecionada.fracao || "—"}</strong>
+                  <span style={{ fontSize: 13 }}>Preço: <strong>{formatarValorMonetario(resumoCondicoesSelecionada.preco_venda)}</strong></span>
+                  <span style={{ fontSize: 12, color: "var(--os-color-muted)" }}>Condições herdadas do empreendimento</span>
+                </div>
+                <Button size="sm" variant="ghost" onClick={() => setUnidadeCondicoesAbertaId(null)}>Fechar</Button>
+              </div>
+              <div data-testid="unidade-detalhes" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 6, marginBottom: 8, fontSize: 12 }}>
+                <span>Tipologia: <strong>{unidadeCondicoesSelecionada.tipologia || "—"}</strong></span>
+                <span>Área: <strong>{unidadeCondicoesSelecionada.area_bruta_privativa != null ? `${unidadeCondicoesSelecionada.area_bruta_privativa} m²` : "—"}</strong></span>
+                {unidadeCondicoesSelecionada.planta?.url ? (
+                  <a href={unidadeCondicoesSelecionada.planta.url} target="_blank" rel="noreferrer" style={{ color: "var(--os-color-primary)", fontWeight: 600, textDecoration: "none" }}>
+                    Abrir planta
+                  </a>
+                ) : null}
+              </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: 13, marginBottom: 8 }}>
+                <span>Estado:</span>
+                <span style={getEstadoBadgeStyle(estadoFinanceiroSelecionado.tipo)}>{estadoFinanceiroSelecionado.label}</span>
+              </div>
+              {resumoCondicoesSelecionada.tem_tipo_invalido || resumoCondicoesSelecionada.tem_valor_invalido ? (
+                <small style={{ display: "block", color: "var(--os-color-danger)", fontWeight: 600, marginBottom: 8 }}>Existem condições inválidas. O plano não está validado.</small>
+              ) : null}
+              {resumoCondicoesSelecionada.etapas.length === 0 ? (
+                <small style={{ color: "var(--os-color-muted)" }}>Sem condições de pagamento configuradas.</small>
+              ) : (
+                <table style={{ ...table, tableLayout: "fixed", fontSize: 12.5 }}>
+                  <thead>
+                    <tr>
+                      <th style={panelTh}>Etapa</th>
+                      <th style={panelTh}>Condição</th>
+                      <th style={{ ...panelTh, textAlign: "right" }}>Montante</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {resumoCondicoesSelecionada.etapas.map((etapa) => (
+                      <tr key={`${unidadeCondicoesSelecionada.id}-${etapa.nome_etapa}-${etapa.ordem}`}>
+                        <td style={panelTd}>{etapa.nome_etapa}</td>
+                        <td style={panelTd}>{!etapa.tipo_suportado || !etapa.valor_valido ? "Condição inválida" : etapa.tipo_valor === "percentual" ? `${etapa.valor}%` : formatarValorMonetario(etapa.valor)}</td>
+                        <td style={{ ...panelTd, textAlign: "right", whiteSpace: "nowrap" }}>{etapa.montante === null ? (!etapa.tipo_suportado || !etapa.valor_valido ? "Não calculável" : "Preço necessário") : formatarValorMonetario(etapa.montante)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+              <div style={{ display: "grid", gap: 3, fontSize: 13, marginTop: 8 }}>
+                <span>Total{resumoCondicoesSelecionada.totais_parciais ? " parcial" : ""}: <strong>{formatarValorMonetario(resumoCondicoesSelecionada.total_calculavel)}</strong></span>
+                {resumoCondicoesSelecionada.saldo !== null ? <span>{resumoCondicoesSelecionada.saldo < 0 ? "Excedente" : "Saldo"}: <strong>{formatarValorMonetario(Math.abs(resumoCondicoesSelecionada.saldo))}</strong></span> : null}
+              </div>
+              {resumoCondicoesSelecionada.tem_percentual_sem_preco ? <small style={{ display: "block", color: "var(--os-color-muted)", marginTop: 8 }}>Defina o preço de venda da fração para calcular os percentuais.</small> : null}
+            </aside>
+          ) : null}
         </div>
       ) : null}
     </div>
-  );
+    );
+  };
 
   const renderDocumentosEmpreendimento = () => {
     const categorias = EMPREENDIMENTO_DOCUMENT_CATEGORIES || [];
@@ -539,74 +698,74 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
       {!loadingCondicoes && condicoes.length === 0 ? (
         <EmptyState title="Sem condições" description="Ainda não existem condições de pagamento configuradas para este empreendimento." />
       ) : (
-        <div style={{ display: "grid", gap: 12 }}>
+        <div style={{ display: "grid" }}>
           {condicoes.map((condicao, index) => {
-            const isBaseStep = ["Entrada", "CPCV", "Escritura"].includes(condicao.nome_etapa || "");
-            const canManageStep = (podeEditarCondicoes || podeCriarCondicoes) && !isBaseStep;
+            const canManageStep = (podeEditarCondicoes || podeCriarCondicoes) && !condicao.isPermanent;
             const valorInputLabel = condicao.tipo_valor === "percentual" ? "%" : "€";
 
             return (
-              <div key={`${condicao.nome_etapa}-${index}`} style={{ border: "1px solid var(--os-color-border)", borderRadius: 12, padding: 12, background: "var(--os-color-surface-soft)" }}>
-                <div style={{ display: "grid", gap: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+              <div key={condicao.id || condicao.localId || `condicao-${index}`} data-testid={`condicao-pagamento-${condicao.id || condicao.localId || index}`} style={condicaoRow}>
+                <Input
+                  size="sm"
+                  label="Nome"
+                  value={condicao.nome_etapa || ""}
+                  onChange={(e) => atualizarCondicao(index, "nome_etapa", e.target.value)}
+                  disabled={condicao.isPermanent || (!podeEditarCondicoes && !podeCriarCondicoes)}
+                  style={{ minWidth: 0 }}
+                />
+                <Select
+                  size="sm"
+                  label="Tipo de valor"
+                  placeholder="Selecione"
+                  value={condicao.tipo_valor || "fixo"}
+                  onChange={(e) => atualizarCondicao(index, "tipo_valor", e.target.value)}
+                  options={[{ value: "fixo", label: "Valor fixo" }, { value: "percentual", label: "Percentual" }]}
+                  disabled={!podeEditarCondicoes && !podeCriarCondicoes}
+                  style={{ minWidth: 0 }}
+                />
+                <div style={{ minWidth: 0 }}>
+                  <label style={{ display: "block", marginBottom: 4, fontSize: 12, fontWeight: 600 }}>Valor</label>
+                  <div style={{ position: "relative" }}>
+                    <span style={{ position: "absolute", right: 10, top: 9, color: "var(--os-color-muted)", fontSize: 13 }}>{valorInputLabel}</span>
+                    <input
+                      aria-label="Valor"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max={condicao.tipo_valor === "percentual" ? "100" : undefined}
+                      value={condicao.valor ?? ""}
+                      onChange={(e) => atualizarCondicao(index, "valor", e.target.value)}
+                      disabled={!podeEditarCondicoes && !podeCriarCondicoes}
+                      style={{ width: "100%", minHeight: 36, padding: "8px 30px 8px 8px", borderRadius: 8, border: "1px solid var(--os-color-border)", boxSizing: "border-box" }}
+                    />
+                  </div>
+                </div>
+                <Select
+                  size="sm"
+                  label="Valor negociável"
+                  placeholder="Selecione"
+                  value={condicao.negociavel ? "sim" : "nao"}
+                  onChange={(e) => atualizarCondicao(index, "negociavel", e.target.value === "sim")}
+                  options={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]}
+                  disabled={!podeEditarCondicoes && !podeCriarCondicoes}
+                  style={{ minWidth: 0 }}
+                />
+                <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "flex-end", minHeight: 36 }}>
+                  {canManageStep ? (
+                    <Button variant="danger" size="sm" onClick={() => removerEtapa(index)}>Eliminar</Button>
+                  ) : null}
+                </div>
+                {condicao.negociavel ? (
+                  <div style={{ gridColumn: "1 / -1", minWidth: 0 }}>
                     <Input
-                      label="Nome"
-                      value={condicao.nome_etapa || ""}
-                      onChange={(e) => atualizarCondicao(index, "nome_etapa", e.target.value)}
-                      disabled={!podeEditarCondicoes && !podeCriarCondicoes}
-                    />
-                    {canManageStep ? (
-                      <Button variant="danger" size="sm" onClick={() => removerEtapa(index)}>Eliminar</Button>
-                    ) : null}
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <Select
-                      label="Tipo de valor"
-                      placeholder="Selecione"
-                      value={condicao.tipo_valor || "fixo"}
-                      onChange={(e) => atualizarCondicao(index, "tipo_valor", e.target.value)}
-                      options={[{ value: "fixo", label: "Valor fixo" }, { value: "percentual", label: "Percentual" }]}
-                      disabled={!podeEditarCondicoes && !podeCriarCondicoes}
-                    />
-                    <div>
-                      <label style={{ display: "block", marginBottom: 6, fontWeight: 600 }}>Valor</label>
-                      <div style={{ position: "relative" }}>
-                        <span style={{ position: "absolute", right: 12, top: 11, color: "var(--os-color-muted)" }}>{valorInputLabel}</span>
-                        <input
-                          type="number"
-                          step={condicao.tipo_valor === "percentual" ? "0.01" : "0.01"}
-                          min={condicao.tipo_valor === "percentual" ? "0" : "0"}
-                          max={condicao.tipo_valor === "percentual" ? "100" : undefined}
-                          value={condicao.valor ?? ""}
-                          onChange={(e) => atualizarCondicao(index, "valor", e.target.value)}
-                          disabled={!podeEditarCondicoes && !podeCriarCondicoes}
-                          style={{ width: "100%", padding: "10px 38px 10px 10px", borderRadius: 8, border: "1px solid var(--os-color-border)", boxSizing: "border-box" }}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                    <Select
-                      label="Valor negociável"
-                      placeholder="Selecione"
-                      value={condicao.negociavel ? "sim" : "nao"}
-                      onChange={(e) => atualizarCondicao(index, "negociavel", e.target.value === "sim")}
-                      options={[{ value: "nao", label: "Não" }, { value: "sim", label: "Sim" }]}
-                      disabled={!podeEditarCondicoes && !podeCriarCondicoes}
-                    />
-                  </div>
-
-                  {condicao.negociavel ? (
-                    <Input
+                      size="sm"
                       label="Condição de negociação"
                       value={condicao.condicao_negociacao || ""}
                       onChange={(e) => atualizarCondicao(index, "condicao_negociacao", e.target.value)}
                       disabled={!podeEditarCondicoes && !podeCriarCondicoes}
                     />
-                  ) : null}
-                </div>
+                  </div>
+                ) : null}
               </div>
             );
           })}
@@ -614,6 +773,11 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
       )}
 
       {errorCondicoes ? <div style={{ color: "var(--os-color-danger)", fontWeight: 600, marginTop: 12 }}>{errorCondicoes}</div> : null}
+      {nomesEtapasDuplicados.length > 0 ? (
+        <div role="alert" style={{ color: "var(--os-color-danger)", fontWeight: 600, marginTop: 12 }}>
+          Existem etapas duplicadas ({nomesEtapasDuplicados.join(", ")}). Remova ou renomeie as entradas antes de guardar.
+        </div>
+      ) : null}
 
       {(podeEditarCondicoes || podeCriarCondicoes) ? (
         <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
@@ -696,7 +860,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
             </thead>
             <tbody>
               {empreendimentos.map((empreendimento) => (
-                <tr key={empreendimento.id} style={{ ...tr, cursor: "pointer" }} onClick={() => { setEmpreendimentoDetalhe(empreendimento); setMostrarFormulario(false); }}>
+                <tr key={empreendimento.id} style={{ ...tr, cursor: "pointer" }} onClick={() => { setEmpreendimentoDetalhe(empreendimento); setMostrarApresentacaoEmpreendimento(false); setMostrarFormulario(false); }}>
                   <td style={tdNome}>{empreendimento.nome || "—"}</td>
                   <td style={td}>{[empreendimento.distrito, empreendimento.concelho, empreendimento.freguesia].filter(Boolean).join(" / ") || "—"}</td>
                   <td style={td}>{empreendimento.percentual_comissao != null ? `${empreendimento.percentual_comissao}%` : "—"}</td>
@@ -704,7 +868,8 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
                   <td style={td}>{empreendimento.previsao_entrega ? new Date(empreendimento.previsao_entrega).toLocaleDateString("pt-PT") : "—"}</td>
                   <td style={td}>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                      <Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); iniciarEdicaoEmpreendimento(empreendimento); }} disabled={!podeEditarEmpreendimento}>Editar</Button>
+                      <Button size="sm" variant="light" onClick={(event) => { event.stopPropagation(); abrirApresentacaoEmpreendimento(empreendimento); }} disabled={!podeVerEmpreendimentos}>Ver apresentação</Button>
+                      <Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); abrirEdicaoEmpreendimento(empreendimento); }} disabled={!podeEditarEmpreendimento}>Editar</Button>
                       <Button size="sm" variant="danger" onClick={(event) => { event.stopPropagation(); excluirEmpreendimento(empreendimento); }} disabled={!podeEliminarEmpreendimento}>Eliminar</Button>
                     </div>
                   </td>
@@ -728,26 +893,64 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
             <small style={{ color: "var(--os-color-muted)" }}>{[empreendimentoDetalhe?.distrito, empreendimentoDetalhe?.concelho, empreendimentoDetalhe?.freguesia].filter(Boolean).join(" / ") || "Sem localização"}</small>
           </div>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <Button variant="light" onClick={() => setEmpreendimentoDetalhe(null)}>Voltar para empreendimentos</Button>
-            {podeEditarEmpreendimento ? <Button onClick={() => iniciarEdicaoEmpreendimento(empreendimentoDetalhe)}>Editar empreendimento</Button> : null}
+            <Button variant="light" onClick={() => { setMostrarApresentacaoEmpreendimento(false); setEmpreendimentoDetalhe(null); }}>Voltar para empreendimentos</Button>
+            {!mostrarFormulario && podeEditarEmpreendimento ? <Button onClick={() => abrirEdicaoEmpreendimento(empreendimentoDetalhe)}>Editar empreendimento</Button> : null}
           </div>
         </div>
 
-        <div style={{ marginBottom: 16 }}>
-          <h4 style={{ margin: 0, marginBottom: 12 }}>Dados do Empreendimento</h4>
-        </div>
+        {mostrarFormulario ? renderEmpreendimentoForm() : (
+          <>
+            <div style={{ marginBottom: 16 }}>
+              <h4 style={{ margin: 0, marginBottom: 12 }}>Dados do Empreendimento</h4>
+            </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
-          <div style={{ background: "var(--os-color-surface-soft)", padding: 12, borderRadius: 8 }}><strong>Comissão</strong><div>{empreendimentoDetalhe?.percentual_comissao != null ? `${empreendimentoDetalhe.percentual_comissao}%` : "—"}</div></div>
-          <div style={{ background: "var(--os-color-surface-soft)", padding: 12, borderRadius: 8 }}><strong>Início das obras</strong><div>{empreendimentoDetalhe?.inicio_obras ? new Date(empreendimentoDetalhe.inicio_obras).toLocaleDateString("pt-PT") : "—"}</div></div>
-          <div style={{ background: "var(--os-color-surface-soft)", padding: 12, borderRadius: 8 }}><strong>Previsão de entrega</strong><div>{empreendimentoDetalhe?.previsao_entrega ? new Date(empreendimentoDetalhe.previsao_entrega).toLocaleDateString("pt-PT") : "—"}</div></div>
-        </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+              <div style={{ background: "var(--os-color-surface-soft)", padding: 12, borderRadius: 8 }}><strong>Comissão</strong><div>{empreendimentoDetalhe?.percentual_comissao != null ? `${empreendimentoDetalhe.percentual_comissao}%` : "—"}</div></div>
+              <div style={{ background: "var(--os-color-surface-soft)", padding: 12, borderRadius: 8 }}><strong>Início das obras</strong><div>{empreendimentoDetalhe?.inicio_obras ? new Date(empreendimentoDetalhe.inicio_obras).toLocaleDateString("pt-PT") : "—"}</div></div>
+              <div style={{ background: "var(--os-color-surface-soft)", padding: 12, borderRadius: 8 }}><strong>Previsão de entrega</strong><div>{empreendimentoDetalhe?.previsao_entrega ? new Date(empreendimentoDetalhe.previsao_entrega).toLocaleDateString("pt-PT") : "—"}</div></div>
+            </div>
+          </>
+        )}
       </div>
 
       {renderCondicoesPagamento()}
       {renderUnidades()}
       {renderDocumentosEmpreendimento()}
     </div>
+  );
+
+  const abrirApresentacaoEmpreendimento = (empreendimento) => {
+    setEmpreendimentoDetalhe(empreendimento);
+    setMostrarFormulario(false);
+    setMostrarApresentacaoEmpreendimento(true);
+  };
+
+  const abrirEdicaoEmpreendimento = (empreendimento) => {
+    setEmpreendimentoDetalhe(empreendimento);
+    setMostrarApresentacaoEmpreendimento(false);
+    iniciarEdicaoEmpreendimento(empreendimento);
+  };
+
+  const renderEmpreendimentoApresentacao = () => (
+    <EmpreendimentoApresentacao
+      empreendimento={empreendimentoDetalhe}
+      cliente={clienteDetalhe}
+      condicoes={condicoes}
+      unidades={unidades}
+      documentos={documentosEmpreendimento}
+      categorias={EMPREENDIMENTO_DOCUMENT_CATEGORIES}
+      loadingCondicoes={loadingCondicoes}
+      loadingUnidades={loadingUnidades}
+      loadingDocumentos={loadingDocumentosEmpreendimento}
+      errorCondicoes={errorCondicoes}
+      errorUnidades={errorUnidades}
+      errorDocumentos={documentosError}
+      podeConsultarDocumentos={podeVerEmpreendimentos}
+      onBack={() => {
+        setMostrarApresentacaoEmpreendimento(false);
+        setEmpreendimentoDetalhe(null);
+      }}
+    />
   );
 
   const renderClienteDetalhe = () => (
@@ -776,7 +979,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
       {!podeVerEmpreendimentos ? (
         <EmptyState title="Sem acesso" description="Não tem permissão para consultar empreendimentos." />
       ) : (
-        empreendimentoDetalhe ? renderEmpreendimentoDetalhe() : mostrarFormulario ? renderEmpreendimentoForm() : renderEmpreendimentosTable()
+        empreendimentoDetalhe ? (mostrarApresentacaoEmpreendimento ? renderEmpreendimentoApresentacao() : renderEmpreendimentoDetalhe()) : mostrarFormulario ? renderEmpreendimentoForm() : renderEmpreendimentosTable()
       )}
     </div>
   );
@@ -882,9 +1085,6 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
           value={buscaClientes}
           onChange={(e) => setBuscaClientes(e.target.value)}
         />
-        {podeCriar ? (
-          <button style={btnNovo} onClick={abrirNovoCliente}>+ Novo Cliente</button>
-        ) : null}
       </div>
 
       {loading ? <div style={{ padding: 20 }}>A carregar clientes…</div> : null}
@@ -903,6 +1103,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
                 <th style={th}>NIPC</th>
                 <th style={th}>AMI</th>
                 <th style={th}>Responsável</th>
+                <th style={th}>Empreendimentos</th>
                 <th style={th}>Ações</th>
               </tr>
             </thead>
@@ -910,6 +1111,7 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
               {clientesFiltrados.map((cliente) => {
                 const responsavel = usuariosEmpresa.find((usuario) => String(usuario.id) === String(cliente.responsavel_angariacao));
                 const responsavelNome = responsavel ? `${responsavel.nome || ""} ${responsavel.apelido || ""}`.trim() : "—";
+                const totalEmpreendimentos = empreendimentosPorCliente[cliente.id] || 0;
 
                 return (
                   <tr key={cliente.id} style={{ ...tr, cursor: "pointer" }} onClick={() => abrirDetalheCliente(cliente)}>
@@ -918,6 +1120,24 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
                     <td style={td}>{cliente.nipc || "—"}</td>
                     <td style={td}>{cliente.ami || "—"}</td>
                     <td style={td}>{responsavelNome}</td>
+                    <td style={td}>
+                      {podeVerEmpreendimentos ? (
+                        <button
+                          type="button"
+                          style={linkButton}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (totalEmpreendimentos > 0) {
+                              abrirDetalheCliente(cliente);
+                            } else {
+                              abrirCadastroEmpreendimento(cliente);
+                            }
+                          }}
+                        >
+                          {totalEmpreendimentos > 0 ? "Ver empreendimentos" : "+ Cadastrar empreendimento"}
+                        </button>
+                      ) : "—"}
+                    </td>
                     <td style={td}>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                         <Button size="sm" variant="ghost" onClick={(event) => { event.stopPropagation(); iniciarEdicaoCliente(cliente); }} disabled={!podeEditar}>Editar</Button>
@@ -1089,6 +1309,9 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
           <h2 style={pageTitle}>{secaoAtual === "clientes" ? "Empreendimentos" : "Imóveis"}</h2>
           <p style={pageSubtitle}>{secaoAtual === "clientes" ? "Gestão de clientes, empreendimentos, unidades e documentação." : "Gestão de imóveis cadastrados fora do portal."}</p>
         </div>
+        {secaoAtual === "clientes" && !clienteDetalhe && moduloAtualClientes === "lista" && podeCriar ? (
+          <button style={btnNovo} onClick={abrirNovoCliente}>+ Novo cliente</button>
+        ) : null}
       </div>
 
       {secaoAtual === "clientes" ? (
@@ -1212,6 +1435,16 @@ const btnNovo = {
   cursor: "pointer"
 };
 
+const linkButton = {
+  background: "transparent",
+  border: "none",
+  color: "var(--os-status-info-text)",
+  cursor: "pointer",
+  fontWeight: 600,
+  padding: 0,
+  textAlign: "left"
+};
+
 const btnGuardar = {
   flex: 1,
   background: "var(--os-color-secondary)",
@@ -1248,12 +1481,120 @@ const th = {
   background: "var(--os-color-surface-soft)"
 };
 
+const thCompact = {
+  ...th,
+  padding: "8px 10px",
+  fontSize: 12,
+  whiteSpace: "normal",
+  overflowWrap: "anywhere"
+};
+
 const tr = {
   borderBottom: "1px solid var(--os-color-border)"
 };
 
 const td = {
   padding: "14px"
+};
+
+const tdCompact = {
+  ...td,
+  padding: "8px 10px",
+  fontSize: 13,
+  verticalAlign: "top",
+  overflowWrap: "anywhere"
+};
+
+const condicaoRow = {
+  display: "grid",
+  gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+  alignItems: "end",
+  gap: 8,
+  padding: "8px 0",
+  borderBottom: "1px solid var(--os-color-border)"
+};
+
+const unidadeAccentPalette = [
+  "#2563eb",
+  "#0f766e",
+  "#7c3aed",
+  "#c2410c",
+  "#be123c",
+  "#4d7c0f"
+];
+
+const getUnidadeAccentColor = (id) => {
+  const value = String(id || "");
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index);
+    hash |= 0;
+  }
+
+  return unidadeAccentPalette[Math.abs(hash) % unidadeAccentPalette.length];
+};
+
+const obterEstadoFinanceiro = (resumo) => {
+  if (resumo.tem_tipo_invalido || resumo.tem_valor_invalido || resumo.tem_percentual_sem_preco || resumo.preco_zero) {
+    return { tipo: "incompleto", label: "Incompleto / inválido" };
+  }
+
+  if (resumo.etapas.length === 0) {
+    return { tipo: "vazio", label: "Sem condições" };
+  }
+
+  if (!resumo.todas_etapas_calculaveis) {
+    return { tipo: "incompleto", label: "Incompleto / inválido" };
+  }
+
+  if (resumo.excedente !== null) {
+    return { tipo: "excedente", label: "Excedente" };
+  }
+
+  if (resumo.saldo !== null && resumo.saldo > 0) {
+    return { tipo: "saldo", label: "Saldo por distribuir" };
+  }
+
+  return { tipo: "equilibrado", label: "Plano equilibrado" };
+};
+
+const getEstadoBadgeStyle = (tipo) => {
+  const palette = {
+    equilibrado: { background: "#dcfce7", color: "#166534" },
+    saldo: { background: "#fef3c7", color: "#92400e" },
+    excedente: { background: "#fee2e2", color: "#991b1b" },
+    incompleto: { background: "#ffedd5", color: "#9a3412" },
+    vazio: { background: "var(--os-color-surface-soft)", color: "var(--os-color-muted)" }
+  };
+
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    maxWidth: "100%",
+    padding: "2px 7px",
+    borderRadius: 999,
+    background: palette[tipo]?.background || palette.incompleto.background,
+    color: palette[tipo]?.color || palette.incompleto.color,
+    fontSize: 11,
+    fontWeight: 700,
+    lineHeight: 1.4,
+    whiteSpace: "normal"
+  };
+};
+
+const panelTh = {
+  ...th,
+  padding: "4px 6px",
+  fontSize: 11,
+  whiteSpace: "nowrap"
+};
+
+const panelTd = {
+  padding: "4px 6px",
+  borderBottom: "1px solid var(--os-color-border)",
+  verticalAlign: "top",
+  overflowWrap: "anywhere"
 };
 
 const tdNome = {

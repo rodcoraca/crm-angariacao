@@ -6,6 +6,7 @@ import {
 } from "../../../utils/empresaScope.js";
 import {
   deleteEmpreendimento,
+  fetchEmpreendimentosByEmpresa,
   fetchEmpreendimentosByCliente,
   insertEmpreendimento,
   updateEmpreendimento
@@ -102,6 +103,16 @@ export async function fetchEmpreendimentosService(clienteId) {
   }
 
   return fetchEmpreendimentosByCliente(clienteId, empresaId);
+}
+
+export async function fetchEmpreendimentosResumoService() {
+  const empresaId = await resolveEmpresaId();
+  if (!hasEmpresaId(empresaId)) {
+    warnMissingEmpresaId();
+    return { data: [], error: null };
+  }
+
+  return fetchEmpreendimentosByEmpresa(empresaId);
 }
 
 export async function salvarEmpreendimentoService({ form, clienteId, isEditing = false, empreendimentoEdicao = null, currentUser = null }) {

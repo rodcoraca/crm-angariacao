@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuthContext } from "../../auth/context";
 import { usePermissions } from "../../auth/hooks/usePermissions";
 import { askConfirmation, notifyError, notifySuccess } from "../../../components/ui/feedbackBus";
@@ -12,14 +12,22 @@ import {
   validarCondicaoPagamento
 } from "../services/condicoesPagamentoService";
 
+const NOMES_ETAPAS_PADRAO = new Set(["entrada", "cpcv", "escritura"]);
+const MENSAGEM_NOME_ETAPA_RESERVADO = "Este nome está reservado para uma etapa padrão. Escolha outro nome.";
+
+function normalizarNomeEtapa(nome) {
+  return String(nome || "").trim().toLocaleLowerCase();
+}
+
 export function useEmpreendimentoCondicoesPagamento({ empreendimentoId = null } = {}) {
   const { user } = useAuthContext();
   const { can } = usePermissions();
 
-  const [condicoes, setCondicoes] = useState(buildDefaultCondicoesPagamento());
+  const [condicoes, setCondicoes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const nextLocalConditionId = useRef(0);
 
   const podeVer = can("estoque_nao_publicitado.view");
   const podeEditar = can("estoque_nao_publicitado.edit_development");
@@ -28,18 +36,48 @@ export function useEmpreendimentoCondicoesPagamento({ empreendimentoId = null } 
 
   const carregarCondicoes = useCallback(async () => {
     if (!empreendimentoId || !podeVer) {
-      setCondicoes(buildDefaultCondicoesPagamento());
+      setCondicoes([]);
       return;
     }
 
+    setCondicoes([]);
     setLoading(true);
     setError("");
 
-    const response = await fetchCondicoesPagamentoService(empreendimentoId);
-    const rows = response?.data || [];
-    const mappedRows = rows.length ? rows.map(mapCondicaoPagamentoParaFormulario) : buildDefaultCondicoesPagamento();
-    setCondicoes(mappedRows);
-    setLoading(false);
+    try {
+      const response = await fetchCondicoesPagamentoService(empreendimentoId);
+      if (response?.error) {
+        throw response.error;
+      }
+
+      const rows = response?.data || [];
+      const rowsSemRepeticao = rows.filter((row, index) => {
+        if (!row?.id) return true;
+        return rows.findIndex((candidate) => candidate?.id === row.id) === index;
+      });
+      const mappedRows = rowsSemRepeticao.map(mapCondicaoPagamentoParaFormulario).map((condicao) => ({
+        ...condicao,
+        isPermanent: NOMES_ETAPAS_PADRAO.has(normalizarNomeEtapa(condicao.nome_etapa))
+      }));
+      const nomesExistentes = new Set(mappedRows.map((condicao) => normalizarNomeEtapa(condicao.nome_etapa)));
+      const etapasEmFalta = buildDefaultCondicoesPagamento()
+        .filter((condicao) => !nomesExistentes.has(normalizarNomeEtapa(condicao.nome_etapa)))
+        .map((condicao, index) => ({
+          ...condicao,
+          ordem: mappedRows.length + index + 1,
+          isPermanent: true
+        }));
+      const condicoesComPermanentes = [...mappedRows, ...etapasEmFalta].map((condicao, index) => ({
+        ...condicao,
+        ordem: condicao.ordem || index + 1
+      }));
+      setCondicoes(condicoesComPermanentes);
+    } catch (err) {
+      setCondicoes([]);
+      setError(err?.message || "Não foi possível carregar as condições de pagamento.");
+    } finally {
+      setLoading(false);
+    }
   }, [empreendimentoId, podeVer]);
 
   useEffect(() => {
@@ -47,17 +85,34 @@ export function useEmpreendimentoCondicoesPagamento({ empreendimentoId = null } 
   }, [carregarCondicoes]);
 
   const totalPercentual = useMemo(() => {
-    return condicoes
+    const total = condicoes
       .filter((condicao) => condicao.tipo_valor === "percentual")
       .reduce((sum, condicao) => {
         const numericValue = Number(String(condicao.valor || "0").replace(/[%\s€]/g, ""));
         return Number.isFinite(numericValue) ? sum + numericValue : sum;
       }, 0);
+
+    return Math.round((total + Number.EPSILON) * 100) / 100;
+  }, [condicoes]);
+
+  const nomesEtapasDuplicados = useMemo(() => {
+    const ocorrencias = condicoes.reduce((mapa, condicao) => {
+      const nome = String(condicao?.nome_etapa || "").trim();
+      if (!nome) return mapa;
+      const nomeNormalizado = nome.toLocaleLowerCase();
+      mapa.set(nomeNormalizado, (mapa.get(nomeNormalizado) || 0) + 1);
+      return mapa;
+    }, new Map());
+
+    return [...ocorrencias.entries()]
+      .filter(([, quantidade]) => quantidade > 1)
+      .map(([nome]) => nome);
   }, [condicoes]);
 
   function atualizarCondicao(index, campo, valor) {
     setCondicoes((prev) => prev.map((condicao, condicaoIndex) => {
       if (condicaoIndex !== index) return condicao;
+      if (condicao.isPermanent && campo === "nome_etapa") return condicao;
 
       const next = { ...condicao, [campo]: valor };
 
@@ -75,14 +130,17 @@ export function useEmpreendimentoCondicoesPagamento({ empreendimentoId = null } 
       return;
     }
 
+    nextLocalConditionId.current += 1;
+    const localId = `local-condicao-${nextLocalConditionId.current}`;
+
     setCondicoes((prev) => {
       const rows = [...prev];
-      const indexEscritura = rows.findIndex((condicao) => condicao.nome_etapa === "Escritura");
       const customSequence = rows.filter((condicao) => condicao.isCustom).length + 1;
       const novaEtapa = {
         id: null,
+        localId,
         nome_etapa: `Reforço ${customSequence}`,
-        ordem: indexEscritura === -1 ? rows.length + 1 : indexEscritura,
+        ordem: rows.length + 1,
         tipo_valor: "percentual",
         valor: "",
         negociavel: false,
@@ -90,11 +148,7 @@ export function useEmpreendimentoCondicoesPagamento({ empreendimentoId = null } 
         isCustom: true
       };
 
-      if (indexEscritura === -1) {
-        rows.push(novaEtapa);
-      } else {
-        rows.splice(indexEscritura, 0, novaEtapa);
-      }
+      rows.push(novaEtapa);
 
       return rows.map((item, ordemIndex) => ({ ...item, ordem: ordemIndex + 1 }));
     });
@@ -107,10 +161,10 @@ export function useEmpreendimentoCondicoesPagamento({ empreendimentoId = null } 
     }
 
     const condicaoSelecionada = condicoes[index];
-    const isBaseStep = ["Entrada", "CPCV", "Escritura"].includes(condicaoSelecionada?.nome_etapa || "");
+    if (!condicaoSelecionada) return;
 
-    if (isBaseStep) {
-      notifyError("Esta etapa não pode ser eliminada.");
+    if (condicaoSelecionada.isPermanent) {
+      notifyError("As etapas Entrada, CPCV e Escritura são permanentes e não podem ser eliminadas.");
       return;
     }
 
@@ -160,6 +214,22 @@ export function useEmpreendimentoCondicoesPagamento({ empreendimentoId = null } 
 
     if (!podeEditar) {
       notifyError("Sem permissão para alterar condições de pagamento.");
+      return null;
+    }
+
+    for (const condicao of condicoes) {
+      if (!condicao.id && !condicao.isPermanent && NOMES_ETAPAS_PADRAO.has(normalizarNomeEtapa(condicao.nome_etapa))) {
+        setError(MENSAGEM_NOME_ETAPA_RESERVADO);
+        notifyError(MENSAGEM_NOME_ETAPA_RESERVADO);
+        return null;
+      }
+    }
+
+    if (nomesEtapasDuplicados.length > 0) {
+      const nomes = nomesEtapasDuplicados.join(", ");
+      const message = `Existem etapas duplicadas (${nomes}). Remova ou renomeie as entradas antes de guardar.`;
+      setError(message);
+      notifyError(message);
       return null;
     }
 
@@ -224,6 +294,7 @@ export function useEmpreendimentoCondicoesPagamento({ empreendimentoId = null } 
     podeCriar,
     podeEliminar,
     totalPercentual,
+    nomesEtapasDuplicados,
     atualizarCondicao,
     adicionarEtapa,
     removerEtapa,

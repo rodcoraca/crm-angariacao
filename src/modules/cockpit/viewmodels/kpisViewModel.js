@@ -5,6 +5,9 @@ export function createKpisViewModel(theme) {
     { id: "kpi-leads-agendadas", titulo: "Leads Agendadas", valor: "41", variacao: "7 para hoje", icone: "A", cor: theme.colors.secondary },
     { id: "kpi-negocios-fechados", titulo: "Convertidos", valor: "12", variacao: "2 esta semana", icone: "N", cor: theme.colors.success },
     { id: "kpi-imoveis-incompletos", titulo: "Imoveis Incompletos", valor: "19", variacao: "4 criticos", icone: "I", cor: theme.colors.danger },
-    { id: "kpi-atividades-hoje", titulo: "Atividades Hoje", valor: "64", variacao: "em execucao", icone: "T", cor: theme.colors.accent }
+    { id: "kpi-atividades-hoje", titulo: "Atividades Hoje", valor: "64", variacao: "em execucao", icone: "T", cor: theme.colors.accent },
+    { id: "kpi-empreendimentos", titulo: "Empreendimentos", valor: "0", variacao: "registados", icone: "E", cor: theme.colors.primary },
+    { id: "kpi-fracoes-registadas", titulo: "Frações registadas", valor: "0", variacao: "em empreendimentos", icone: "F", cor: theme.colors.secondary },
+    { id: "kpi-imoveis-nao-publicitados", titulo: "Imóveis não publicitados", valor: "0", variacao: "registados", icone: "I", cor: theme.colors.accent }
   ];
 }

@@ -4,7 +4,10 @@ const KPI_IDS = [
   "kpi-leads-agendadas",
   "kpi-negocios-fechados",
   "kpi-imoveis-incompletos",
-  "kpi-atividades-hoje"
+  "kpi-atividades-hoje",
+  "kpi-empreendimentos",
+  "kpi-fracoes-registadas",
+  "kpi-imoveis-nao-publicitados"
 ];
 
 export const INITIAL_COCKPIT_KPI_VALUES = {
@@ -13,7 +16,10 @@ export const INITIAL_COCKPIT_KPI_VALUES = {
   "kpi-leads-agendadas": "...",
   "kpi-negocios-fechados": "...",
   "kpi-imoveis-incompletos": "...",
-  "kpi-atividades-hoje": "..."
+  "kpi-atividades-hoje": "...",
+  "kpi-empreendimentos": "...",
+  "kpi-fracoes-registadas": "...",
+  "kpi-imoveis-nao-publicitados": "..."
 };
 
 export const ERROR_COCKPIT_KPI_VALUES = {
@@ -22,7 +28,10 @@ export const ERROR_COCKPIT_KPI_VALUES = {
   "kpi-leads-agendadas": "--",
   "kpi-negocios-fechados": "--",
   "kpi-imoveis-incompletos": "--",
-  "kpi-atividades-hoje": "--"
+  "kpi-atividades-hoje": "--",
+  "kpi-empreendimentos": "--",
+  "kpi-fracoes-registadas": "--",
+  "kpi-imoveis-nao-publicitados": "--"
 };
 
 export function normalizeCockpitKpiValues(values) {

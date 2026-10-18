@@ -1,4 +1,10 @@
-import { queryAgendaLembretesFuturos, queryAgendaLembretesHoje } from "./cockpitRepository";
+import {
+  queryAgendaLembretesFuturos,
+  queryAgendaLembretesHoje,
+  queryCountEmpreendimentos,
+  queryCountImoveisNaoPublicitados,
+  queryCountUnidades
+} from "./cockpitRepository";
 import { supabase } from "../../../supabase";
 
 const mockQuery = {
@@ -38,6 +44,31 @@ describe("queryAgendaLembretesHoje", () => {
 
     expect(mockQuery.eq).toHaveBeenCalledWith("criado_por", "usuario-b");
     expect(mockQuery.eq).not.toHaveBeenCalledWith("criado_por", "usuario-a");
+  });
+});
+
+describe("contagens do inventário no Cockpit", () => {
+  beforeEach(() => {
+    mockQuery.select.mockClear().mockImplementation(function select() { return this; });
+    mockQuery.eq.mockClear().mockImplementation(function eq() { return this; });
+    supabase.from.mockClear();
+    supabase.from.mockReturnValue(mockQuery);
+  });
+
+  it("aplica o empresa_id às três fontes sem cruzar tabelas", () => {
+    queryCountEmpreendimentos("empresa-1");
+    expect(supabase.from).toHaveBeenCalledWith("empreendimentos");
+    expect(mockQuery.eq).toHaveBeenCalledWith("empresa_id", "empresa-1");
+
+    mockQuery.eq.mockClear();
+    queryCountUnidades("empresa-1");
+    expect(supabase.from).toHaveBeenCalledWith("unidades");
+    expect(mockQuery.eq).toHaveBeenCalledWith("empresa_id", "empresa-1");
+
+    mockQuery.eq.mockClear();
+    queryCountImoveisNaoPublicitados("empresa-1");
+    expect(supabase.from).toHaveBeenCalledWith("estoque_nao_publicitado");
+    expect(mockQuery.eq).toHaveBeenCalledWith("empresa_id", "empresa-1");
   });
 });
 

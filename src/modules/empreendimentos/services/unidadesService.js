@@ -23,6 +23,7 @@ export function buildDefaultUnidadeForm() {
   return {
     fracao: "",
     tipologia: "",
+    preco_venda: "",
     area_bruta_privativa: "",
     area_total: "",
     area_dependente: "",
@@ -57,6 +58,7 @@ export function mapUnidadeParaFormulario(unidade = {}) {
   return {
     fracao: unidade?.fracao || "",
     tipologia: unidade?.tipologia || "",
+    preco_venda: unidade?.preco_venda ?? "",
     area_bruta_privativa: unidade?.area_bruta_privativa ?? "",
     area_total: unidade?.area_total ?? "",
     area_dependente: unidade?.area_dependente ?? "",
@@ -71,6 +73,124 @@ export function toNumberOrNull(value) {
   if (value === "" || value === null || value === undefined) return null;
   const normalized = Number(value);
   return Number.isNaN(normalized) ? null : normalized;
+}
+
+export function toMoneyNumberOrNull(value) {
+  if (value === "" || value === null || value === undefined) return null;
+
+  const normalizedValue = String(value).replace(/€/g, "").replace(/\s+/g, "").trim();
+  if (!normalizedValue) return null;
+
+  const normalized = normalizedValue.includes(",")
+    ? normalizedValue.replace(/\./g, "").replace(",", ".")
+    : normalizedValue;
+  const numericValue = Number(normalized);
+  return Number.isFinite(numericValue) ? numericValue : null;
+}
+
+export function roundMoney(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
+export function formatarValorMonetario(value) {
+  const numericValue = toMoneyNumberOrNull(value);
+  return numericValue === null
+    ? "—"
+    : new Intl.NumberFormat("pt-PT", { style: "currency", currency: "EUR" }).format(numericValue);
+}
+
+export function calcularCondicoesPagamentoPorUnidade({ precoVenda = null, condicoes = [] } = {}) {
+  const preco = toMoneyNumberOrNull(precoVenda);
+  const etapas = (condicoes || []).filter((condicao) => String(condicao?.nome_etapa || "").trim());
+  let totalFixos = 0;
+  let totalPercentuais = 0;
+  let temPercentualSemPreco = false;
+  let temValorInvalido = false;
+  let temTipoInvalido = false;
+  let totalAcumulado = 0;
+
+  const etapasCalculadas = etapas.map((condicao) => {
+    const valor = toMoneyNumberOrNull(condicao?.valor);
+    const tipo = String(condicao?.tipo_valor || "").trim().toLowerCase();
+    const tipoSuportado = tipo === "fixo" || tipo === "percentual";
+    const valorValido = tipoSuportado && valor !== null && valor >= 0;
+    if (!tipoSuportado) temTipoInvalido = true;
+    if (!valorValido) temValorInvalido = true;
+
+    let montante = null;
+    if (valorValido && tipo === "fixo") {
+      montante = roundMoney(valor);
+      totalFixos = roundMoney(totalFixos + montante);
+    } else if (valorValido && preco !== null && tipo === "percentual") {
+      montante = roundMoney(preco * valor / 100);
+      totalPercentuais = roundMoney(totalPercentuais + montante);
+    } else if (tipo === "percentual" && preco === null) {
+      temPercentualSemPreco = true;
+    }
+
+    if (montante !== null) {
+      totalAcumulado = roundMoney(totalAcumulado + montante);
+    }
+
+    return {
+      nome_etapa: condicao.nome_etapa,
+      ordem: condicao.ordem,
+      tipo_valor: tipo,
+      valor,
+      montante,
+      total_acumulado: montante === null ? null : totalAcumulado,
+      valor_valido: valorValido,
+      tipo_suportado: tipoSuportado
+    };
+  });
+
+  const totalCalculavel = roundMoney(totalFixos + totalPercentuais);
+  const todasEtapasCalculaveis = etapas.length > 0
+    && preco !== null
+    && !temPercentualSemPreco
+    && !temValorInvalido
+    && !temTipoInvalido
+    && etapasCalculadas.every((etapa) => etapa.montante !== null);
+  const saldo = todasEtapasCalculaveis ? roundMoney(preco - totalCalculavel) : null;
+  const tolerancia = 0.01;
+  const precoZero = preco === 0;
+  const totaisParciais = preco === null || temPercentualSemPreco || temValorInvalido || temTipoInvalido;
+
+  const estados = [];
+  if (precoZero) {
+    estados.push("Preço de venda zero — validar comercialmente");
+  }
+  if (temTipoInvalido || temValorInvalido) {
+    estados.push("Condição inválida");
+  }
+  if (estados.length === 0 && etapas.length === 0) {
+    estados.push("Sem condições");
+  } else if (estados.length === 0 && todasEtapasCalculaveis && Math.abs(saldo) <= tolerancia) {
+    estados.push("Plano equilibrado");
+  } else if (estados.length === 0 && todasEtapasCalculaveis && saldo > tolerancia) {
+    estados.push("Saldo por distribuir");
+  } else if (estados.length === 0 && todasEtapasCalculaveis && saldo < -tolerancia) {
+    estados.push("Plano excede o preço");
+  } else if (estados.length === 0) {
+    estados.push("Cálculo incompleto");
+  }
+
+  return {
+    preco_venda: preco,
+    etapas: etapasCalculadas,
+    total_fixos: totalFixos,
+    total_percentuais: totalPercentuais,
+    total_calculavel: totalCalculavel,
+    saldo,
+    excedente: saldo !== null && saldo < -tolerancia ? roundMoney(Math.abs(saldo)) : null,
+    estado: estados.join(" · "),
+    tem_percentual_sem_preco: temPercentualSemPreco,
+    tem_tipo_invalido: temTipoInvalido,
+    tem_valor_invalido: temValorInvalido,
+    totais_parciais: totaisParciais,
+    preco_zero: precoZero,
+    todas_etapas_calculaveis: todasEtapasCalculaveis
+  };
 }
 
 export function validarFracaoDuplicada({ fracao = "", empreendimentoId = null, unidades = [], unidadeId = null } = {}) {
@@ -130,6 +250,13 @@ export function validarUnidade(form = {}) {
     return "As áreas devem ser numéricas e não negativas.";
   }
 
+  if (form.preco_venda !== "" && form.preco_venda !== null && form.preco_venda !== undefined) {
+    const precoVenda = toMoneyNumberOrNull(form.preco_venda);
+    if (precoVenda === null || precoVenda < 0) {
+      return "O preço de venda deve ser monetário e não negativo.";
+    }
+  }
+
   const garageValue = form.lugares_garagem;
   if (garageValue !== "" && garageValue !== null && garageValue !== undefined) {
     const numericGarage = Number(garageValue);
@@ -147,6 +274,7 @@ export function toUnidadePayload(form = {}, { empresaId, empreendimentoId, userP
     empreendimento_id: empreendimentoId || form.empreendimento_id || null,
     fracao: String(form.fracao || "").trim() || null,
     tipologia: String(form.tipologia || "").trim() || null,
+    preco_venda: toMoneyNumberOrNull(form.preco_venda),
     area_bruta_privativa: toNumberOrNull(form.area_bruta_privativa),
     area_total: toNumberOrNull(form.area_total),
     area_dependente: toNumberOrNull(form.area_dependente),

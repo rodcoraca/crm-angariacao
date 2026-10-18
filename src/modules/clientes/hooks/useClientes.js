@@ -5,12 +5,14 @@ import { usePermissions } from "../../auth/hooks/usePermissions";
 import { askConfirmation, notifyError, notifySuccess } from "../../../components/ui/feedbackBus";
 import { auditMutation } from "../../audit/services/auditService";
 import { buildDefaultClienteForm, fetchClientesService, fetchUsuariosEmpresaService, mapClienteParaFormulario, salvarClienteService, excluirClienteService } from "../services/clientesService";
+import { fetchEmpreendimentosResumoService } from "../../empreendimentos/services/empreendimentosService";
 
 export function useClientes() {
   const { user } = useAuthContext();
   const { can } = usePermissions();
 
   const [clientes, setClientes] = useState([]);
+  const [empreendimentosPorCliente, setEmpreendimentosPorCliente] = useState({});
   const [usuariosEmpresa, setUsuariosEmpresa] = useState([]);
   const [busca, setBusca] = useState("");
   const [moduloAtual, setModuloAtual] = useState("lista");
@@ -32,15 +34,47 @@ export function useClientes() {
 
     setLoading(true);
     setError("");
+    setEmpreendimentosPorCliente({});
 
-    const [{ data: clientesData = [] }, { data: usuariosData = [] }] = await Promise.all([
-      fetchClientesService(),
-      fetchUsuariosEmpresaService()
-    ]);
+    try {
+      const [clientesResult, usuariosResult, empreendimentosResult] = await Promise.allSettled([
+        fetchClientesService(),
+        fetchUsuariosEmpresaService(),
+        fetchEmpreendimentosResumoService()
+      ]);
 
-    setClientes(clientesData || []);
-    setUsuariosEmpresa(usuariosData || []);
-    setLoading(false);
+      const hasServiceError = (result) => result.status === "rejected" || result.value?.error;
+      const mainResultsFailed = hasServiceError(clientesResult) || hasServiceError(usuariosResult);
+
+      if (mainResultsFailed) {
+        setClientes([]);
+        setUsuariosEmpresa([]);
+        throw clientesResult.status === "rejected"
+          ? clientesResult.reason
+          : usuariosResult.status === "rejected"
+            ? usuariosResult.reason
+            : clientesResult.value?.error || usuariosResult.value?.error;
+      }
+
+      setClientes(clientesResult.value?.data || []);
+      setUsuariosEmpresa(usuariosResult.value?.data || []);
+
+      if (!hasServiceError(empreendimentosResult)) {
+        setEmpreendimentosPorCliente((empreendimentosResult.value?.data || []).reduce((accumulator, empreendimento) => {
+          const clienteId = empreendimento?.cliente_id;
+          if (!clienteId) return accumulator;
+          accumulator[clienteId] = (accumulator[clienteId] || 0) + 1;
+          return accumulator;
+        }, {}));
+      }
+    } catch (err) {
+      setClientes([]);
+      setUsuariosEmpresa([]);
+      setEmpreendimentosPorCliente({});
+      setError(err?.message || "Não foi possível carregar clientes e utilizadores.");
+    } finally {
+      setLoading(false);
+    }
   }, [podeVer]);
 
   useEffect(() => {
@@ -277,6 +311,7 @@ export function useClientes() {
 
   return {
     clientes,
+    empreendimentosPorCliente,
     usuariosEmpresa,
     busca,
     setBusca,

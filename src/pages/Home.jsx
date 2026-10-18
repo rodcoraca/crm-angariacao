@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTheme } from "../theme/ThemeContext";
 import { usePermissions } from "../modules/auth/hooks";
+import { useTenantContext } from "../modules/tenant";
 import Badge from "../components/ui/Badge";
 import EmptyState from "../components/ui/EmptyState";
 import Card from "../components/ui/Card";
@@ -49,6 +50,15 @@ function obterIniciais(label) {
     .slice(0, 2)
     .map((chunk) => chunk[0]?.toUpperCase() || "")
     .join("") || "U";
+}
+
+function obterNomeEmpresaDescritivo(...candidatos) {
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+  return candidatos
+    .map((candidate) => String(candidate || "").trim())
+    .find((candidate) => candidate && !uuidPattern.test(candidate))
+    || "Empresa não identificada";
 }
 
 function obterVariantPrioridade(prioridade) {
@@ -224,9 +234,10 @@ function AgendaItems({ items, onOpenLead, onCompleteReminder, completingReminder
   );
 }
 
-export default function Home({ user, onOpenSearchResult = null, onOpenLead = null }) {
+export default function Home({ user, onOpenSearchResult = null, onOpenLead = null, onNavigate = null }) {
   const theme = useTheme();
   const { can } = usePermissions();
+  const { activeEmpresa } = useTenantContext();
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("");
   const [searchResults, setSearchResults] = useState([]);
@@ -268,13 +279,11 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
   const saudacao = nomeUtilizador
     ? `${obterSaudacaoPorPeriodo(hora)}, ${nomeUtilizador}`
     : "Bem-vindo.";
-  const empresaSelecionada = (
-    user?.user_metadata?.empresa_nome
-    || user?.user_metadata?.empresa
-    || user?.user_metadata?.company_name
-    || user?.user_metadata?.empresa_id
-    || "OSFlow"
-  ).toString();
+  const empresaSelecionada = obterNomeEmpresaDescritivo(
+    activeEmpresa?.nome,
+    user?.user_metadata?.empresa_nome,
+    user?.user_metadata?.company_name
+  );
   const avatarIniciais = obterIniciais(nomeUtilizador || user?.email || "OSFlow");
   const canViewUsers = can("users.view");
 
@@ -285,6 +294,13 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
   } = useMemo(() => createCockpitViewModel(theme), [theme]);
 
   const { data: kpisTopo } = useCockpitKPIs(kpis);
+  const idsCarteiraImobiliaria = [
+    "kpi-empreendimentos",
+    "kpi-fracoes-registadas",
+    "kpi-imoveis-nao-publicitados"
+  ];
+  const kpisCarteiraImobiliaria = kpisTopo.filter((kpi) => idsCarteiraImobiliaria.includes(kpi.id));
+  const kpisComerciais = kpisTopo.filter((kpi) => !idsCarteiraImobiliaria.includes(kpi.id));
   const { data: pipelineComercial } = useCockpitPipeline(pipeline);
   const {
     data: acoesImediatasItems,
@@ -424,6 +440,50 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
     return Array.from(groups.entries()).sort(([left], [right]) => left.localeCompare(right));
   }, [futureAgendaItems]);
   const [agendaModalOpen, setAgendaModalOpen] = useState(false);
+
+  const renderKpiCard = (kpi, isCarteira = false) => {
+    const targetView = {
+      "kpi-empreendimentos": "estoque_np_empreendimentos",
+      "kpi-imoveis-nao-publicitados": "estoque_np"
+    }[kpi.id];
+    const variacaoCarteira = {
+      "kpi-empreendimentos": "Empreendimentos registados",
+      "kpi-fracoes-registadas": "Unidades nos empreendimentos",
+      "kpi-imoveis-nao-publicitados": "Imóveis no cadastro"
+    }[kpi.id];
+
+    const navegarParaIndicador = () => {
+      if (targetView) onNavigate?.(targetView);
+    };
+
+    return (
+      <KpiCard
+        key={kpi.id}
+        titulo={kpi.titulo}
+        valor={kpi.valor}
+        variacao={isCarteira ? variacaoCarteira : kpi.variacao}
+        icone={kpi.icone}
+        cor={kpi.cor}
+        className={`cockpit-kpi-card${isCarteira ? " cockpit-kpi-card--carteira" : ""}`}
+        role={targetView ? "link" : undefined}
+        tabIndex={targetView ? 0 : undefined}
+        aria-label={targetView ? `Abrir ${kpi.titulo}` : undefined}
+        onClick={targetView ? navegarParaIndicador : undefined}
+        onKeyDown={targetView ? (event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            navegarParaIndicador();
+          }
+        } : undefined}
+        style={{
+          minHeight: 0,
+          padding: "16px",
+          borderRadius: "12px",
+          cursor: targetView ? "pointer" : undefined
+        }}
+      />
+    );
+  };
 
   async function concluirLembreteAgenda(item) {
     if (!item?.leadId || lembretesAConcluirIds.has(item.leadId)) return;
@@ -726,8 +786,7 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
           <button type="button" className="cockpit-icon-button" aria-label="Abrir menu">|||</button>
 
           <div className="cockpit-topbar__title-block">
-            <span className="cockpit-eyebrow">Cockpit</span>
-            <h1 className="cockpit-page-title">Cockpit</h1>
+            <h1 className="cockpit-page-title cockpit-page-title--compact">Cockpit</h1>
           </div>
 
           <div className="cockpit-company-chip">
@@ -796,6 +855,7 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
           <div className="cockpit-topbar__meta">
             <span className="cockpit-topbar__meta-label">Hoje</span>
             <strong className="cockpit-topbar__meta-value">{dataAtual}</strong>
+            <span className="cockpit-topbar__greeting">{saudacao}</span>
           </div>
 
           <button type="button" className="cockpit-icon-button cockpit-icon-button--accent" aria-label="Lembretes de hoje">
@@ -809,22 +869,16 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
       </header>
 
       <section className="cockpit-kpi-grid" aria-label="Indicadores principais">
-        {kpisTopo.map((kpi) => (
-          <KpiCard
-            key={kpi.id}
-            titulo={kpi.titulo}
-            valor={kpi.valor}
-            variacao={kpi.variacao}
-            icone={kpi.icone}
-            cor={kpi.cor}
-            className="cockpit-kpi-card"
-            style={{
-              minHeight: 0,
-              padding: "16px",
-              borderRadius: "12px"
-            }}
-          />
-        ))}
+        {kpisComerciais.map((kpi) => renderKpiCard(kpi))}
+      </section>
+
+      <section aria-labelledby="cockpit-carteira-imobiliaria" style={{ display: "grid", gap: 12, marginTop: 24 }}>
+        <div>
+          <h2 id="cockpit-carteira-imobiliaria" style={{ margin: 0, fontSize: "1.15rem", color: theme.colors.text }}>Carteira Imobiliária</h2>
+        </div>
+        <div className="cockpit-kpi-grid cockpit-kpi-grid--carteira" aria-label="Indicadores da carteira imobiliária">
+          {kpisCarteiraImobiliaria.map((kpi) => renderKpiCard(kpi, true))}
+        </div>
       </section>
 
       <section className="cockpit-grid-12">
@@ -1085,7 +1139,6 @@ export default function Home({ user, onOpenSearchResult = null, onOpenLead = nul
       </section>
 
       <div className="cockpit-signature-row">
-        <span className="cockpit-signature-row__status">{saudacao}</span>
         <span className="cockpit-signature-row__status">Centro de comando OSFlow</span>
       </div>
     </div>

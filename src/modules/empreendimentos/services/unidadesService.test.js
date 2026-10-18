@@ -1,6 +1,8 @@
 import {
   buildPlantaUnidadePayload,
+  calcularCondicoesPagamentoPorUnidade,
   inferNextFracao,
+  mapUnidadeParaFormulario,
   toUnidadePayload,
   validarEmpreendimentoTenant,
   validarFracaoDuplicada,
@@ -38,6 +40,124 @@ describe('unidadesService', () => {
     expect(payload.created_by).toBe('user-1');
     expect(payload.updated_by).toBe('user-1');
     expect(payload.lugares_garagem).toBe(1);
+  });
+
+  it('inclui o preço de venda no formulário e no payload da unidade', () => {
+    expect(mapUnidadeParaFormulario({ preco_venda: 250000 }).preco_venda).toBe(250000);
+
+    const payload = toUnidadePayload({ fracao: 'A', tipologia: 'T2', preco_venda: '250000,50' }, {
+      empresaId: 'company-1',
+      empreendimentoId: 'emp-1',
+      userProfileId: 'user-1'
+    });
+
+    expect(payload.preco_venda).toBe(250000.5);
+    expect(payload).not.toHaveProperty('condicoes');
+  });
+
+  it('calcula plano misto por fração e identifica excedente', () => {
+    const resumo = calcularCondicoesPagamentoPorUnidade({
+      precoVenda: 250000,
+      condicoes: [
+        { nome_etapa: 'Entrada', ordem: 1, tipo_valor: 'fixo', valor: 10000 },
+        { nome_etapa: 'CPCV', ordem: 2, tipo_valor: 'percentual', valor: 20 },
+        { nome_etapa: 'Reforço', ordem: 3, tipo_valor: 'percentual', valor: 10 },
+        { nome_etapa: 'Escritura', ordem: 4, tipo_valor: 'percentual', valor: 70 }
+      ]
+    });
+
+    expect(resumo.total_calculavel).toBe(260000);
+    expect(resumo.saldo).toBe(-10000);
+    expect(resumo.excedente).toBe(10000);
+    expect(resumo.estado).toBe('Plano excede o preço');
+  });
+
+  it('calcula plano misto equilibrado, saldo positivo e arredondamento', () => {
+    const equilibrado = calcularCondicoesPagamentoPorUnidade({
+      precoVenda: 250000,
+      condicoes: [
+        { nome_etapa: 'Entrada', ordem: 1, tipo_valor: 'fixo', valor: 10000 },
+        { nome_etapa: 'CPCV', ordem: 2, tipo_valor: 'percentual', valor: 20 },
+        { nome_etapa: 'Reforço', ordem: 3, tipo_valor: 'percentual', valor: 10 },
+        { nome_etapa: 'Escritura', ordem: 4, tipo_valor: 'percentual', valor: 66 }
+      ]
+    });
+    const positivo = calcularCondicoesPagamentoPorUnidade({
+      precoVenda: 250000,
+      condicoes: [{ nome_etapa: 'Entrada', ordem: 1, tipo_valor: 'fixo', valor: 10000 }]
+    });
+
+    expect(equilibrado.total_calculavel).toBe(250000);
+    expect(equilibrado.estado).toBe('Plano equilibrado');
+    expect(positivo.saldo).toBe(240000);
+    expect(positivo.estado).toBe('Saldo por distribuir');
+  });
+
+  it('não calcula percentuais sem preço e suporta condições vazias ou só fixas', () => {
+    const semPreco = calcularCondicoesPagamentoPorUnidade({
+      condicoes: [
+        { nome_etapa: 'Entrada', ordem: 1, tipo_valor: 'fixo', valor: 10000 },
+        { nome_etapa: 'CPCV', ordem: 2, tipo_valor: 'percentual', valor: 20 }
+      ]
+    });
+    const vazias = calcularCondicoesPagamentoPorUnidade({ precoVenda: 250000, condicoes: [] });
+    const fixas = calcularCondicoesPagamentoPorUnidade({
+      precoVenda: 250000,
+      condicoes: [{ nome_etapa: 'Entrada', ordem: 1, tipo_valor: 'fixo', valor: 10000 }]
+    });
+
+    expect(semPreco.etapas[0].montante).toBe(10000);
+    expect(semPreco.etapas[1].montante).toBeNull();
+    expect(semPreco.estado).toBe('Cálculo incompleto');
+    expect(vazias.estado).toBe('Sem condições');
+    expect(fixas.total_fixos).toBe(10000);
+  });
+
+  it('distingue preço ausente de preço zero e sinaliza o zero', () => {
+    const ausente = calcularCondicoesPagamentoPorUnidade({
+      precoVenda: '',
+      condicoes: [{ nome_etapa: 'CPCV', tipo_valor: 'percentual', valor: 20 }]
+    });
+    const zero = calcularCondicoesPagamentoPorUnidade({
+      precoVenda: 0,
+      condicoes: [{ nome_etapa: 'Entrada', tipo_valor: 'fixo', valor: 0 }]
+    });
+
+    expect(ausente.preco_venda).toBeNull();
+    expect(ausente.preco_zero).toBe(false);
+    expect(ausente.estado).toBe('Cálculo incompleto');
+    expect(zero.preco_venda).toBe(0);
+    expect(zero.preco_zero).toBe(true);
+    expect(zero.estado).toBe('Preço de venda zero — validar comercialmente');
+  });
+
+  it('sinaliza tipos de condição desconhecidos sem os somar', () => {
+    const resumo = calcularCondicoesPagamentoPorUnidade({
+      precoVenda: 250000,
+      condicoes: [
+        { nome_etapa: 'Entrada', tipo_valor: 'fixo', valor: 10000 },
+        { nome_etapa: 'Desconhecida', tipo_valor: 'proporcional', valor: 50 }
+      ]
+    });
+
+    expect(resumo.tem_tipo_invalido).toBe(true);
+    expect(resumo.etapas[1].tipo_suportado).toBe(false);
+    expect(resumo.etapas[1].montante).toBeNull();
+    expect(resumo.total_fixos).toBe(10000);
+    expect(resumo.total_percentuais).toBe(0);
+    expect(resumo.estado).toBe('Condição inválida');
+    expect(resumo.todas_etapas_calculaveis).toBe(false);
+  });
+
+  it('rejeita preço inválido e mantém cálculos independentes entre unidades', () => {
+    expect(validarUnidade({ fracao: 'A', tipologia: 'T2', preco_venda: '-1' })).toBe('O preço de venda deve ser monetário e não negativo.');
+
+    const unidadeA = calcularCondicoesPagamentoPorUnidade({ precoVenda: 100000, condicoes: [{ nome_etapa: 'CPCV', tipo_valor: 'percentual', valor: 10 }] });
+    const unidadeB = calcularCondicoesPagamentoPorUnidade({ precoVenda: 200000, condicoes: [{ nome_etapa: 'CPCV', tipo_valor: 'percentual', valor: 10 }] });
+
+    expect(unidadeA.total_percentuais).toBe(10000);
+    expect(unidadeB.total_percentuais).toBe(20000);
+    expect(unidadeA.etapas).not.toBe(unidadeB.etapas);
   });
 
   it('permite mesma fração em empreendimentos diferentes e rejeita duplicidade no mesmo empreendimento', () => {

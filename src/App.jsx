@@ -1087,7 +1087,7 @@ export default function App() {
   }
 
   const screens = {
-    home: canAccessView("home") ? <Home user={user} onOpenSearchResult={abrirResultadoPesquisaCockpit} onOpenLead={abrirFichaLead} /> : <Forbidden requestedView="home" requiredPermission={getRequiredPermission("home")} />,
+    home: canAccessView("home") ? <Home user={user} onOpenSearchResult={abrirResultadoPesquisaCockpit} onOpenLead={abrirFichaLead} onNavigate={mudarView} /> : <Forbidden requestedView="home" requiredPermission={getRequiredPermission("home")} />,
     radar: canAccessView("radar") ? <Radar selectionRequest={radarSelectionRequest} /> : <Forbidden requestedView="radar" requiredPermission={getRequiredPermission("radar")} />,
     radar_imovirtual: canAccessView("radar_imovirtual") ? <RadarImovirtual /> : <Forbidden requestedView="radar_imovirtual" requiredPermission={getRequiredPermission("radar_imovirtual")} />,
     admin_documentacao: canAccessView("admin_documentacao") ? <AdministracaoDocumentacao selectedDoc={docSelecionado} /> : <Forbidden requestedView="admin_documentacao" requiredPermission={getRequiredPermission("admin_documentacao")} />,

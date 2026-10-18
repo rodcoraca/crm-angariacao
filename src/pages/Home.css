@@ -54,6 +54,11 @@
   color: var(--cockpit-text);
 }
 
+.cockpit-page-title--compact {
+  font-size: 15px;
+  line-height: 1.2;
+}
+
 .cockpit-company-chip {
   display: inline-grid;
   gap: 2px;
@@ -213,6 +218,8 @@
   display: grid;
   gap: 2px;
   text-align: right;
+  min-width: 0;
+  max-width: min(280px, 100%);
 }
 
 .cockpit-topbar__meta-label {
@@ -225,6 +232,16 @@
   color: var(--cockpit-text);
   font-weight: 400;
   text-transform: capitalize;
+}
+
+.cockpit-topbar__greeting {
+  font-size: 12px;
+  line-height: 1.2;
+  color: var(--cockpit-muted);
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-overflow: ellipsis;
 }
 
 .cockpit-icon-button {
@@ -290,6 +307,19 @@
 .cockpit-kpi-card {
   min-width: 0;
   box-shadow: 0 1px 3px rgba(16, 34, 45, 0.04) !important;
+}
+
+.cockpit-kpi-grid--carteira {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.cockpit-kpi-card--carteira > header > div {
+  min-width: 0;
+}
+
+.cockpit-kpi-card--carteira > header > span {
+  flex: 0 0 32px;
+  box-sizing: border-box;
 }
 
 .cockpit-kpi-card > div[aria-hidden="true"] {
@@ -1184,6 +1214,12 @@
   .cockpit-topbar__right,
   .cockpit-signature-row {
     align-items: flex-start;
+  }
+
+  .cockpit-topbar__meta {
+    width: min(100%, 280px);
+    max-width: 100%;
+    text-align: left;
   }
 
   .cockpit-future-agenda-hint {
