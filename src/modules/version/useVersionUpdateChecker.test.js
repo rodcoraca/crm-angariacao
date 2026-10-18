@@ -1,9 +1,10 @@
 import { act, render } from "@testing-library/react";
 import useVersionUpdateChecker, { VERSION_CHECK_INTERVAL_MS } from "./useVersionUpdateChecker";
-import { notify } from "../../components/ui/feedbackBus";
+import { clearPersistentToast, notify } from "../../components/ui/feedbackBus";
 
 jest.mock("../../components/ui/feedbackBus", () => ({
-  notify: jest.fn()
+  notify: jest.fn(),
+  clearPersistentToast: jest.fn()
 }));
 
 function TestComponent() {
@@ -15,6 +16,12 @@ function responseFor(version) {
   return Promise.resolve({ ok: true, json: () => Promise.resolve({ version }) });
 }
 
+function setLoadedVersion(version) {
+  document.head.innerHTML = version
+    ? `<meta name="osflow-version" content="${version}" />`
+    : "";
+}
+
 describe("useVersionUpdateChecker", () => {
   let fetchMock;
 
@@ -23,13 +30,16 @@ describe("useVersionUpdateChecker", () => {
     fetchMock = jest.fn();
     global.fetch = fetchMock;
     window.localStorage.clear();
+    setLoadedVersion(null);
     Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" });
     notify.mockClear();
+    clearPersistentToast.mockClear();
   });
 
   afterEach(() => {
     jest.useRealTimers();
     delete global.fetch;
+    setLoadedVersion(null);
   });
 
   test("regista a versão inicial e ignora a mesma versão", async () => {
@@ -53,6 +63,70 @@ describe("useVersionUpdateChecker", () => {
       actionLabel: "Atualizar",
       onAction: expect.any(Function)
     }));
+  });
+
+  test("preserva o aviso persistente após recarregar antes de concluir a atualização", async () => {
+    setLoadedVersion("one");
+    window.localStorage.setItem("osflow:pending-update-version", "two");
+    fetchMock.mockResolvedValue(responseFor("two"));
+
+    render(<TestComponent />);
+    await act(async () => {});
+
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBe("two");
+    expect(clearPersistentToast).not.toHaveBeenCalled();
+  });
+
+  test("confirma a atualização quando a versão carregada coincide com a pendente", async () => {
+    setLoadedVersion("two");
+    window.localStorage.setItem("osflow:pending-update-version", "two");
+    fetchMock.mockResolvedValue(responseFor("two"));
+
+    render(<TestComponent />);
+    await act(async () => {});
+
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBeNull();
+    expect(clearPersistentToast).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+  });
+
+  test("mantém o aviso e atualiza a pendente quando uma versão posterior é publicada", async () => {
+    setLoadedVersion("two");
+    window.localStorage.setItem("osflow:pending-update-version", "two");
+    fetchMock.mockResolvedValue(responseFor("three"));
+
+    render(<TestComponent />);
+    await act(async () => {});
+
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBe("three");
+    expect(clearPersistentToast).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  test("sem meta, não confirma a pendente e atualiza-a para uma versão posterior", async () => {
+    window.localStorage.setItem("osflow:pending-update-version", "two");
+    fetchMock.mockResolvedValue(responseFor("three"));
+
+    render(<TestComponent />);
+    await act(async () => {});
+
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBe("three");
+    expect(clearPersistentToast).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledTimes(1);
+  });
+
+  test("sem meta, não duplica o aviso enquanto a versão publicada não muda", async () => {
+    window.localStorage.setItem("osflow:pending-update-version", "two");
+    fetchMock.mockResolvedValue(responseFor("two"));
+
+    render(<TestComponent />);
+    await act(async () => {});
+    await act(async () => { jest.advanceTimersByTime(VERSION_CHECK_INTERVAL_MS); });
+
+    expect(window.localStorage.getItem("osflow:pending-update-version")).toBe("two");
+    expect(clearPersistentToast).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledTimes(1);
   });
 
   test("ignora erros de rede e evita requests concorrentes", async () => {

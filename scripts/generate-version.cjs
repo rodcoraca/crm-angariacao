@@ -21,6 +21,18 @@ function getGitCommit() {
 
 const version = getGitCommit() || `build-${new Date().toISOString().replace(/[-:.]/g, "")}`;
 const outputPath = path.join(buildDirectory, "version.json");
+const indexPath = path.join(buildDirectory, "index.html");
 
 fs.writeFileSync(outputPath, `${JSON.stringify({ version }, null, 2)}\n`, "utf8");
+
+if (fs.existsSync(indexPath)) {
+  const indexHtml = fs.readFileSync(indexPath, "utf8");
+  const versionMeta = `<meta name="osflow-version" content="${version}" />`;
+  const updatedIndexHtml = indexHtml
+    .replace(/\s*<meta name="osflow-version"[^>]*\/?>(?:\r?\n)?/i, "\n")
+    .replace(/<\/head>/i, `    ${versionMeta}\n  </head>`);
+
+  fs.writeFileSync(indexPath, updatedIndexHtml, "utf8");
+}
+
 console.log(`Generated ${path.relative(projectRoot, outputPath)} (${version})`);

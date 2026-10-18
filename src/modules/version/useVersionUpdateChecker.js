@@ -1,8 +1,9 @@
 import { useEffect, useRef } from "react";
-import { notify } from "../../components/ui/feedbackBus";
+import { clearPersistentToast, notify } from "../../components/ui/feedbackBus";
 
 export const VERSION_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const PENDING_UPDATE_VERSION_KEY = "osflow:pending-update-version";
+const UPDATE_PERSISTENT_TOAST_ID = "osflow:update-available";
 
 function readVersion(payload) {
   const version = payload?.version;
@@ -15,6 +16,20 @@ function readPendingUpdateVersion() {
   } catch {
     return null;
   }
+}
+
+function clearPendingUpdateVersion() {
+  try {
+    window.localStorage.removeItem(PENDING_UPDATE_VERSION_KEY);
+  } catch {
+    // A indisponibilidade do armazenamento não impede a verificação da versão.
+  }
+}
+
+function readLoadedVersion() {
+  if (typeof document === "undefined") return null;
+  const versionMeta = document.querySelector('meta[name="osflow-version"]');
+  return readVersion({ version: versionMeta?.getAttribute("content") });
 }
 
 function writePendingUpdateVersion(version) {
@@ -45,18 +60,35 @@ export default function useVersionUpdateChecker() {
         const remoteVersion = readVersion(await response.json());
         if (!remoteVersion || disposed) return;
 
-        const pendingUpdateVersion = readPendingUpdateVersion();
+        const loadedVersion = readLoadedVersion();
+        const currentLoadedVersion = loadedVersion || initialVersionRef.current || remoteVersion;
+        let pendingUpdateVersion = readPendingUpdateVersion();
+        let updateConfirmed = false;
+
+        if (pendingUpdateVersion && loadedVersion === pendingUpdateVersion) {
+          clearPendingUpdateVersion();
+          clearPersistentToast(UPDATE_PERSISTENT_TOAST_ID);
+          pendingUpdateVersion = null;
+          updateConfirmed = true;
+        }
 
         if (initialVersionRef.current === null) {
-          initialVersionRef.current = remoteVersion;
-          if (pendingUpdateVersion) {
+          initialVersionRef.current = currentLoadedVersion;
+          if (pendingUpdateVersion && !updateConfirmed) {
             notifyUpdate();
           }
+        }
+
+        if (!loadedVersion && pendingUpdateVersion && pendingUpdateVersion !== remoteVersion) {
+          writePendingUpdateVersion(remoteVersion);
+          notifyUpdate();
           return;
         }
 
-        if (remoteVersion !== initialVersionRef.current && !pendingUpdateVersion) {
-          writePendingUpdateVersion(remoteVersion);
+        if (remoteVersion !== currentLoadedVersion) {
+          if (pendingUpdateVersion !== remoteVersion) {
+            writePendingUpdateVersion(remoteVersion);
+          }
           notifyUpdate();
         }
       } catch {
@@ -73,7 +105,8 @@ export default function useVersionUpdateChecker() {
         message: "Está disponível uma nova versão do OSFlow.",
         actionLabel: "Atualizar",
         onAction: () => window.location.reload(),
-        persistent: true
+        persistent: true,
+        persistentId: UPDATE_PERSISTENT_TOAST_ID
       });
     }
 

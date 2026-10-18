@@ -3,7 +3,7 @@ import { useTheme } from "../../theme/ThemeContext";
 import Button from "./Button";
 import Modal from "./Modal";
 import Toast from "./Toast";
-import { feedbackEvents, getLastPersistentToast } from "./feedbackBus";
+import { feedbackEvents, getPersistentToasts } from "./feedbackBus";
 
 export default function FeedbackHost() {
   const theme = useTheme();
@@ -13,17 +13,18 @@ export default function FeedbackHost() {
   useEffect(() => {
     function onToast(event) {
       const detail = event?.detail || {};
-      const id = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+      const id = detail.persistentId || `${Date.now()}_${Math.random().toString(36).slice(2)}`;
       const next = {
         id,
         message: detail.message,
           variant: detail.variant || "neutral",
           actionLabel: detail.actionLabel,
           onAction: detail.onAction,
-          persistent: detail.persistent === true
+          persistent: detail.persistent === true,
+          persistentId: detail.persistentId
       };
 
-      setToasts((prev) => [...prev, next]);
+      setToasts((prev) => [...prev.filter((toast) => toast.id !== id), next]);
 
       if (!next.persistent) {
         const timeout = Number(detail.duration) > 0 ? Number(detail.duration) : 3200;
@@ -44,16 +45,21 @@ export default function FeedbackHost() {
       });
     }
 
+    function onToastDismiss(event) {
+      const detail = event?.detail || {};
+      if (detail.persistent !== true || !detail.persistentId) return;
+      setToasts((prev) => prev.filter((toast) => toast.id !== detail.persistentId));
+    }
+
     window.addEventListener(feedbackEvents.toast, onToast);
+    window.addEventListener(feedbackEvents.toastDismiss, onToastDismiss);
     window.addEventListener(feedbackEvents.confirm, onConfirm);
 
-    const lastPersistentToast = getLastPersistentToast();
-    if (lastPersistentToast) {
-      onToast({ detail: lastPersistentToast });
-    }
+    getPersistentToasts().forEach((persistentToast) => onToast({ detail: persistentToast }));
 
     return () => {
       window.removeEventListener(feedbackEvents.toast, onToast);
+      window.removeEventListener(feedbackEvents.toastDismiss, onToastDismiss);
       window.removeEventListener(feedbackEvents.confirm, onConfirm);
     };
   }, []);
