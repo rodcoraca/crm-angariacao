@@ -1105,7 +1105,7 @@ export default function App() {
     relatorios: canAccessView("servicos") || canAccessView("plantoes") ? <RelatoriosOperacao /> : <Forbidden requestedView="relatorios" requiredPermission={getRequiredPermission("servicos")} />,
     comissoes: canAccessView("comissoes") ? <CalculadoraComissoes /> : <Forbidden requestedView="comissoes" requiredPermission={getRequiredPermission("comissoes")} />,
     estoque_np: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} defaultSection="imoveis" /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
-    estoque_np_empreendimentos: canAccessView("estoque_np") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} defaultSection="clientes" /> : <Forbidden requestedView="estoque_np" requiredPermission={getRequiredPermission("estoque_np")} />,
+    estoque_np_empreendimentos: canAccessView("estoque_np_empreendimentos") ? <EstoqueNaoPublicitado selectionRequest={imovelSelectionRequest} defaultSection="clientes" /> : <Forbidden requestedView="estoque_np_empreendimentos" requiredPermission={getRequiredPermission("estoque_np_empreendimentos")} />,
     usuarios: canAccessView("usuarios") ? <Usuarios currentUser={currentUserWithTenant} selectionRequest={userSelectionRequest} /> : <Forbidden requestedView="usuarios" requiredPermission={getRequiredPermission("usuarios")} />,
     logs: canAccessView("logs") ? <Logs modo={logsModo} onModoChange={setLogsModo} currentUser={currentUserWithTenant} /> : <Forbidden requestedView="logs" requiredPermission={getRequiredPermission("logs")} />,
   

@@ -14,6 +14,7 @@ export const PROTECTED_VIEW_RULES = {
   servicos: { permission: "servico.view" },
   plantoes: { permission: "plantao.view" },
   estoque_np: { permission: "inventory.view" },
+  estoque_np_empreendimentos: { permission: "empreendimentos.view" },
   usuarios: { permission: "users.view" },
   logs: { permission: "logs.view" },
   empresas_admin: { permission: "settings.manage" },

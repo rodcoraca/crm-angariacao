@@ -31,3 +31,33 @@ describe("autorizacao de Leads Acompanhamento", () => {
     }).allowed).toBe(true);
   });
 });
+
+describe("autorizacao de Empreendimentos", () => {
+  it("protege a vista com empreendimentos.view e não com inventory.view", () => {
+    expect(getRequiredPermission("estoque_np_empreendimentos")).toBe("empreendimentos.view");
+    expect(authorizeProtectedView("estoque_np_empreendimentos", {
+      user: { id: "auth-user" },
+      activeCompanyId: "empresa-1",
+      perfil: { permissoes: { "inventory.view": true } }
+    }).allowed).toBe(false);
+    expect(authorizeProtectedView("estoque_np_empreendimentos", {
+      user: { id: "auth-user" },
+      activeCompanyId: "empresa-1",
+      perfil: { permissoes: { "empreendimentos.view": true } }
+    }).allowed).toBe(true);
+  });
+
+  it("mantém Não Publicitados protegido por inventory.view", () => {
+    expect(getRequiredPermission("estoque_np")).toBe("inventory.view");
+    expect(authorizeProtectedView("estoque_np", {
+      user: { id: "auth-user" },
+      activeCompanyId: "empresa-1",
+      perfil: { permissoes: { "empreendimentos.view": true } }
+    }).allowed).toBe(false);
+    expect(authorizeProtectedView("estoque_np", {
+      user: { id: "auth-user" },
+      activeCompanyId: "empresa-1",
+      perfil: { permissoes: { "inventory.view": true } }
+    }).allowed).toBe(true);
+  });
+});

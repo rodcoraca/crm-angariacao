@@ -11,7 +11,6 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
   const theme = useTheme();
   const [activeView, setActiveView] = useState(initialActiveView);
   const [menuLeadsAberto, setMenuLeadsAberto] = useState(true);
-  const [menuEstoqueAberto, setMenuEstoqueAberto] = useState(true);
   const [menuOperacaoAberto, setMenuOperacaoAberto] = useState(true);
   const [menuGestaoAberto, setMenuGestaoAberto] = useState(true);
   const [menuLogsAberto, setMenuLogsAberto] = useState(true);
@@ -163,30 +162,33 @@ export default function Sidebar({ initialActiveView = "home", setView, logout, c
           </>
         ) : null}
 
-        {podeVerRota('estoque_np') ? (
-          <>
-            {(() => {
-              const isEstoqueActive = ["estoque_np", "estoque_np_empreendimentos"].includes(activeView);
-              const menuStyles = getMenuStyles(isEstoqueActive);
-              return (
-                <SidebarItem
-                  collapsed={collapsed}
-                  onClick={() => setMenuEstoqueAberto((v) => !v)}
-                  style={menuStyles.style}
-                  collapsedStyle={menuStyles.collapsedStyle}
-                >
-                  {collapsed ? "N" : `Não Publicitados ${menuEstoqueAberto ? "▾" : "▸"}`}
-                </SidebarItem>
-              );
-            })()}
-            {menuEstoqueAberto && !collapsed && (
-              <div style={subMenu}>
-                <SidebarItem style={getSubMenuStyle(activeView === "estoque_np")} onClick={() => handleSelectView("estoque_np")}>Imóveis</SidebarItem>
-                <SidebarItem style={getSubMenuStyle(activeView === "estoque_np_empreendimentos")} onClick={() => handleSelectView("estoque_np_empreendimentos")}>Empreendimentos</SidebarItem>
-              </div>
-            )}
-          </>
-        ) : null}
+        {podeVerRota("estoque_np") ? (() => {
+          const menuStyles = getMenuStyles(activeView === "estoque_np");
+          return (
+            <SidebarItem
+              collapsed={collapsed}
+              onClick={() => handleSelectView("estoque_np")}
+              style={menuStyles.style}
+              collapsedStyle={menuStyles.collapsedStyle}
+            >
+              {collapsed ? "N" : "Não Publicitados"}
+            </SidebarItem>
+          );
+        })() : null}
+
+        {podeVerRota("estoque_np_empreendimentos") ? (() => {
+          const menuStyles = getMenuStyles(activeView === "estoque_np_empreendimentos");
+          return (
+            <SidebarItem
+              collapsed={collapsed}
+              onClick={() => handleSelectView("estoque_np_empreendimentos")}
+              style={menuStyles.style}
+              collapsedStyle={menuStyles.collapsedStyle}
+            >
+              {collapsed ? "E" : "Empreendimentos"}
+            </SidebarItem>
+          );
+        })() : null}
 
         {podeVerRota('mensagens') ? (
           (() => {
