@@ -198,9 +198,12 @@ export default function Dashboard({ onAbrirLead, user }) {
     {
       key: "status",
       title: "Estado",
+      width: "18%",
       render: (lead) => (
         <span style={{ ...styles.td, ...styles.clickableCell }} {...getInteractiveCellProps(lead)}>
-          <Badge variant={getLeadStatusVariant(lead.status)}>{getLeadStatusLabel(lead.status)}</Badge>
+          <Badge variant={getLeadStatusVariant(lead.status)} style={{ whiteSpace: "nowrap" }}>
+            {getLeadStatusLabel(lead.status)}
+          </Badge>
         </span>
       )
     },
