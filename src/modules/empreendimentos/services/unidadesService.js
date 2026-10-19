@@ -27,6 +27,7 @@ export function buildDefaultUnidadeForm() {
     area_bruta_privativa: "",
     area_total: "",
     area_dependente: "",
+    casas_banho: "",
     varanda: false,
     terraco: false,
     lugares_garagem: "",
@@ -62,6 +63,7 @@ export function mapUnidadeParaFormulario(unidade = {}) {
     area_bruta_privativa: unidade?.area_bruta_privativa ?? "",
     area_total: unidade?.area_total ?? "",
     area_dependente: unidade?.area_dependente ?? "",
+    casas_banho: unidade?.casas_banho ?? "",
     varanda: Boolean(unidade?.varanda),
     terraco: Boolean(unidade?.terraco),
     lugares_garagem: unidade?.lugares_garagem ?? "",
@@ -73,6 +75,12 @@ export function toNumberOrNull(value) {
   if (value === "" || value === null || value === undefined) return null;
   const normalized = Number(value);
   return Number.isNaN(normalized) ? null : normalized;
+}
+
+export function toIntegerOrNull(value) {
+  if (value === "" || value === null || value === undefined) return null;
+  const normalized = Number(value);
+  return Number.isInteger(normalized) ? normalized : null;
 }
 
 export function toMoneyNumberOrNull(value) {
@@ -250,6 +258,13 @@ export function validarUnidade(form = {}) {
     return "As áreas devem ser numéricas e não negativas.";
   }
 
+  if (form.casas_banho !== "" && form.casas_banho !== null && form.casas_banho !== undefined) {
+    const casasBanho = Number(form.casas_banho);
+    if (!Number.isInteger(casasBanho) || casasBanho < 0) {
+      return "As casas de banho devem ser um número inteiro não negativo.";
+    }
+  }
+
   if (form.preco_venda !== "" && form.preco_venda !== null && form.preco_venda !== undefined) {
     const precoVenda = toMoneyNumberOrNull(form.preco_venda);
     if (precoVenda === null || precoVenda < 0) {
@@ -260,8 +275,8 @@ export function validarUnidade(form = {}) {
   const garageValue = form.lugares_garagem;
   if (garageValue !== "" && garageValue !== null && garageValue !== undefined) {
     const numericGarage = Number(garageValue);
-    if (Number.isNaN(numericGarage) || numericGarage < 1 || numericGarage > 6) {
-      return "A garagem deve estar entre 1 e 6.";
+    if (!Number.isInteger(numericGarage) || numericGarage < 0 || numericGarage > 12) {
+      return "Os lugares de garagem devem ser um número inteiro entre 0 e 12.";
     }
   }
 
@@ -278,6 +293,7 @@ export function toUnidadePayload(form = {}, { empresaId, empreendimentoId, userP
     area_bruta_privativa: toNumberOrNull(form.area_bruta_privativa),
     area_total: toNumberOrNull(form.area_total),
     area_dependente: toNumberOrNull(form.area_dependente),
+    casas_banho: toIntegerOrNull(form.casas_banho),
     varanda: Boolean(form.varanda),
     terraco: Boolean(form.terraco),
     lugares_garagem: toNumberOrNull(form.lugares_garagem)

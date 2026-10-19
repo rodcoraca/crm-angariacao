@@ -23,7 +23,7 @@ function renderApresentacao(props = {}) {
           { id: "cond-1", nome_etapa: "Entrada", tipo_valor: "percentual", valor: 20 },
           { id: "cond-2", nome_etapa: "CPCV", tipo_valor: "fixo", valor: 10000 }
         ]}
-        unidades={[{ id: "unit-1", fracao: "A", tipologia: "T2", area_bruta_privativa: 85, preco_venda: 250000, planta: { nome: "planta-a.pdf", url: "https://example.test/planta-a.pdf" } }]}
+        unidades={[{ id: "unit-1", fracao: "A", tipologia: "T2", area_bruta_privativa: 85, casas_banho: 2, lugares_garagem: 0, preco_venda: 250000, planta: { nome: "planta-a.pdf", url: "https://example.test/planta-a.pdf" } }]}
         documentos={{ brochura: [{ id: "doc-1", nome: "brochura.pdf", url: "https://example.test/brochura.pdf" }] }}
         categorias={["brochura", "planta"]}
         onBack={props.onBack || jest.fn()}
@@ -41,12 +41,16 @@ describe("EmpreendimentoApresentacao", () => {
     expect(screen.getByText("Rua Central, 10 · Porto · Porto")).toBeInTheDocument();
     const row = screen.getByRole("row", { name: /A T2/ });
     expect(row).toHaveTextContent("250");
+    expect(row).toHaveTextContent("2");
+    expect(row).toHaveTextContent("0");
     expect(screen.getByRole("link", { name: "planta-a.pdf" })).toHaveAttribute("href", "https://example.test/planta-a.pdf");
     fireEvent.click(row);
 
     const panel = screen.getByRole("complementary", { name: /Detalhe da fração A/i });
     expect(panel).toHaveTextContent("Entrada");
     expect(panel).toHaveTextContent("CPCV");
+    expect(panel).toHaveTextContent("Casas de banho: 2");
+    expect(panel).toHaveTextContent("Lugares de garagem: 0");
     expect(panel).toHaveTextContent("50");
     expect(panel).toHaveTextContent("10");
     expect(within(panel).getAllByRole("table")).toHaveLength(1);
@@ -64,6 +68,8 @@ describe("EmpreendimentoApresentacao", () => {
 
     const panel = screen.getByRole("complementary", { name: /Detalhe da fração B/i });
     expect(panel).toHaveTextContent("Preço: —");
+    expect(panel).toHaveTextContent("Casas de banho: —");
+    expect(panel).toHaveTextContent("Lugares de garagem: —");
     expect(panel).toHaveTextContent("Não calculável");
     expect(panel).not.toHaveTextContent("Plano equilibrado");
   });

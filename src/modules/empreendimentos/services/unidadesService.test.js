@@ -13,7 +13,10 @@ describe('unidadesService', () => {
   it('valida campos obrigatórios e valores numéricos', () => {
     expect(validarUnidade({ fracao: '', tipologia: '' })).toBe('A fração e a tipologia são obrigatórias.');
     expect(validarUnidade({ fracao: 'A', tipologia: 'T2', area_bruta_privativa: 'abc' })).toBe('As áreas devem ser numéricas e não negativas.');
-    expect(validarUnidade({ fracao: 'A', tipologia: 'T2', lugares_garagem: '7' })).toBe('A garagem deve estar entre 1 e 6.');
+    expect(validarUnidade({ fracao: 'A', tipologia: 'T2', casas_banho: '-1' })).toBe('As casas de banho devem ser um número inteiro não negativo.');
+    expect(validarUnidade({ fracao: 'A', tipologia: 'T2', casas_banho: '1.5' })).toBe('As casas de banho devem ser um número inteiro não negativo.');
+    expect(validarUnidade({ fracao: 'A', tipologia: 'T2', lugares_garagem: '13' })).toBe('Os lugares de garagem devem ser um número inteiro entre 0 e 12.');
+    expect(validarUnidade({ fracao: 'A', tipologia: 'T2', lugares_garagem: '0' })).toBe('');
   });
 
   it('constrói payload seguro com tenant e auditoria', () => {
@@ -23,6 +26,7 @@ describe('unidadesService', () => {
       area_bruta_privativa: '80',
       area_total: '100',
       area_dependente: '20',
+      casas_banho: '2',
       varanda: true,
       terraco: false,
       lugares_garagem: '1',
@@ -39,7 +43,16 @@ describe('unidadesService', () => {
     expect(payload.empreendimento_id).toBe('emp-1');
     expect(payload.created_by).toBe('user-1');
     expect(payload.updated_by).toBe('user-1');
+    expect(payload.casas_banho).toBe(2);
     expect(payload.lugares_garagem).toBe(1);
+  });
+
+  it('preserva ND, zero e valores positivos de garagem no payload', () => {
+    const base = { fracao: 'A', tipologia: 'T2' };
+
+    expect(toUnidadePayload({ ...base, lugares_garagem: '' }, {}).lugares_garagem).toBeNull();
+    expect(toUnidadePayload({ ...base, lugares_garagem: '0' }, {}).lugares_garagem).toBe(0);
+    expect(toUnidadePayload({ ...base, lugares_garagem: '12' }, {}).lugares_garagem).toBe(12);
   });
 
   it('inclui o preço de venda no formulário e no payload da unidade', () => {
@@ -53,6 +66,17 @@ describe('unidadesService', () => {
 
     expect(payload.preco_venda).toBe(250000.5);
     expect(payload).not.toHaveProperty('condicoes');
+  });
+
+  it('carrega casas de banho e garagem na edição e na duplicação', () => {
+    const unidade = { fracao: 'A', tipologia: 'T2', casas_banho: 2, lugares_garagem: 0 };
+    const formulario = mapUnidadeParaFormulario(unidade);
+
+    expect(formulario.casas_banho).toBe(2);
+    expect(formulario.lugares_garagem).toBe(0);
+
+    const unidadeSemGaragem = mapUnidadeParaFormulario({ ...unidade, lugares_garagem: null });
+    expect(unidadeSemGaragem.lugares_garagem).toBe('');
   });
 
   it('calcula plano misto por fração e identifica excedente', () => {

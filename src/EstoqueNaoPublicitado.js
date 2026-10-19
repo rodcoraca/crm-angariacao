@@ -29,6 +29,10 @@ const PRIVATE_CLIENT_FIELDS = [
   "email_contacto_2"
 ];
 
+const formatarValorUnidade = (value) => (
+  value === null || value === undefined || value === "" ? "—" : value
+);
+
 export default function EstoqueNaoPublicitado({ selectionRequest = null, defaultSection = "imoveis" }) {
   const [secaoAtual, setSecaoAtual] = useState(defaultSection);
   const [clienteDetalhe, setClienteDetalhe] = useState(null);
@@ -349,7 +353,8 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
             <Input label="Área Bruta Privativa (m²)" type="number" step="0.01" value={formUnidade.area_bruta_privativa ?? ""} onChange={(e) => setFieldUnidade("area_bruta_privativa", e.target.value)} />
             <Input label="Área Total (m²)" type="number" step="0.01" value={formUnidade.area_total ?? ""} onChange={(e) => setFieldUnidade("area_total", e.target.value)} />
             <Input label="Área Dependente (m²)" type="number" step="0.01" value={formUnidade.area_dependente ?? ""} onChange={(e) => setFieldUnidade("area_dependente", e.target.value)} />
-            <Select label="Lugares de garagem" placeholder="Selecione" value={formUnidade.lugares_garagem ?? ""} onChange={(e) => setFieldUnidade("lugares_garagem", e.target.value)} options={[{ value: "1", label: "1" }, { value: "2", label: "2" }, { value: "3", label: "3" }, { value: "4", label: "4" }, { value: "5", label: "5" }, { value: "6", label: "6" }]} />
+            <Input label="Casas de banho" type="number" min="0" step="1" value={formUnidade.casas_banho ?? ""} onChange={(e) => setFieldUnidade("casas_banho", e.target.value)} />
+            <Select label="Lugares de garagem" placeholder="ND" value={formUnidade.lugares_garagem ?? ""} onChange={(e) => setFieldUnidade("lugares_garagem", e.target.value)} options={Array.from({ length: 13 }, (_, index) => ({ value: String(index), label: String(index) }))} />
           </div>
 
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
@@ -386,6 +391,8 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
                 <th style={{ ...thCompact, width: "12%" }}>Fração</th>
                 <th style={{ ...thCompact, width: "13%" }}>Tipologia</th>
                 <th style={{ ...thCompact, width: "13%" }}>Área</th>
+                <th style={{ ...thCompact, width: "11%" }}>Casas de banho</th>
+                <th style={{ ...thCompact, width: "11%" }}>Garagem</th>
                 <th style={{ ...thCompact, width: "15%" }}>Preço</th>
                 <th style={{ ...thCompact, width: "23%" }}>Condições</th>
                 <th style={{ ...thCompact, width: "12%" }}>Planta</th>
@@ -407,6 +414,8 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
                     </td>
                     <td style={tdCompact}>{unidade.tipologia || "—"}</td>
                     <td style={tdCompact}>{unidade.area_bruta_privativa != null ? `${unidade.area_bruta_privativa} m²` : "—"}</td>
+                    <td style={tdCompact}>{formatarValorUnidade(unidade.casas_banho)}</td>
+                    <td style={tdCompact}>{formatarValorUnidade(unidade.lugares_garagem)}</td>
                     <td style={tdCompact}>{formatarValorMonetario(unidade.preco_venda)}</td>
                     <td style={tdCompact}>
                       <div style={{ display: "grid", gap: 4 }}>
@@ -540,6 +549,8 @@ export default function EstoqueNaoPublicitado({ selectionRequest = null, default
               <div data-testid="unidade-detalhes" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 6, marginBottom: 8, fontSize: 12 }}>
                 <span>Tipologia: <strong>{unidadeCondicoesSelecionada.tipologia || "—"}</strong></span>
                 <span>Área: <strong>{unidadeCondicoesSelecionada.area_bruta_privativa != null ? `${unidadeCondicoesSelecionada.area_bruta_privativa} m²` : "—"}</strong></span>
+                <span>Casas de banho: <strong>{formatarValorUnidade(unidadeCondicoesSelecionada.casas_banho)}</strong></span>
+                <span>Lugares de garagem: <strong>{formatarValorUnidade(unidadeCondicoesSelecionada.lugares_garagem)}</strong></span>
                 {unidadeCondicoesSelecionada.planta?.url ? (
                   <a href={unidadeCondicoesSelecionada.planta.url} target="_blank" rel="noreferrer" style={{ color: "var(--os-color-primary)", fontWeight: 600, textDecoration: "none" }}>
                     Abrir planta
