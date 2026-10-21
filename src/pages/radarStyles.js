@@ -55,6 +55,8 @@ export function createRadarStyles(theme) {
       flexWrap: "wrap"
     },
     filterCard: {
+      position: "relative",
+      zIndex: 1,
       display: "grid",
       gap: theme.spacing.xs,
       padding: "10px 12px"
