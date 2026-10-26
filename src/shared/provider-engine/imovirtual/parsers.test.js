@@ -63,6 +63,53 @@ describe('Imovirtual publication date normalization', () => {
     });
   });
 
+  it('extracts a complete location from location.address objects while preserving accents', () => {
+    expect(mapNextDataItemToListing({
+      ...baseItem,
+      location: {
+        address: {
+          province: { name: 'Porto' },
+          municipality: { name: 'Vila Nova de Gaia' },
+          county: { name: 'Vila Nova de Gaia' },
+          city: { name: 'São Pedro da Afurada' },
+          parish: { name: 'Santa Marinha e São Pedro da Afurada' }
+        }
+      }
+    })).toMatchObject({
+      district: 'Porto',
+      municipality: 'Vila Nova de Gaia',
+      county: 'Vila Nova de Gaia',
+      city: 'São Pedro da Afurada',
+      region: 'Porto',
+      freguesia: 'Santa Marinha e São Pedro da Afurada'
+    });
+  });
+
+  it('supports direct location fields and ignores malformed nested values', () => {
+    expect(mapNextDataItemToListing({
+      ...baseItem,
+      location: {
+        municipality: { name: 'Matosinhos' },
+        city: 'Leça da Palmeira',
+        province: 'Porto',
+        parish: null,
+        address: {
+          province: null,
+          municipality: { name: 'Matosinhos' },
+          city: { name: 'Leça da Palmeira' },
+          county: { name: 'Matosinhos' },
+          parish: null
+        }
+      }
+    })).toMatchObject({
+      district: 'Porto',
+      municipality: 'Matosinhos',
+      county: 'Matosinhos',
+      city: 'Leça da Palmeira',
+      region: 'Porto'
+    });
+  });
+
   it('falls back to reverseGeocoding when address fields are empty', () => {
     expect(mapNextDataItemToListing({
       ...baseItem,
@@ -80,9 +127,55 @@ describe('Imovirtual publication date normalization', () => {
       district: 'Porto',
       municipality: 'Vila Nova de Gaia',
       county: 'Vila Nova de Gaia',
-      city: 'Vila Nova de Gaia',
+      city: null,
       region: 'Porto',
       freguesia: 'Santa Marinha e São Pedro da Afurada'
+    });
+  });
+
+  it('keeps municipality available from municipality and concelho-only payloads', () => {
+    expect(mapNextDataItemToListing({
+      ...baseItem,
+      municipality: 'Albufeira',
+      county: null,
+      city: 'Albufeira'
+    })).toMatchObject({
+      municipality: 'Albufeira',
+      county: 'Albufeira',
+      city: 'Albufeira'
+    });
+
+    expect(mapNextDataItemToListing({
+      ...baseItem,
+      concelho: 'Amadora',
+      district: 'Lisboa',
+      city: 'Amadora'
+    })).toMatchObject({
+      municipality: 'Amadora',
+      county: 'Amadora',
+      city: 'Amadora',
+      district: 'Lisboa'
+    });
+  });
+
+  it('keeps valid values and ignores null or malformed data without replacing them', () => {
+    expect(mapNextDataItemToListing({
+      ...baseItem,
+      district: 'Porto',
+      municipality: null,
+      county: undefined,
+      city: 'Porto',
+      location: {
+        address: {
+          municipality: { name: 'Porto' },
+          city: null,
+          province: 'Porto'
+        }
+      }
+    })).toMatchObject({
+      district: 'Porto',
+      municipality: 'Porto',
+      city: 'Porto'
     });
   });
 

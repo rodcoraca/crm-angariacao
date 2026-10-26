@@ -22,9 +22,51 @@ function getExternalId(element, url) {
   return idFromUrl?.[1] || null;
 }
 
+function normalizeLocationText(value) {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed || null;
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  if (Array.isArray(value)) {
+    for (const entry of value) {
+      const normalized = normalizeLocationText(entry);
+      if (normalized) return normalized;
+    }
+    return null;
+  }
+
+  if (value && typeof value === "object") {
+    if (typeof value.name === "string") {
+      const trimmed = value.name.trim();
+      return trimmed || null;
+    }
+
+    if (typeof value.label === "string") {
+      const trimmed = value.label.trim();
+      return trimmed || null;
+    }
+  }
+
+  return null;
+}
+
+function firstValidLocationValue(...values) {
+  for (const value of values) {
+    const normalized = normalizeLocationText(value);
+    if (normalized) return normalized;
+  }
+
+  return null;
+}
+
 function getLocationPath(item) {
   const location = item?.location || {};
-  const address = location?.address || {};
+  const address = location?.address || item?.address || {};
   const reverseLocations = Array.isArray(location?.reverseGeocoding?.locations)
     ? location.reverseGeocoding.locations
     : [];
@@ -34,74 +76,88 @@ function getLocationPath(item) {
       levels.includes(String(entry?.locationLevel || "").trim().toLowerCase())
     );
 
-  const textValue = (value) => {
-    if (typeof value === "string" && value.trim()) return value.trim();
-    if (typeof value === "number") return String(value);
-    if (value && typeof value === "object" && typeof value.name === "string" && value.name.trim()) {
-      return value.name.trim();
-    }
-    return null;
-  };
-
-  const firstText = (...values) => {
-    for (const value of values) {
-      const normalized = textValue(value);
-      if (normalized) return normalized;
-    }
-    return null;
-  };
-
   const reverseDistrict = reverseByLevel("district", "province", "region");
   const reverseMunicipality = reverseByLevel("council", "municipality", "county");
   const reverseCity = reverseByLevel("city", "locality");
   const reverseParish = reverseByLevel("parish", "freguesia");
 
-  const district = firstText(
+  const district = firstValidLocationValue(
     address?.province?.name,
+    address?.province,
     location?.province?.name,
+    location?.province,
     item?.province,
     item?.district,
     item?.region,
-    reverseDistrict?.name
+    reverseDistrict?.name,
+    reverseDistrict
   );
 
-  const municipality = firstText(
+  const municipality = firstValidLocationValue(
     address?.municipality?.name,
     address?.municipality,
     address?.county?.name,
+    address?.county,
     location?.municipality?.name,
+    location?.municipality,
     location?.county?.name,
+    location?.county,
     item?.municipality,
     item?.concelho,
     item?.county,
-    reverseMunicipality?.name
+    reverseMunicipality?.name,
+    reverseMunicipality
   );
 
-  const city = firstText(
+  const county = firstValidLocationValue(
+    address?.county?.name,
+    address?.county,
+    location?.county?.name,
+    location?.county,
+    item?.county,
+    item?.concelho,
+    item?.municipality,
+    municipality
+  );
+
+  const city = firstValidLocationValue(
     address?.city?.name,
     address?.city,
     location?.city?.name,
+    location?.city,
     item?.city,
     reverseCity?.name,
-    reverseMunicipality?.name
+    reverseCity
   );
 
-  const freguesia = firstText(
+  const region = firstValidLocationValue(
+    item?.region,
+    location?.region,
+    location?.region?.name,
+    district
+  );
+
+  const freguesia = firstValidLocationValue(
     address?.parish?.name,
+    address?.parish,
     address?.freguesia?.name,
+    address?.freguesia,
     location?.parish?.name,
+    location?.parish,
     location?.freguesia?.name,
+    location?.freguesia,
     item?.parish,
     item?.freguesia,
-    reverseParish?.name
+    reverseParish?.name,
+    reverseParish
   );
 
   return {
     district,
-    municipality,
-    county: municipality,
+    municipality: municipality || county || null,
+    county: county || municipality || null,
     city,
-    region: district,
+    region: region || district || null,
     freguesia
   };
 }

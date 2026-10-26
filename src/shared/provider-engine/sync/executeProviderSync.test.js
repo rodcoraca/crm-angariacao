@@ -181,6 +181,36 @@ describe("executeProviderSync normalized contract", () => {
     expect(insertedRows[0]).toMatchObject({ location: "Cacém E São Marcos", district: "Lisboa" });
   });
 
+  it("maps Imovirtual municipality into concelho and avoids duplicated composed location parts", async () => {
+    const insertedRows = [];
+    await executeProviderSync({
+      providerName: "imovirtual",
+      empresaId: "empresa-1",
+      listings: [{
+        externalId: "IMV330",
+        url: "https://www.imovirtual.com/pt/anuncio/IMV330",
+        city: "Vila Nova de Gaia",
+        municipality: "Vila Nova de Gaia",
+        district: "Porto",
+        freguesia: "Santa Marinha e São Pedro da Afurada",
+        createdAtFirst: "2026-09-12T10:00:00.000Z",
+        source: "imovirtual",
+        isPrivateOwner: false
+      }],
+      fetchedAt: "2026-09-13T12:00:00.000Z",
+      supabaseClient: createSupabaseInsertMock(insertedRows),
+      allowListingsWithoutCreatedAtFirst: true
+    });
+
+    expect(insertedRows[0]).toMatchObject({
+      city: "Vila Nova de Gaia",
+      concelho: "Vila Nova de Gaia",
+      district: "Porto",
+      freguesia: "Santa Marinha e São Pedro da Afurada",
+      location: "Vila Nova de Gaia, Porto"
+    });
+  });
+
   it("converts Ontem and leaves unknown relative text unpublished", async () => {
     const insertedRows = [];
     await executeProviderSync({

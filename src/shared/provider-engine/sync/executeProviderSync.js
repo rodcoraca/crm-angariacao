@@ -262,7 +262,16 @@ export async function executeProviderSync({
   if (newEntries.length > 0) {
     const insertTasks = newEntries.map(({ externalId, listing }) => async () => {
       const score = typeof scoreCalculator === "function" ? scoreCalculator(listing) : undefined;
-      const structuredLocation = [listing.city, listing.district].filter(Boolean).join(", ");
+      const municipality = listing.municipality || listing.concelho || listing.county || null;
+      const uniqueLocationParts = [listing.city, municipality, listing.district]
+        .filter((part) => typeof part === "string" ? part.trim() : Boolean(part))
+        .reduce((parts, part) => {
+          const normalized = typeof part === "string" ? part.trim() : String(part).trim();
+          if (!normalized) return parts;
+          if (!parts.includes(normalized)) parts.push(normalized);
+          return parts;
+        }, []);
+      const structuredLocation = uniqueLocationParts.join(", ") || null;
       const payload = {
         provider: providerName,
         empresa_id: scopedEmpresaId,
@@ -274,8 +283,8 @@ export async function executeProviderSync({
         area: listing.area ?? null,
         rooms: listing.rooms ?? null,
         city: listing.city || null,
-        concelho: listing.concelho ?? null,
-        freguesia: listing.freguesia ?? null,
+        concelho: municipality,
+        freguesia: listing.freguesia || null,
         district: listing.district || null,
         owner_name: listing.ownerName || null,
         is_private_owner: listing.isPrivateOwner === null || listing.isPrivateOwner === undefined
