@@ -38,7 +38,20 @@ describe("activation completion", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.spyOn(console, "warn").mockImplementation(() => {});
+    jest.spyOn(console, "info").mockImplementation(() => {});
   });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  function expectActivationDiagnostic(code) {
+    expect(console.warn).toHaveBeenCalledWith(
+      "[ActivationDiagnostics]",
+      expect.objectContaining({ code })
+    );
+  }
 
   test("activates only after confirmed email and password onboarding completed", async () => {
     mockActivationUpdate();
@@ -158,6 +171,23 @@ describe("activation completion", () => {
     }));
   });
 
+  test.each([
+    ["onboarding_not_completed", authUser, pendingProfile, {}],
+    ["email_not_confirmed", { id: "auth-user-1" }, pendingProfile, { passwordAuthenticated: true }],
+    ["auth_profile_mismatch", authUser, { ...pendingProfile, auth_user_id: "another-auth-user" }, { onboardingCompleted: true }],
+    ["missing_empresa_id", authUser, { ...pendingProfile, empresa_id: null }, { onboardingCompleted: true }],
+    ["empresa_mismatch", { ...authUser, user_metadata: { empresa_id: "empresa-2" } }, pendingProfile, { onboardingCompleted: true }],
+    ["account_not_pending", authUser, { ...pendingProfile, account_status: "active" }, { onboardingCompleted: true }],
+    ["account_inactive", authUser, { ...pendingProfile, ativo: false }, { onboardingCompleted: true }],
+    ["already_activated", authUser, { ...pendingProfile, activated_at: "2026-10-13T10:00:00.000Z" }, { onboardingCompleted: true }],
+    ["invite_not_confirmed_after_sent", { ...authUser, email_confirmed_at: "2026-09-01T10:00:00.000Z" }, { ...pendingProfile, activation_sent_at: "2026-10-01T10:00:00.000Z" }, { passwordAuthenticated: true }]
+  ])("reports %s when activation conditions are not met", async (code, auth, profile, options) => {
+    const result = await reconcilePendingActivation(auth, profile, options);
+
+    expect(result).toEqual({ data: profile, error: null, updated: false });
+    expectActivationDiagnostic(code);
+  });
+
   test("does not activate a profile belonging to another auth user", async () => {
     const result = await reconcilePendingActivation(authUser, {
       ...pendingProfile,
@@ -211,6 +241,37 @@ describe("activation completion", () => {
 
     expect(result.updated).toBe(false);
     expect(result.error).toEqual({ code: "permission_denied", message: "Denied" });
+    expectActivationDiagnostic("activation_update_error");
+    expect(console.warn).toHaveBeenCalledWith(
+      "[ActivationDiagnostics]",
+      expect.objectContaining({ supabase_error_code: "permission_denied" })
+    );
+  });
+
+  test("reports an UPDATE that returned no row", async () => {
+    mockActivationUpdate({ data: null, error: null });
+
+    const result = await reconcilePendingActivation(authUser, pendingProfile, {
+      onboardingCompleted: true
+    });
+
+    expect(result.updated).toBe(false);
+    expect(result.error).toEqual(expect.objectContaining({ code: "activation_not_applied" }));
+    expectActivationDiagnostic("activation_update_no_row");
+  });
+
+  test("reports activation only after the UPDATE returns a profile", async () => {
+    mockActivationUpdate();
+
+    const result = await reconcilePendingActivation(authUser, pendingProfile, {
+      onboardingCompleted: true
+    });
+
+    expect(result.updated).toBe(true);
+    expect(console.info).toHaveBeenCalledWith(
+      "[ActivationDiagnostics]",
+      expect.objectContaining({ code: "activation_completed" })
+    );
   });
 
   test("refuses direct activation without onboarding completion", async () => {

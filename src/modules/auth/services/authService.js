@@ -7,6 +7,36 @@ const ROLE_PERMISSIONS_TABLE = "role_permissions";
 const PERMISSIONS_TABLE = "permissions";
 const AUDIT_TABLE = "audit_logs";
 const USER_PROFILE_SELECT = "id,auth_user_id,nome,apelido,email,telefone,username,ativo,account_status,activation_sent_at,activated_at,disabled_at,permissoes,empresa_id,created_at,updated_at";
+const ACTIVATION_DIAGNOSTICS_PREFIX = "[ActivationDiagnostics]";
+
+function activationDiagnosticContext(authUser, profile) {
+  return {
+    profile_id: profile?.id || null,
+    auth_user_id: normalizeIdentifier(authUser?.id) || null,
+    profile_auth_user_id: normalizeIdentifier(profile?.auth_user_id) || null,
+    profile_empresa_id: normalizeIdentifier(profile?.empresa_id) || null,
+    auth_metadata_empresa_id: normalizeIdentifier(authUser?.user_metadata?.empresa_id) || null,
+    account_status: String(profile?.account_status || "").trim().toLowerCase() || null,
+    ativo: profile?.ativo ?? null,
+    email_confirmed_at: authUser?.email_confirmed_at || authUser?.confirmed_at || null,
+    activation_sent_at: profile?.activation_sent_at || null
+  };
+}
+
+function logActivationDiagnostic(code, context = {}, extra = {}) {
+  const payload = {
+    code,
+    ...context,
+    ...extra
+  };
+
+  if (code === "activation_completed") {
+    console.info(ACTIVATION_DIAGNOSTICS_PREFIX, payload);
+    return;
+  }
+
+  console.warn(ACTIVATION_DIAGNOSTICS_PREFIX, payload);
+}
 
 function normalizeIdentifier(identifier) {
   return String(identifier || "").trim();
@@ -812,7 +842,8 @@ export async function alterarPasswordUtilizador({ authUserId, password }) {
 export async function markUserAccountActive(profileId, {
   activationCompleted = false,
   authUserId = "",
-  empresaId = ""
+  empresaId = "",
+  diagnosticContext = {}
 } = {}) {
   if (!profileId) {
     return {
@@ -859,10 +890,24 @@ export async function markUserAccountActive(profileId, {
   const result = await query.select(USER_PROFILE_SELECT).maybeSingle();
 
   if (result.error) {
+    logActivationDiagnostic("activation_update_error", {
+      ...diagnosticContext,
+      profile_id: diagnosticContext.profile_id || profileId,
+      auth_user_id: diagnosticContext.auth_user_id || normalizeIdentifier(authUserId) || null,
+      profile_empresa_id: diagnosticContext.profile_empresa_id || normalizeIdentifier(empresaId) || null
+    }, {
+      supabase_error_code: result.error.code || null
+    });
     return result;
   }
 
   if (!result.data) {
+    logActivationDiagnostic("activation_update_no_row", {
+      ...diagnosticContext,
+      profile_id: diagnosticContext.profile_id || profileId,
+      auth_user_id: diagnosticContext.auth_user_id || normalizeIdentifier(authUserId) || null,
+      profile_empresa_id: diagnosticContext.profile_empresa_id || normalizeIdentifier(empresaId) || null
+    });
     return {
       data: null,
       error: {
@@ -871,6 +916,13 @@ export async function markUserAccountActive(profileId, {
       }
     };
   }
+
+  logActivationDiagnostic("activation_completed", {
+    ...diagnosticContext,
+    profile_id: diagnosticContext.profile_id || profileId,
+    auth_user_id: diagnosticContext.auth_user_id || normalizeIdentifier(authUserId) || null,
+    profile_empresa_id: diagnosticContext.profile_empresa_id || normalizeIdentifier(empresaId) || null
+  });
 
   return result;
 }
@@ -910,25 +962,42 @@ export async function reconcilePendingActivation(authUser, profile, {
   const profileEmpresaId = normalizeIdentifier(profile.empresa_id);
   const accountStatus = String(profile.account_status || "").trim().toLowerCase();
   const emailConfirmed = Boolean(authUser.email_confirmed_at || authUser.confirmed_at);
+  const diagnosticContext = activationDiagnosticContext(authUser, profile);
+  const inviteEvidenceConfirmed = hasCompletedInviteEvidence(authUser, profile);
+  const onboardingEvidence = onboardingCompleted || (passwordAuthenticated && inviteEvidenceConfirmed);
+  const failedConditionCodes = [];
 
-  if (
-    !(onboardingCompleted || (passwordAuthenticated && hasCompletedInviteEvidence(authUser, profile)))
-    || !emailConfirmed
-    || !profileAuthUserId
-    || profileAuthUserId !== authUserId
-    || !profileEmpresaId
-    || (authEmpresaId && authEmpresaId !== profileEmpresaId)
-    || accountStatus !== "pending_activation"
-    || profile.ativo === false
-    || profile.activated_at
-  ) {
+  if (!onboardingEvidence) {
+    const confirmedAt = Date.parse(authUser?.email_confirmed_at || authUser?.confirmed_at || "");
+    const sentAt = Date.parse(profile?.activation_sent_at || "");
+    const inviteWasConfirmedBeforeSent = passwordAuthenticated
+      && emailConfirmed
+      && !Number.isNaN(confirmedAt)
+      && !Number.isNaN(sentAt)
+      && confirmedAt < sentAt;
+
+    failedConditionCodes.push(inviteWasConfirmedBeforeSent
+      ? "invite_not_confirmed_after_sent"
+      : "onboarding_not_completed");
+  }
+  if (!emailConfirmed) failedConditionCodes.push("email_not_confirmed");
+  if (!profileAuthUserId || profileAuthUserId !== authUserId) failedConditionCodes.push("auth_profile_mismatch");
+  if (!profileEmpresaId) failedConditionCodes.push("missing_empresa_id");
+  if (authEmpresaId && authEmpresaId !== profileEmpresaId) failedConditionCodes.push("empresa_mismatch");
+  if (accountStatus !== "pending_activation") failedConditionCodes.push("account_not_pending");
+  if (profile.ativo === false) failedConditionCodes.push("account_inactive");
+  if (profile.activated_at) failedConditionCodes.push("already_activated");
+
+  if (failedConditionCodes.length) {
+    failedConditionCodes.forEach((code) => logActivationDiagnostic(code, diagnosticContext));
     return { data: profile, error: null, updated: false };
   }
 
   const activationResult = await markUserAccountActive(profile.id, {
     activationCompleted: true,
     authUserId,
-    empresaId: profile.empresa_id || ""
+    empresaId: profile.empresa_id || "",
+    diagnosticContext
   });
 
   if (activationResult.error) {
