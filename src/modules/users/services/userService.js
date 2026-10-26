@@ -247,14 +247,25 @@ export async function guardarUsuarioComAuditoria({
 
     const persistedStatus = String(editProfile?.account_status || "").trim().toLowerCase();
     if (["active", "pending_activation", "disabled"].includes(persistedStatus)) {
-      accountStatus = persistedStatus;
+      // Só são aceites pelo formulário desativar e ativar/reativar contas já ativadas;
+      // a saída de pending_activation continua a depender do fluxo de ativação.
+      const requestedStatus = accountStatus;
+      const allowRequested =
+        requestedStatus === "disabled" ||
+        (requestedStatus === "active" && persistedStatus === "disabled");
+      accountStatus = allowRequested ? requestedStatus : persistedStatus;
+      const statusChanged = accountStatus !== persistedStatus;
       isDisabled = accountStatus === "disabled";
       isPendingActivation = accountStatus === "pending_activation";
       payload.account_status = accountStatus;
       payload.ativo = !isDisabled;
-      payload.activated_at = accountStatus === "active" ? editProfile?.activated_at || null : null;
+      payload.activated_at = accountStatus === "active"
+        ? editProfile?.activated_at || (statusChanged ? new Date().toISOString() : null)
+        : null;
       payload.activation_sent_at = isPendingActivation ? editProfile?.activation_sent_at || null : null;
-      payload.disabled_at = isDisabled ? editProfile?.disabled_at || null : null;
+      payload.disabled_at = isDisabled
+        ? editProfile?.disabled_at || (statusChanged ? new Date().toISOString() : null)
+        : null;
     }
 
     authUserIdForPasswordUpdate = String(editProfile?.auth_user_id || "").trim() || null;

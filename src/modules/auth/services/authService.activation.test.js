@@ -57,6 +57,51 @@ describe("activation completion", () => {
     }));
   });
 
+  test("activates a pending profile after a password login when the invite was accepted", async () => {
+    mockActivationUpdate();
+
+    const result = await reconcilePendingActivation(
+      authUser,
+      { ...pendingProfile, activation_sent_at: "2026-09-27T10:00:00.000Z" },
+      { passwordAuthenticated: true }
+    );
+
+    expect(result.updated).toBe(true);
+    expect(result.data.account_status).toBe("active");
+  });
+
+  test("does not activate on password login when the email was confirmed before the latest invite", async () => {
+    const result = await reconcilePendingActivation(
+      authUser,
+      { ...pendingProfile, activation_sent_at: "2026-10-01T10:00:00.000Z" },
+      { passwordAuthenticated: true }
+    );
+
+    expect(result.updated).toBe(false);
+  });
+
+  test("does not activate on password login without a confirmed email", async () => {
+    const result = await reconcilePendingActivation(
+      { id: "auth-user-1" },
+      pendingProfile,
+      { passwordAuthenticated: true }
+    );
+
+    expect(result.updated).toBe(false);
+  });
+
+  test("does not reactivate an administratively disabled account", async () => {
+    const result = await reconcilePendingActivation(authUser, {
+      ...pendingProfile,
+      account_status: "disabled",
+      ativo: false,
+      activated_at: null
+    }, { onboardingCompleted: true });
+
+    expect(result.updated).toBe(false);
+    expect(result.data.account_status).toBe("disabled");
+  });
+
   test("does not activate a pending profile from email confirmation alone", async () => {
     const result = await reconcilePendingActivation(
       authUser,

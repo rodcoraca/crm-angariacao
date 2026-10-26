@@ -215,6 +215,15 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
         return;
       }
 
+      if (accountStatus === "pending_activation") {
+        const activation = await reconcilePendingActivation(authUser, perfil, { passwordAuthenticated: true });
+        if (activation.error) {
+          reportError(activation.error, "Login.reconcilePendingActivation");
+        } else if (activation.updated) {
+          perfil = activation.data;
+        }
+      }
+
       const usuarioSessao = montarUsuarioSessao(authUser, perfil, authSession?.expires_at || null);
 
       try {

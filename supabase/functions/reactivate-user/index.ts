@@ -233,7 +233,7 @@ Deno.serve(async (request) => {
 
     const { data: profile, error: profileError } = await adminClient
       .from("usuarios")
-      .select("id,auth_user_id,email,empresa_id,account_status,nome,username")
+      .select("id,auth_user_id,email,empresa_id,account_status,activated_at,disabled_at,nome,username")
       .eq("id", usuarioId)
       .maybeSingle();
 
@@ -322,7 +322,20 @@ Deno.serve(async (request) => {
       return jsonResponse(502, { success: false, error: "activation_send_failed" });
     }
 
-    const nextStatus = "pending_activation";
+    // An activation invite must not reset an account that is already active.
+    // Administratively disabled accounts are also kept disabled; the existing
+    // authentication flow explicitly prevents them from being reactivated.
+    const nextStatus = previousStatus === "active"
+      ? "active"
+      : previousStatus === "disabled"
+        ? "disabled"
+        : "pending_activation";
+    const nextActivatedAt = previousStatus === "active"
+      ? profile.activated_at || null
+      : null;
+    const nextDisabledAt = previousStatus === "disabled"
+      ? profile.disabled_at || null
+      : null;
     const activationSentAt = new Date().toISOString();
     const { error: profileUpdateError } = await adminClient
       .from("usuarios")
@@ -330,9 +343,9 @@ Deno.serve(async (request) => {
         email: targetEmail,
         account_status: nextStatus,
         activation_sent_at: activationSentAt,
-        activated_at: null,
-        disabled_at: null,
-        ativo: true,
+        activated_at: nextActivatedAt,
+        disabled_at: nextDisabledAt,
+        ativo: nextStatus !== "disabled",
         updated_at: activationSentAt
       })
       .eq("id", usuarioId)
@@ -362,6 +375,7 @@ Deno.serve(async (request) => {
         authUserId,
         email: targetEmail,
         status: nextStatus,
+        activated_at: nextActivatedAt,
         emailChanged,
         delivery: "smtp_accepted"
       }

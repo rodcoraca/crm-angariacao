@@ -53,7 +53,7 @@ describe("user activation service", () => {
     applyEmpresaScope.mockImplementation((query) => query);
   });
 
-  test("preserves disabled status during administrative edits", async () => {
+  async function saveWithStatuses(persisted, requested) {
     const profileQuery = {
       eq: jest.fn().mockReturnThis(),
       maybeSingle: jest.fn().mockResolvedValue({
@@ -61,25 +61,22 @@ describe("user activation service", () => {
           id: "profile-a",
           auth_user_id: "auth-a",
           email: "user@example.com",
-          account_status: "disabled",
+          account_status: persisted,
           activation_sent_at: null,
-          activated_at: null,
-          disabled_at: "2026-09-27T10:00:00.000Z"
+          activated_at: persisted === "active" ? "2026-09-01T10:00:00.000Z" : null,
+          disabled_at: persisted === "disabled" ? "2026-09-27T10:00:00.000Z" : null
         },
         error: null
       })
     };
-    const updateQuery = {
-      eq: jest.fn().mockReturnValue({ error: null })
-    };
+    let savedPayload = null;
     supabase.from = jest.fn((table) => {
       if (table !== "usuarios") throw new Error(`Unexpected table: ${table}`);
       return {
         select: jest.fn(() => profileQuery),
         update: jest.fn((payload) => {
-          expect(payload.account_status).toBe("disabled");
-          expect(payload.activated_at).toBeNull();
-          return updateQuery;
+          savedPayload = payload;
+          return { eq: jest.fn().mockReturnValue({ error: null }) };
         })
       };
     });
@@ -87,12 +84,12 @@ describe("user activation service", () => {
     const result = await guardarUsuarioComAuditoria({
       form: {
         nome: "Utilizador",
-        apelido: "Desativado",
+        apelido: "Teste",
         email: "user@example.com",
         telefone: "",
         username: "user",
-        account_status: "active",
-        ativo: true,
+        account_status: requested,
+        ativo: requested !== "disabled",
         permissoes: {}
       },
       modoEdicao: true,
@@ -103,7 +100,30 @@ describe("user activation service", () => {
     });
 
     expect(result.error).toBeNull();
+    return savedPayload;
+  }
+
+  test("persists active -> disabled from the edit form", async () => {
+    const payload = await saveWithStatuses("active", "disabled");
+    expect(payload.account_status).toBe("disabled");
+    expect(payload.ativo).toBe(false);
+    expect(payload.activated_at).toBeNull();
+    expect(payload.disabled_at).toEqual(expect.any(String));
+  });
+
+  test("persists disabled -> active from the edit form", async () => {
+    const payload = await saveWithStatuses("disabled", "active");
+    expect(payload.account_status).toBe("active");
+    expect(payload.ativo).toBe(true);
+    expect(payload.disabled_at).toBeNull();
+    expect(payload.activated_at).toEqual(expect.any(String));
     expect(markUserAccountActive).not.toHaveBeenCalled();
+  });
+
+  test("keeps pending_activation until the activation flow completes", async () => {
+    const payload = await saveWithStatuses("pending_activation", "active");
+    expect(payload.account_status).toBe("pending_activation");
+    expect(payload.activated_at).toBeNull();
   });
 
   test("reactivates by profile id and never trusts a client auth user id", async () => {
@@ -191,5 +211,48 @@ describe("user activation service", () => {
 
     expect(sendInviteSource).toContain('const DEFAULT_ACTIVATION_REDIRECT = "https://app.osflow.pt/"');
     expect(reactivateSource).toContain('const DEFAULT_ACTIVATION_REDIRECT = "https://app.osflow.pt/?activation=1"');
+  });
+
+  test("preserves active status and activated_at when resending activation", () => {
+    const source = readFileSync(
+      join(process.cwd(), "supabase/functions/reactivate-user/index.ts"),
+      "utf8"
+    );
+
+    expect(source).toContain('previousStatus === "active"');
+    expect(source).toContain("profile.activated_at || null");
+    expect(source).toContain("activated_at: nextActivatedAt");
+  });
+
+  test("keeps pending_activation without activated_at when resending activation", () => {
+    const source = readFileSync(
+      join(process.cwd(), "supabase/functions/reactivate-user/index.ts"),
+      "utf8"
+    );
+
+    expect(source).toContain('"pending_activation"');
+    expect(source).toContain("const nextActivatedAt = previousStatus === \"active\"");
+    expect(source).toContain("  : null;");
+  });
+
+  test("does not automatically reactivate disabled accounts", () => {
+    const source = readFileSync(
+      join(process.cwd(), "supabase/functions/reactivate-user/index.ts"),
+      "utf8"
+    );
+
+    expect(source).toContain('previousStatus === "disabled"');
+    expect(source).toContain('? "disabled"');
+    expect(source).toContain("disabled_at: nextDisabledAt");
+    expect(source).toContain('ativo: nextStatus !== "disabled"');
+  });
+
+  test("preserves the existing profile update error response", () => {
+    const source = readFileSync(
+      join(process.cwd(), "supabase/functions/reactivate-user/index.ts"),
+      "utf8"
+    );
+
+    expect(source).toContain('return jsonResponse(500, { success: false, error: "profile_update_failed" });');
   });
 });

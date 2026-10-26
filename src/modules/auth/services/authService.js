@@ -875,7 +875,20 @@ export async function markUserAccountActive(profileId, {
   return result;
 }
 
-export async function reconcilePendingActivation(authUser, profile, { onboardingCompleted = false } = {}) {
+// Um login com password só prova onboarding concluído se o email foi confirmado
+// depois do último convite enviado (evita ativar contas reativadas sem novo convite).
+function hasCompletedInviteEvidence(authUser, profile) {
+  const confirmedAt = Date.parse(authUser?.email_confirmed_at || authUser?.confirmed_at || "");
+  if (Number.isNaN(confirmedAt)) return false;
+
+  const sentAt = Date.parse(profile?.activation_sent_at || "");
+  return Number.isNaN(sentAt) || confirmedAt >= sentAt;
+}
+
+export async function reconcilePendingActivation(authUser, profile, {
+  onboardingCompleted = false,
+  passwordAuthenticated = false
+} = {}) {
   if (!authUser?.id) {
     return { data: profile || null, error: null, updated: false };
   }
@@ -899,7 +912,7 @@ export async function reconcilePendingActivation(authUser, profile, { onboarding
   const emailConfirmed = Boolean(authUser.email_confirmed_at || authUser.confirmed_at);
 
   if (
-    !onboardingCompleted
+    !(onboardingCompleted || (passwordAuthenticated && hasCompletedInviteEvidence(authUser, profile)))
     || !emailConfirmed
     || !profileAuthUserId
     || profileAuthUserId !== authUserId
