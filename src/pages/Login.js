@@ -19,6 +19,7 @@ import {
 import { notifyError, notifySuccess } from "../components/ui/feedbackBus";
 
 const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
+const DISABLED_ACCOUNT_MESSAGE = "Conta desativada\n\nA sua conta encontra-se desativada e não pode aceder à plataforma neste momento.\n\nPara recuperar o acesso, entre em contacto com o administrador da sua organização.\n\nSe considerar que esta desativação ocorreu por engano, solicite ao administrador a verificação do estado da sua conta.";
 
 export default function Login({ setUser, onLogin, passwordRecoveryMode = false, passwordRecoveryUserId = null, passwordRecoveryReady = false, passwordRecoveryError = null, passwordRecoveryActivation = false, onPasswordRecoveryComplete = null }) {
   const theme = useTheme();
@@ -80,11 +81,9 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
   function resolveAccountStatus(profile) {
     const status = String(profile?.account_status || "").trim().toLowerCase();
-    if (status === "pending_activation" || status === "active" || status === "disabled") {
-      return status;
-    }
-
-    return profile?.ativo === false ? "disabled" : "active";
+    if (status === "disabled" || profile?.ativo === false) return "disabled";
+    if (status === "pending_activation") return "pending_activation";
+    return "active";
   }
 
   function normalizeErrorText(error) {
@@ -210,7 +209,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
       const accountStatus = resolveAccountStatus(perfil);
       if (accountStatus === "disabled") {
-        notifyError("Utilizador inativo. Contacte um administrador.");
+        notifyError(DISABLED_ACCOUNT_MESSAGE);
         await signOutAuthSession();
         return;
       }
@@ -519,8 +518,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
             <Button
               variant="ghost"
               style={styles.secondaryButton}
-              disabled={isAuthenticating || isRecoveringPassword}
-              loading={isRecoveringPassword}
+              disabled
               onClick={recuperarPassword}
             >
               Recuperar password
@@ -529,7 +527,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
             <Button
               variant="ghost"
               style={styles.secondaryButton}
-              disabled={isAuthenticating}
+              disabled
               onClick={async () => {
                 try {
                   const podeBootstrap = await bootstrapDisponivel();
@@ -579,7 +577,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
               onChange={(e) => setBootstrapPassword(e.target.value)}
             />
 
-            <Button variant="primary" style={styles.button} onClick={criarPrimeiroAdmin}>
+            <Button variant="primary" style={styles.button} onClick={criarPrimeiroAdmin} disabled>
               Criar administrador
             </Button>
             <Button variant="ghost" style={styles.secondaryButton} onClick={() => setModoBootstrap(false)}>
