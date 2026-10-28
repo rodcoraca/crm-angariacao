@@ -36,6 +36,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
   const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
   const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
   const [recoveryMode, setRecoveryMode] = useState(Boolean(passwordRecoveryMode));
+  const [accountDisabled, setAccountDisabled] = useState(false);
 
   useEffect(() => {
     setRecoveryMode(Boolean(passwordRecoveryMode));
@@ -208,6 +209,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
       }
 
       const accountStatus = resolveAccountStatus(perfil);
+      setAccountDisabled(accountStatus === "disabled");
       if (accountStatus === "disabled") {
         notifyError(DISABLED_ACCOUNT_MESSAGE);
         await signOutAuthSession();
@@ -515,39 +517,44 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
               Entrar
             </Button>
 
-            <Button
-              variant="ghost"
-              style={styles.secondaryButton}
-              disabled
-              onClick={recuperarPassword}
-            >
-              Recuperar password
-            </Button>
+            {!accountDisabled ? (
+              <>
+                <Button
+                  variant="ghost"
+                  style={styles.secondaryButton}
+                  disabled={isAuthenticating || isRecoveringPassword}
+                  loading={isRecoveringPassword}
+                  onClick={recuperarPassword}
+                >
+                  Recuperar password
+                </Button>
 
-            <Button
-              variant="ghost"
-              style={styles.secondaryButton}
-              disabled
-              onClick={async () => {
-                try {
-                  const podeBootstrap = await bootstrapDisponivel();
-                  if (!podeBootstrap) {
-                    setModoBootstrap(false);
-                    notifyError("Bootstrap inicial indisponível. Utilize o login e a Administração.");
-                    return;
-                  }
+                <Button
+                  variant="ghost"
+                  style={styles.secondaryButton}
+                  disabled={isAuthenticating}
+                  onClick={async () => {
+                    try {
+                      const podeBootstrap = await bootstrapDisponivel();
+                      if (!podeBootstrap) {
+                        setModoBootstrap(false);
+                        notifyError("Bootstrap inicial indisponível. Utilize o login e a Administração.");
+                        return;
+                      }
 
-                  setModoBootstrap(true);
-                } catch (error) {
-                  reportError(error, "Login.bootstrapDisponivel");
-                  notifyError(isCommunicationError(error)
-                    ? "Erro de comunicação ao validar bootstrap inicial."
-                    : "Erro interno ao validar bootstrap inicial.");
-                }
-              }}
-            >
-              Criar primeiro administrador
-            </Button>
+                      setModoBootstrap(true);
+                    } catch (error) {
+                      reportError(error, "Login.bootstrapDisponivel");
+                      notifyError(isCommunicationError(error)
+                        ? "Erro de comunicação ao validar bootstrap inicial."
+                        : "Erro interno ao validar bootstrap inicial.");
+                    }
+                  }}
+                >
+                  Criar primeiro administrador
+                </Button>
+              </>
+            ) : null}
           </>
         ) : (
           <>
@@ -577,7 +584,7 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
               onChange={(e) => setBootstrapPassword(e.target.value)}
             />
 
-            <Button variant="primary" style={styles.button} onClick={criarPrimeiroAdmin} disabled>
+            <Button variant="primary" style={styles.button} onClick={criarPrimeiroAdmin}>
               Criar administrador
             </Button>
             <Button variant="ghost" style={styles.secondaryButton} onClick={() => setModoBootstrap(false)}>
