@@ -1,8 +1,19 @@
-import { markUserAccountActive, reconcilePendingActivation } from "./authService";
+import {
+  createAuthUserFromAdminFlow,
+  markUserAccountActive,
+  reconcilePendingActivation,
+  sendAccountActivationInvite
+} from "./authService";
 
 jest.mock("../../../supabase.js", () => ({
   supabase: {
-    from: jest.fn()
+    auth: {
+      getSession: jest.fn()
+    },
+    from: jest.fn(),
+    functions: {
+      invoke: jest.fn()
+    }
   }
 }));
 
@@ -38,8 +49,84 @@ describe("activation completion", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    const { supabase } = require("../../../supabase.js");
+    supabase.auth.getSession.mockResolvedValue({
+      data: {
+        session: {
+          access_token: "master-access-token",
+          user: { id: "master-user" }
+        }
+      },
+      error: null
+    });
     jest.spyOn(console, "warn").mockImplementation(() => {});
     jest.spyOn(console, "info").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  test("sends the authenticated Master bearer token to the invite function", async () => {
+    const { supabase } = require("../../../supabase.js");
+    supabase.functions.invoke.mockResolvedValue({
+      data: { success: true, inviteSent: true },
+      error: null
+    });
+
+    await expect(sendAccountActivationInvite("new@example.com", "https://app.osflow.pt/", {
+      empresaId: "empresa-1"
+    })).resolves.toEqual(expect.objectContaining({ error: null }));
+
+    expect(supabase.functions.invoke).toHaveBeenCalledWith("send-user-invite", expect.objectContaining({
+      headers: { Authorization: "Bearer master-access-token" }
+    }));
+  });
+
+  test("rejects invite creation when the Master session has no access token", async () => {
+    const { supabase } = require("../../../supabase.js");
+    supabase.auth.getSession.mockResolvedValue({ data: { session: null }, error: null });
+
+    const result = await sendAccountActivationInvite("new@example.com", "https://app.osflow.pt/");
+
+    expect(result.error).toEqual(expect.objectContaining({ code: "auth_session_missing" }));
+    expect(supabase.functions.invoke).not.toHaveBeenCalled();
+  });
+
+  test("includes empresaId in the invite payload for valid admin creation flows", async () => {
+    const { supabase } = require("../../../supabase.js");
+    supabase.functions.invoke.mockResolvedValue({
+      data: { success: true, data: { user: { id: "auth-user-2", email: "new@example.com" } } },
+      error: null
+    });
+
+    const result = await createAuthUserFromAdminFlow({
+      email: "new@example.com",
+      metadata: { nome: "Novo", username: "novo" },
+      empresaId: "empresa-1"
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.createdUser.id).toBe("auth-user-2");
+    expect(supabase.functions.invoke).toHaveBeenCalledWith("send-user-invite", expect.objectContaining({
+      body: expect.objectContaining({
+        email: "new@example.com",
+        empresaId: "empresa-1"
+      })
+    }));
+  });
+
+  test("blocks admin user creation when empresaId is absent", async () => {
+    const { supabase } = require("../../../supabase.js");
+
+    const result = await createAuthUserFromAdminFlow({
+      email: "new@example.com",
+      metadata: { nome: "Novo", username: "novo" },
+      empresaId: ""
+    });
+
+    expect(result.error).toEqual(expect.objectContaining({ code: "missing_empresa_id" }));
+    expect(supabase.functions.invoke).not.toHaveBeenCalled();
   });
 
   afterEach(() => {
