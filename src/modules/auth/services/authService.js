@@ -574,10 +574,40 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
 
   try {
     const activationRedirectTo = buildActivationRedirectUrl(redirectTo);
-    const {
-      data: { session },
-      error: sessionError
-    } = await supabase.auth.getSession();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const session = sessionData?.session || null;
+
+    if (sessionError) {
+      return {
+        data: null,
+        error: {
+          code: "auth_session_error",
+          message: sessionError.message || "Não foi possível obter a sessão autenticada.",
+          details: sessionError
+        }
+      };
+    }
+
+    if (!session?.access_token) {
+      return {
+        data: null,
+        error: {
+          code: "auth_session_missing",
+          message: "Sessão autenticada do Master não encontrada. Volte a iniciar sessão."
+        }
+      };
+    }
+
+    const normalizedEmpresaId = String(empresaId || "").trim();
+    if (!normalizedEmpresaId) {
+      return {
+        data: null,
+        error: {
+          code: "missing_empresa_id",
+          message: "Empresa obrigatoria para envio de convite de ativacao."
+        }
+      };
+    }
 
     console.group(
       "sendAccountActivationInvite"
@@ -629,7 +659,7 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
       email: normalizedEmail,
       usuarioId: usuarioId || undefined,
       authUserId: authUserId || undefined,
-      empresaId: empresaId || undefined,
+      empresaId: normalizedEmpresaId,
       redirectTo: activationRedirectTo,
       nome: nome || undefined,
       username: username || undefined,
@@ -645,7 +675,10 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
       await supabase.functions.invoke(
         "send-user-invite",
         {
-          body: payload
+          body: payload,
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
         }
       );
 
@@ -707,6 +740,18 @@ export async function getAuthUserInviteStatus(email, { usuarioId = "", authUserI
     };
   }
 
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const session = sessionData?.session || null;
+  if (sessionError || !session?.access_token) {
+    return {
+      data: null,
+      error: sessionError || {
+        code: "auth_session_missing",
+        message: "Sessão autenticada do Master não encontrada. Volte a iniciar sessão."
+      }
+    };
+  }
+
   const result = await supabase.functions.invoke("send-user-invite", {
     body: {
       email: normalizedEmail,
@@ -714,6 +759,9 @@ export async function getAuthUserInviteStatus(email, { usuarioId = "", authUserI
       authUserId: authUserId || undefined,
       empresaId: empresaId || undefined,
       action: "status"
+    },
+    headers: {
+      Authorization: `Bearer ${session.access_token}`
     }
   });
 
@@ -741,6 +789,18 @@ export async function updateAuthUserEmail({ usuarioId, authUserId, empresaId, em
     };
   }
 
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const session = sessionData?.session || null;
+  if (sessionError || !session?.access_token) {
+    return {
+      data: null,
+      error: sessionError || {
+        code: "auth_session_missing",
+        message: "Sessão autenticada do Master não encontrada. Volte a iniciar sessão."
+      }
+    };
+  }
+
   const result = await supabase.functions.invoke("send-user-invite", {
     body: {
       action: "update_email",
@@ -749,6 +809,9 @@ export async function updateAuthUserEmail({ usuarioId, authUserId, empresaId, em
       empresaId,
       email: normalizedNewEmail,
       newEmail: normalizedNewEmail
+    },
+    headers: {
+      Authorization: `Bearer ${session.access_token}`
     }
   });
 
@@ -1020,7 +1083,7 @@ export async function reconcilePendingActivation(authUser, profile, {
   };
 }
 
-export async function createAuthUserFromAdminFlow({ email, password, metadata = {}, existingAuthUserId = null }) {
+export async function createAuthUserFromAdminFlow({ email, password, metadata = {}, existingAuthUserId = null, empresaId = null }) {
   const normalizedEmail = normalizeIdentifier(email).toLowerCase();
 
   if (!normalizedEmail) {
@@ -1029,6 +1092,20 @@ export async function createAuthUserFromAdminFlow({ email, password, metadata = 
       error: {
         code: "missing_email",
         message: "Email obrigatorio para criacao administrativa de utilizador."
+      },
+      createdUser: null,
+      reusedExistingUser: false,
+      inviteSent: false
+    };
+  }
+
+  const normalizedEmpresaId = String(empresaId || "").trim();
+  if (!normalizedEmpresaId && !existingAuthUserId) {
+    return {
+      data: null,
+      error: {
+        code: "missing_empresa_id",
+        message: "Empresa obrigatoria para criacao administrativa de utilizador."
       },
       createdUser: null,
       reusedExistingUser: false,
@@ -1072,7 +1149,8 @@ export async function createAuthUserFromAdminFlow({ email, password, metadata = 
       {
         nome: String(metadata?.nome || "").trim(),
         username: String(metadata?.username || "").trim(),
-        empresa: String(metadata?.empresa || "").trim()
+        empresa: String(metadata?.empresa || "").trim(),
+        empresaId: normalizedEmpresaId
       }
     );
 
