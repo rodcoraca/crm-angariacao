@@ -74,6 +74,44 @@ function normalizeAuthUserRef(authUserOrId) {
   };
 }
 
+export async function checkLoginAccountStatus(identifier) {
+  const normalized = normalizeIdentifier(identifier);
+
+  const { data, error } = await supabase.functions.invoke(
+    "check-login-account-status",
+    {
+      body: { identifier: normalized }
+    }
+  );
+
+  if (error) {
+    return {
+      status: null,
+      error
+    };
+  }
+
+  const status = data?.status;
+
+  if (["active", "disabled", "pending_activation", "unknown"].includes(status)) {
+    return {
+      status,
+      error: null
+    };
+  }
+
+  return {
+    status: null,
+    error: {
+      code: status === "unavailable"
+        ? "account_status_unavailable"
+        : "invalid_account_status_response",
+      message: status === "unavailable"
+        ? "Não foi possível verificar o estado da conta."
+        : "Resposta inválida ao verificar o estado da conta."
+    }
+  };
+}
 export async function resolveLoginEmail(identifier) {
   const normalized = normalizeIdentifier(identifier);
   if (!normalized) {
@@ -97,6 +135,63 @@ export async function resolveLoginEmail(identifier) {
 
 export async function signInWithPassword({ email, password }) {
   return supabase.auth.signInWithPassword({ email, password });
+}
+
+export async function signInWithUsername(username, password) {
+  const normalizedUsername = normalizeIdentifier(username);
+  const normalizedPassword = typeof password === "string" ? password : "";
+
+  if (!normalizedUsername || !normalizedPassword) {
+    return {
+      data: null,
+      error: {
+        code: "missing_credentials",
+        message: "Username e password obrigatorios."
+      }
+    };
+  }
+
+  const { data, error } = await supabase.functions.invoke("login-by-username", {
+    body: {
+      username: normalizedUsername,
+      password: normalizedPassword
+    }
+  });
+
+  if (error) {
+    return { data: null, error };
+  }
+
+  const session = data?.session || null;
+  const accessToken = session?.access_token || data?.access_token || null;
+  const refreshToken = session?.refresh_token || data?.refresh_token || null;
+
+  if (!accessToken || !refreshToken) {
+    return {
+      data: null,
+      error: {
+        code: "invalid_login_response",
+        message: "Resposta inválida da autenticação por username."
+      }
+    };
+  }
+
+  const sessionResult = await supabase.auth.setSession({
+    access_token: accessToken,
+    refresh_token: refreshToken
+  });
+
+  if (sessionResult.error) {
+    return { data: null, error: sessionResult.error };
+  }
+
+  return {
+    data: {
+      user: sessionResult.data?.user || data?.user || null,
+      session: sessionResult.data?.session || session || null
+    },
+    error: null
+  };
 }
 
 export async function signOutAuthSession() {
@@ -574,10 +669,40 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
 
   try {
     const activationRedirectTo = buildActivationRedirectUrl(redirectTo);
-    const {
-      data: { session },
-      error: sessionError
-    } = await supabase.auth.getSession();
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    const session = sessionData?.session || null;
+
+    if (sessionError) {
+      return {
+        data: null,
+        error: {
+          code: "auth_session_error",
+          message: sessionError.message || "Não foi possível obter a sessão autenticada.",
+          details: sessionError
+        }
+      };
+    }
+
+    if (!session?.access_token) {
+      return {
+        data: null,
+        error: {
+          code: "auth_session_missing",
+          message: "Sessão autenticada do Master não encontrada. Volte a iniciar sessão."
+        }
+      };
+    }
+
+    const normalizedEmpresaId = String(empresaId || "").trim();
+    if (!normalizedEmpresaId) {
+      return {
+        data: null,
+        error: {
+          code: "missing_empresa_id",
+          message: "Empresa obrigatoria para envio de convite de ativacao."
+        }
+      };
+    }
 
     console.group(
       "sendAccountActivationInvite"
@@ -629,7 +754,7 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
       email: normalizedEmail,
       usuarioId: usuarioId || undefined,
       authUserId: authUserId || undefined,
-      empresaId: empresaId || undefined,
+      empresaId: normalizedEmpresaId || undefined,
       redirectTo: activationRedirectTo,
       nome: nome || undefined,
       username: username || undefined,
@@ -645,7 +770,10 @@ export async function sendAccountActivationInvite(email, redirectTo, { nome = ""
       await supabase.functions.invoke(
         "send-user-invite",
         {
-          body: payload
+          body: payload,
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          }
         }
       );
 
@@ -707,6 +835,18 @@ export async function getAuthUserInviteStatus(email, { usuarioId = "", authUserI
     };
   }
 
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const session = sessionData?.session || null;
+  if (sessionError || !session?.access_token) {
+    return {
+      data: null,
+      error: sessionError || {
+        code: "auth_session_missing",
+        message: "Sessão autenticada do Master não encontrada. Volte a iniciar sessão."
+      }
+    };
+  }
+
   const result = await supabase.functions.invoke("send-user-invite", {
     body: {
       email: normalizedEmail,
@@ -714,6 +854,9 @@ export async function getAuthUserInviteStatus(email, { usuarioId = "", authUserI
       authUserId: authUserId || undefined,
       empresaId: empresaId || undefined,
       action: "status"
+    },
+    headers: {
+      Authorization: `Bearer ${session.access_token}`
     }
   });
 
@@ -741,6 +884,18 @@ export async function updateAuthUserEmail({ usuarioId, authUserId, empresaId, em
     };
   }
 
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+  const session = sessionData?.session || null;
+  if (sessionError || !session?.access_token) {
+    return {
+      data: null,
+      error: sessionError || {
+        code: "auth_session_missing",
+        message: "Sessão autenticada do Master não encontrada. Volte a iniciar sessão."
+      }
+    };
+  }
+
   const result = await supabase.functions.invoke("send-user-invite", {
     body: {
       action: "update_email",
@@ -749,6 +904,9 @@ export async function updateAuthUserEmail({ usuarioId, authUserId, empresaId, em
       empresaId,
       email: normalizedNewEmail,
       newEmail: normalizedNewEmail
+    },
+    headers: {
+      Authorization: `Bearer ${session.access_token}`
     }
   });
 
@@ -1020,7 +1178,7 @@ export async function reconcilePendingActivation(authUser, profile, {
   };
 }
 
-export async function createAuthUserFromAdminFlow({ email, password, metadata = {}, existingAuthUserId = null }) {
+export async function createAuthUserFromAdminFlow({ email, password, metadata = {}, existingAuthUserId = null, empresaId = null }) {
   const normalizedEmail = normalizeIdentifier(email).toLowerCase();
 
   if (!normalizedEmail) {
@@ -1029,6 +1187,20 @@ export async function createAuthUserFromAdminFlow({ email, password, metadata = 
       error: {
         code: "missing_email",
         message: "Email obrigatorio para criacao administrativa de utilizador."
+      },
+      createdUser: null,
+      reusedExistingUser: false,
+      inviteSent: false
+    };
+  }
+
+  const normalizedEmpresaId = String(empresaId || "").trim();
+  if (!normalizedEmpresaId && !existingAuthUserId) {
+    return {
+      data: null,
+      error: {
+        code: "missing_empresa_id",
+        message: "Empresa obrigatoria para criacao administrativa de utilizador."
       },
       createdUser: null,
       reusedExistingUser: false,
@@ -1072,7 +1244,8 @@ export async function createAuthUserFromAdminFlow({ email, password, metadata = 
       {
         nome: String(metadata?.nome || "").trim(),
         username: String(metadata?.username || "").trim(),
-        empresa: String(metadata?.empresa || "").trim()
+        empresa: String(metadata?.empresa || "").trim(),
+        empresaId: normalizedEmpresaId
       }
     );
 

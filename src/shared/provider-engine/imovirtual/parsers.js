@@ -64,7 +64,7 @@ function firstValidLocationValue(...values) {
   return null;
 }
 
-function getLocationPath(item) {
+export function getLocationPath(item) {
   const location = item?.location || {};
   const address = location?.address || item?.address || {};
   const reverseLocations = Array.isArray(location?.reverseGeocoding?.locations)

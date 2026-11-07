@@ -266,4 +266,215 @@ describe("executeProviderSync normalized contract", () => {
     expect(result.skipped).toBe(1);
     expect(insertedRows).toEqual([]);
   });
+
+  it("reuses a globally existing listing created by another company", async () => {
+    const insertedRows = [];
+    const junctionRows = [];
+
+    const globalListing = {
+      id: "lead-global-123",
+      provider: "imovirtual",
+      external_id: "IMV-GLOBAL-123",
+      empresa_id: "empresa-A",
+      provider_active: true
+    };
+
+    const supabaseClient = {
+      from(table) {
+        if (table === "provider_leads") {
+          const filters = {};
+
+          return {
+            select() {
+              return this;
+            },
+            eq(column, value) {
+              filters[column] = value;
+              return this;
+            },
+            in(column, values) {
+              if (filters.empresa_id) {
+                return Promise.resolve({ data: [], error: null });
+              }
+
+              const matches =
+                filters.provider === globalListing.provider &&
+                values.includes(globalListing.external_id);
+
+              return Promise.resolve({
+                data: matches ? [{
+                  id: globalListing.id,
+                  external_id: globalListing.external_id
+                }] : [],
+                error: null
+              });
+            },
+            insert(rows) {
+              insertedRows.push(...rows);
+
+              return {
+                select() {
+                  return this;
+                },
+                single() {
+                  return Promise.resolve({
+                    data: null,
+                    error: {
+                      code: "23505",
+                      message: "duplicate key value violates unique constraint"
+                    }
+                  });
+                }
+              };
+            }
+          };
+        }
+
+        if (table === "empresa_provider_listings") {
+          return {
+            upsert(rows) {
+              junctionRows.push(...rows);
+              return Promise.resolve({ error: null });
+            }
+          };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      }
+    };
+
+    const result = await executeProviderSync({
+      providerName: "imovirtual",
+      empresaId: "empresa-B",
+      listings: [baseListing("IMV-GLOBAL-123", {
+        source: "imovirtual"
+      })],
+      fetchedAt: "2026-09-17T12:00:00.000Z",
+      supabaseClient,
+      allowListingsWithoutCreatedAtFirst: true
+    });
+
+    expect(result.created).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.errors).toEqual([]);
+    expect(insertedRows).toHaveLength(0);
+
+    expect(junctionRows).toHaveLength(1);
+    expect(junctionRows[0]).toMatchObject({
+      empresa_id: "empresa-B",
+      provider_lead_id: "lead-global-123"
+    });
+  });
+    it("recovers a globally existing listing after a concurrent 23505 insert conflict", async () => {
+    const insertedRows = [];
+    const junctionRows = [];
+    let initialLookupCount = 0;
+    let recoveryLookupCount = 0;
+
+    const globalListing = {
+      id: "lead-race-123",
+      external_id: "IMV-RACE-123",
+      provider_active: false
+    };
+
+    const supabaseClient = {
+      from(table) {
+        if (table === "provider_leads") {
+          const filters = {};
+
+          return {
+            select() {
+              return this;
+            },
+
+            eq(column, value) {
+              filters[column] = value;
+
+              if (column === "external_id") {
+                recoveryLookupCount += 1;
+
+                return Promise.resolve({
+                  data: [{
+                    id: globalListing.id,
+                    external_id: globalListing.external_id
+                  }],
+                  error: null
+                });
+              }
+
+              return this;
+            },
+
+            in(column, values) {
+              initialLookupCount += 1;
+
+              return Promise.resolve({
+                data: [],
+                error: null
+              });
+            },
+
+            insert(rows) {
+              insertedRows.push(...rows);
+
+              return {
+                select() {
+                  return this;
+                },
+
+                single() {
+                  return Promise.resolve({
+                    data: null,
+                    error: {
+                      code: "23505",
+                      message: "duplicate key value violates unique constraint"
+                    }
+                  });
+                }
+              };
+            }
+          };
+        }
+
+        if (table === "empresa_provider_listings") {
+          return {
+            upsert(rows) {
+              junctionRows.push(...rows);
+              return Promise.resolve({ error: null });
+            }
+          };
+        }
+
+        throw new Error(`Unexpected table: ${table}`);
+      }
+    };
+
+    const result = await executeProviderSync({
+      providerName: "imovirtual",
+      empresaId: "empresa-B",
+      listings: [baseListing("IMV-RACE-123", {
+        source: "imovirtual"
+      })],
+      fetchedAt: "2026-09-17T12:00:00.000Z",
+      supabaseClient,
+      allowListingsWithoutCreatedAtFirst: true
+    });
+
+    expect(initialLookupCount).toBe(1);
+    expect(recoveryLookupCount).toBe(1);
+
+    expect(result.created).toBe(0);
+    expect(result.skipped).toBe(1);
+    expect(result.errors).toEqual([]);
+
+    expect(insertedRows).toHaveLength(1);
+    expect(junctionRows).toHaveLength(1);
+
+    expect(junctionRows[0]).toMatchObject({
+      empresa_id: "empresa-B",
+      provider_lead_id: "lead-race-123"
+    });
+
+    expect(globalListing.provider_active).toBe(false);
+  });
 });

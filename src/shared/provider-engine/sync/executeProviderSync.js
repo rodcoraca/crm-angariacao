@@ -211,7 +211,6 @@ export async function executeProviderSync({
       .from("provider_leads")
       .select("id, external_id")
       .eq("provider", providerName)
-      .eq("empresa_id", scopedEmpresaId)
       .in("external_id", validExternalIds);
 
     if (lookupError) {
@@ -316,7 +315,35 @@ export async function executeProviderSync({
     const insertResults = await runConcurrent(insertTasks, CONCURRENCY_LIMIT);
 
     for (const { externalId, inserted, insertError } of insertResults) {
-      if (insertError) {
+      if (insertError?.code === "23505") {
+        const { data: recoveredRows, error: recoveryError } = await supabaseClient
+          .from("provider_leads")
+          .select("id, external_id")
+          .eq("provider", providerName)
+          .eq("external_id", externalId);
+
+        const recovered = (recoveredRows || []).find(
+          (row) => String(row.external_id) === String(externalId)
+        );
+
+        if (recoveryError) {
+          errors.push({
+            externalId,
+            error: `Conflito 23505; recuperação falhou: ${recoveryError.message}`
+          });
+        } else if (recovered?.id) {
+          skipped += 1;
+          junctionRows.push({
+            empresa_id: scopedEmpresaId,
+            provider_lead_id: recovered.id,
+            first_seen_at: syncStartedAtIso,
+            created_at: junctionNow,
+            updated_at: junctionNow
+          });
+        } else {
+          errors.push({ externalId, error: insertError.message });
+        }
+      } else if (insertError) {
         errors.push({ externalId, error: insertError.message });
       } else if (inserted) {
         created += 1;

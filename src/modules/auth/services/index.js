@@ -4,7 +4,9 @@ export { LEGACY_PERMISSION_MAP, getLegacyPermissionKeys, hasLegacyPermission, de
 export { registerUserSession, updateSessionActivity, finalizeUserSession, startSessionActivityTracking, getLastActivityTimestamp, expireSessionOnTimeout } from "./sessionService";
 export {
 	resolveLoginEmail,
+	checkLoginAccountStatus,
 	signInWithPassword,
+	signInWithUsername,
 	signOutAuthSession,
 	loadUserProfileByAuthUserId,
 	loadUserProfileByLoginEmail,

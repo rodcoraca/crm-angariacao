@@ -60,6 +60,21 @@ describe("RadarService importação idempotente", () => {
     }));
   });
 
+  test("não cria a Lead quando o anúncio está globalmente indisponível", async () => {
+    supabase.rpc.mockResolvedValueOnce({
+      data: { status: "unavailable" },
+      error: null
+    });
+
+    const service = new RadarService({});
+    const result = await service.importOpportunityToLeads(opportunity, user);
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toBe("Não foi possível iniciar a importação.");
+    expect(salvarLeadFluxo).not.toHaveBeenCalled();
+    expect(supabase.rpc).toHaveBeenCalledTimes(1);
+  });
+
   test("reserva e conclui uma importação OLX", async () => {
     supabase.rpc
       .mockResolvedValueOnce({ data: { status: "claimed" }, error: null })

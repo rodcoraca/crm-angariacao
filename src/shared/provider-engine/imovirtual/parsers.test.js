@@ -1,4 +1,4 @@
-import { mapNextDataItemToListing } from './parsers';
+import { mapNextDataItemToListing, getLocationPath } from './parsers';
 
 describe('Imovirtual publication date normalization', () => {
   const baseItem = {
@@ -179,4 +179,34 @@ describe('Imovirtual publication date normalization', () => {
     });
   });
 
+});
+
+describe('getLocationPath export shared with repair-imovirtual-location', () => {
+  it('resolves every reverseGeocoding level variant supported by the parser', () => {
+    expect(getLocationPath({
+      location: {
+        reverseGeocoding: {
+          locations: [
+            { locationLevel: 'province', name: 'Lisboa' },
+            { locationLevel: 'municipality', name: 'Cascais' },
+            { locationLevel: 'locality', name: 'Estoril' },
+            { locationLevel: 'freguesia', name: 'Cascais e Estoril' }
+          ]
+        }
+      }
+    })).toMatchObject({
+      district: 'Lisboa',
+      municipality: 'Cascais',
+      county: 'Cascais',
+      city: 'Estoril',
+      region: 'Lisboa',
+      freguesia: 'Cascais e Estoril'
+    });
+  });
+
+  it('reads address from the top-level item when location.address is absent', () => {
+    expect(getLocationPath({
+      address: { city: { name: 'Braga' }, province: { name: 'Braga' } }
+    })).toMatchObject({ city: 'Braga', district: 'Braga' });
+  });
 });

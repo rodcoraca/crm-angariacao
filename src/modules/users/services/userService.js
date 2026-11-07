@@ -332,6 +332,7 @@ export async function guardarUsuarioComAuditoria({
       email,
       password: form.password,
       existingAuthUserId: existingProfileByEmail?.auth_user_id || null,
+      empresaId,
       metadata: {
         nome,
         apelido,

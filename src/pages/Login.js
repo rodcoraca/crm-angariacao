@@ -12,15 +12,14 @@ import {
   loadAuthorizationProfileByAuthUserId,
   reconcilePendingActivation,
   requestPasswordReset,
-  resolveLoginEmail,
   signInWithPassword,
+  signInWithUsername,
   signOutAuthSession
 } from "../modules/auth/services";
 import { notifyError, notifySuccess } from "../components/ui/feedbackBus";
 
 const ACTIVE_SESSION_TENANT_KEY = "osflow_active_session_empresa_id";
 const DISABLED_ACCOUNT_MESSAGE = "Conta desativada\n\nA sua conta encontra-se desativada e não pode aceder à plataforma neste momento.\n\nPara recuperar o acesso, entre em contacto com o administrador da sua organização.\n\nSe considerar que esta desativação ocorreu por engano, solicite ao administrador a verificação do estado da sua conta.";
-
 export default function Login({ setUser, onLogin, passwordRecoveryMode = false, passwordRecoveryUserId = null, passwordRecoveryReady = false, passwordRecoveryError = null, passwordRecoveryActivation = false, onPasswordRecoveryComplete = null }) {
   const theme = useTheme();
   const [username, setUsername] = useState("");
@@ -84,7 +83,8 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
     const status = String(profile?.account_status || "").trim().toLowerCase();
     if (status === "disabled" || profile?.ativo === false) return "disabled";
     if (status === "pending_activation") return "pending_activation";
-    return "active";
+    if (status === "active" || status === "") return "active";
+    return "invalid";
   }
 
   function normalizeErrorText(error) {
@@ -172,17 +172,13 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
         return;
       }
 
-      const resolved = await resolveLoginEmail(valor);
-      if (resolved?.error) {
-        reportError(resolved.error, "Login.resolveLoginEmail");
-      }
-
-      const emailAutenticacao = resolved?.email || valor;
-
-      const { data, error } = await signInWithPassword({
-        email: emailAutenticacao,
-        password
-      });
+      const usesEmailLogin = valor.includes("@");
+      const { data, error } = usesEmailLogin
+        ? await signInWithPassword({
+            email: valor.toLowerCase(),
+            password
+          })
+        : await signInWithUsername(valor, password);
 
       const authUser = data?.user || null;
       const authSession = data?.session || null;
@@ -210,8 +206,9 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
 
       const accountStatus = resolveAccountStatus(perfil);
       setAccountDisabled(accountStatus === "disabled");
-      if (accountStatus === "disabled") {
+      if (accountStatus === "disabled" || accountStatus === "invalid") {
         notifyError(DISABLED_ACCOUNT_MESSAGE);
+        clearOnboardingClientState();
         await signOutAuthSession();
         return;
       }
@@ -271,8 +268,15 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
         return;
       }
 
+      const bootstrapEmpresaId = null;
+      if (!bootstrapEmpresaId) {
+        notifyError("Não existe contexto empresarial válido para criar o primeiro administrador e enviar o convite de ativação.");
+        return;
+      }
+
       const authCreation = await createAuthUserFromAdminFlow({
         email: bootstrapEmail,
+        empresaId: bootstrapEmpresaId,
         metadata: {
           nome: bootstrapNome,
           apelido: bootstrapApelido,
@@ -424,16 +428,16 @@ export default function Login({ setUser, onLogin, passwordRecoveryMode = false, 
     try {
       const valor = username.trim();
       if (!valor) {
-        notifyError("Introduza o email ou user name para recuperar a password.");
+        notifyError("Introduza o email para recuperar a password.");
         return;
       }
 
-      const resolved = await resolveLoginEmail(valor);
-      if (resolved?.error) {
-        reportError(resolved.error, "Login.requestPasswordReset.resolveLoginEmail");
+      if (!valor.includes("@")) {
+        notifySuccess("Se a conta existir, será enviado um email de recuperação.");
+        return;
       }
 
-      const emailRecuperacao = resolved?.email || valor;
+      const emailRecuperacao = valor.toLowerCase();
 
       const { error } = await requestPasswordReset(emailRecuperacao, getPasswordRecoveryRedirectUrl());
       if (error) {

@@ -154,37 +154,208 @@ async function findAuthUserById(adminClient: any, authUserId: string) {
   return data?.user || null;
 }
 
-async function hasUsersEditPermission(adminClient: any, operatorId: string, empresaId: string) {
-  const { data: operatorProfile, error: operatorError } = await adminClient
-    .from("usuarios")
-    .select("id,empresa_id")
-    .eq("auth_user_id", operatorId)
-    .eq("empresa_id", empresaId)
+type SupportedAuditAction = "invite" | "status" | "update_email";
+
+const SUPPORTED_ACTIONS = new Set<SupportedAuditAction>([
+  "invite",
+  "status",
+  "update_email"
+]);
+
+const INTERNAL_AUDIT_ACTIONS = new Set<string>([
+  "resend_invite"
+]);
+
+function normalizeSupportedAction(action: unknown): SupportedAuditAction {
+  const normalizedAction = String(action || "").trim().toLowerCase();
+  if (!SUPPORTED_ACTIONS.has(normalizedAction as SupportedAuditAction)) {
+    throw new Error("invalid_action");
+  }
+
+  return normalizedAction as SupportedAuditAction;
+}
+
+function normalizeAuditAction(action: unknown): string {
+  const normalizedAction = String(action || "").trim().toLowerCase();
+  if (
+    SUPPORTED_ACTIONS.has(normalizedAction as SupportedAuditAction) ||
+    INTERNAL_AUDIT_ACTIONS.has(normalizedAction)
+  ) {
+    return normalizedAction;
+  }
+
+  throw new Error("invalid_action");
+}
+
+export function resolvePermissionCode(action: string, usuarioId?: string | null, profile?: any | null) {
+  if (action === "status") {
+    return "users.view";
+  }
+
+  if (action === "update_email") {
+    return "users.edit";
+  }
+
+  if (usuarioId || profile) {
+    return "users.edit";
+  }
+
+  return "users.create";
+}
+
+export async function hasUsersPermission(adminClient: any, operatorId: string, empresaId: string, permissionCode: string) {
+  if (!empresaId) {
+    return false;
+  }
+
+  const { data: targetEmpresa, error: targetEmpresaError } = await adminClient
+    .from("empresas")
+    .select("id")
+    .eq("id", empresaId)
     .maybeSingle();
 
-  if (operatorError || !operatorProfile) return false;
+  if (targetEmpresaError) {
+    throw targetEmpresaError;
+  }
+
+  if (!targetEmpresa) {
+    return false;
+  }
 
   const { data: roleRows, error: roleError } = await adminClient
     .from("user_roles")
-    .select("role_id,empresa_id")
+    .select("role_id,empresa_id,is_primary,roles!inner(code,is_active)")
     .eq("user_id", operatorId)
+    .eq("is_primary", true)
     .or(`empresa_id.is.null,empresa_id.eq.${empresaId}`);
 
-  if (roleError) throw roleError;
+  if (roleError) {
+    throw roleError;
+  }
 
-  const roleIds = (roleRows || []).map((row: { role_id?: string }) => row.role_id).filter(Boolean);
-  if (!roleIds.length) return false;
+  const roleIds = (roleRows || [])
+    .filter((row: any) => row.roles?.is_active !== false && row.roles?.code)
+    .map((row: { role_id?: string }) => row.role_id)
+    .filter(Boolean);
+
+  if (!roleIds.length) {
+    return false;
+  }
 
   const { data: permissionRows, error: permissionError } = await adminClient
     .from("role_permissions")
     .select("permissions!inner(code,is_active)")
     .in("role_id", roleIds);
 
-  if (permissionError) throw permissionError;
+  if (permissionError) {
+    throw permissionError;
+  }
 
   return (permissionRows || []).some((row: any) =>
-    row.permissions?.is_active !== false && row.permissions?.code === "users.edit"
+    row.permissions?.is_active !== false && row.permissions?.code === permissionCode
   );
+}
+
+async function hasUsersEditPermission(adminClient: any, operatorId: string, empresaId: string) {
+  return hasUsersPermission(adminClient, operatorId, empresaId, "users.edit");
+}
+
+function resolveAuditEventType(action: string) {
+  const normalizedAction = String(action || "").trim().toLowerCase();
+
+  switch (normalizedAction) {
+    case "status":
+      return "read";
+    case "update_email":
+      return "update";
+    case "invite":
+    case "resend_invite":
+      return "create";
+    default:
+      throw new Error("invalid_action");
+  }
+}
+
+async function createPendingAuditRecord(adminClient: any, {
+  operatorId,
+  empresaId,
+  usuarioId,
+  action
+}: {
+  operatorId: string;
+  empresaId?: string | null;
+  usuarioId?: string | null;
+  action: string;
+}) {
+  const normalizedAction = normalizeAuditAction(action);
+  const payload: Record<string, unknown> = {
+    user_id: operatorId,
+    empresa_id: empresaId || null,
+    modulo: "users",
+    entidade: "usuarios",
+    entidade_id: usuarioId || null,
+    event_type: resolveAuditEventType(normalizedAction),
+    status: "pending",
+    metadata: {
+      action: normalizedAction,
+      result: "pending",
+      error: null
+    },
+    created_at: new Date().toISOString()
+  };
+
+  const { data, error: insertError } = await adminClient
+    .from("audit_logs")
+    .insert([payload])
+    .select("id")
+    .single();
+
+  if (insertError || !data?.id) {
+    console.error("[send-user-invite] audit_write_failed", {
+      action: normalizedAction,
+      status: "pending"
+    });
+    throw new Error("audit_write_failed");
+  }
+
+  return data.id as string;
+}
+
+export async function finalizeAuditRecord(adminClient: any, {
+  auditId,
+  action,
+  status,
+  error
+}: {
+  auditId: string;
+  action: string;
+  status: "success" | "denied" | "error";
+  error?: string | null;
+}) {
+  const normalizedAction = normalizeAuditAction(action);
+  const { data: updatedRow, error: updateError } = await adminClient
+    .from("audit_logs")
+    .update({
+      status,
+      metadata: {
+        action: normalizedAction,
+        result: status,
+        error: error || null
+      }
+    })
+    .eq("id", auditId)
+    .select("id")
+    .maybeSingle();
+
+  if (updateError || !updatedRow?.id) {
+    console.error("[send-user-invite] audit_update_failed", {
+      auditId,
+      action: normalizedAction,
+      status,
+      updateError: updateError ? updateError.message : "no_row_updated"
+    });
+    throw new Error("audit_update_failed");
+  }
 }
 
 async function writeSecurityAudit(adminClient: any, {
@@ -192,25 +363,29 @@ async function writeSecurityAudit(adminClient: any, {
   empresaId,
   usuarioId,
   action,
-  error
+  error,
+  status = "denied"
 }: {
   operatorId: string;
   empresaId?: string | null;
   usuarioId?: string | null;
   action: string;
-  error: string;
+  error?: string | null;
+  status?: "success" | "denied" | "error";
 }) {
-  await adminClient.from("audit_logs").insert([{
-    user_id: operatorId,
-    empresa_id: empresaId || null,
-    modulo: "users",
-    entidade: "usuarios",
-    entidade_id: usuarioId || null,
-    event_type: "update",
-    status: "denied",
-    metadata: { action, error },
-    created_at: new Date().toISOString()
-  }]);
+  const auditId = await createPendingAuditRecord(adminClient, {
+    operatorId,
+    empresaId,
+    usuarioId,
+    action
+  });
+
+  await finalizeAuditRecord(adminClient, {
+    auditId,
+    action,
+    status,
+    error
+  });
 }
 
 Deno.serve(async (req: Request) => {
@@ -243,6 +418,11 @@ Deno.serve(async (req: Request) => {
         "SUPABASE_URL"
       );
 
+    const supabaseAnonKey =
+      Deno.env.get(
+        "SUPABASE_ANON_KEY"
+      ) || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+
     const serviceRoleKey =
       Deno.env.get(
         "SUPABASE_SERVICE_ROLE_KEY"
@@ -250,6 +430,7 @@ Deno.serve(async (req: Request) => {
 
     if (
       !supabaseUrl ||
+      !supabaseAnonKey ||
       !serviceRoleKey
     ) {
       console.error(
@@ -257,6 +438,9 @@ Deno.serve(async (req: Request) => {
         {
           supabaseUrlExists:
             Boolean(supabaseUrl),
+
+          supabaseAnonKeyExists:
+            Boolean(supabaseAnonKey),
 
           serviceRoleKeyExists:
             Boolean(serviceRoleKey)
@@ -280,6 +464,9 @@ Deno.serve(async (req: Request) => {
         supabaseUrlExists:
           Boolean(supabaseUrl),
 
+        supabaseAnonKeyExists:
+          Boolean(supabaseAnonKey),
+
         serviceRoleKeyExists:
           Boolean(serviceRoleKey)
       }
@@ -288,6 +475,18 @@ Deno.serve(async (req: Request) => {
     // -------------------------------------------------------
     // ADMIN CLIENT
     // -------------------------------------------------------
+    const authClient =
+      createClient(
+        supabaseUrl,
+        supabaseAnonKey,
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false
+          }
+        }
+      );
+
     const admin =
       createClient(
         supabaseUrl,
@@ -338,7 +537,7 @@ Deno.serve(async (req: Request) => {
       data: authUser,
       error: authError
     } =
-      await admin.auth.getUser(
+      await authClient.auth.getUser(
         jwt
       );
 
@@ -415,6 +614,16 @@ Deno.serve(async (req: Request) => {
     const usuarioId = String(body.usuarioId || "").trim();
     const authUserId = String(body.authUserId || "").trim();
     const empresaId = String(body.empresaId || "").trim();
+
+    let action: SupportedAuditAction;
+    try {
+      action = normalizeSupportedAction(body.action ?? "invite");
+    } catch (_error) {
+      return logAndRespond("invalid_action", 400, {
+        success: false,
+        error: "invalid_action"
+      });
+    }
 
     const redirectTo =
       body.redirectTo;
@@ -507,58 +716,97 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (usuarioId) {
-      const targetEmpresaId = normalizeEmail(profile?.empresa_id);
-      const operatorProfile = targetEmpresaId
-        ? await admin
-          .from("usuarios")
-          .select("id,empresa_id")
-          .eq("auth_user_id", authUser.user.id)
-          .eq("empresa_id", targetEmpresaId)
-          .maybeSingle()
-        : { data: null, error: null };
+    if (!usuarioId && !empresaId && email) {
+      const { data: profileByEmail, error: profileByEmailError } = await admin
+        .from("usuarios")
+        .select("id,auth_user_id,email,empresa_id")
+        .ilike("email", email)
+        .maybeSingle();
+      if (profileByEmailError) throw profileByEmailError;
+      profile = profileByEmail;
+    }
 
-      if (operatorProfile.error || !operatorProfile.data) {
-        await writeSecurityAudit(admin, {
-          operatorId: authUser.user.id,
-          empresaId: targetEmpresaId || null,
-          usuarioId,
-          action: "send_user_invite",
-          error: "tenant_access_denied"
-        });
-        return logAndRespond("tenant_access_denied", 403, {
-          success: false,
-          error: "tenant_access_denied"
-        });
-      }
+    const targetEmpresaId = String(profile?.empresa_id || empresaId || "").trim();
+    if (profile?.empresa_id && empresaId && String(profile.empresa_id) !== empresaId) {
+      await writeSecurityAudit(admin, {
+        operatorId: authUser.user.id,
+        empresaId: targetEmpresaId,
+        usuarioId: usuarioId || profile?.id || null,
+        action,
+        error: "tenant_access_denied"
+      });
+      return logAndRespond("tenant_access_denied", 403, {
+        success: false,
+        error: "tenant_access_denied"
+      });
+    }
 
-      if (!(await hasUsersEditPermission(admin, authUser.user.id, targetEmpresaId))) {
-        await writeSecurityAudit(admin, {
-          operatorId: authUser.user.id,
-          empresaId: targetEmpresaId,
-          usuarioId,
-          action: "send_user_invite",
-          error: "permission_denied"
-        });
-        return logAndRespond("permission_denied", 403, {
-          success: false,
-          error: "permission_denied"
-        });
-      }
+    if (!targetEmpresaId) {
+      await writeSecurityAudit(admin, {
+        operatorId: authUser.user.id,
+        empresaId: null,
+        usuarioId: usuarioId || profile?.id || null,
+        action,
+        error: "missing_empresa_id"
+      });
+      return logAndRespond("missing_empresa_id", 400, {
+        success: false,
+        error: "missing_empresa_id"
+      });
+    }
 
-      if (!profile.auth_user_id) {
-        await writeSecurityAudit(admin, {
-          operatorId: authUser.user.id,
-          empresaId: targetEmpresaId,
-          usuarioId,
-          action: "send_user_invite",
-          error: "missing_auth_user_id"
-        });
-        return logAndRespond("missing_auth_user_id", 409, {
-          success: false,
-          error: "missing_auth_user_id"
-        });
-      }
+    const { data: targetEmpresa, error: targetEmpresaError } = await admin
+      .from("empresas")
+      .select("id")
+      .eq("id", targetEmpresaId)
+      .maybeSingle();
+
+    if (targetEmpresaError) {
+      throw targetEmpresaError;
+    }
+
+    if (!targetEmpresa) {
+      await writeSecurityAudit(admin, {
+        operatorId: authUser.user.id,
+        empresaId: targetEmpresaId,
+        usuarioId: usuarioId || profile?.id || null,
+        action,
+        error: "invalid_empresa_id"
+      });
+      return logAndRespond("invalid_empresa_id", 400, {
+        success: false,
+        error: "invalid_empresa_id"
+      });
+    }
+
+    const permissionCode = resolvePermissionCode(action, usuarioId || null, profile || null);
+    if (!(await hasUsersPermission(admin, authUser.user.id, targetEmpresaId, permissionCode))) {
+      await writeSecurityAudit(admin, {
+        operatorId: authUser.user.id,
+        empresaId: targetEmpresaId,
+        usuarioId: usuarioId || profile?.id || null,
+        action,
+        error: "permission_denied"
+      });
+      return logAndRespond("permission_denied", 403, {
+        success: false,
+        error: "permission_denied",
+        requiredPermission: permissionCode
+      });
+    }
+
+    if (usuarioId && (!profile || !profile.auth_user_id)) {
+      await writeSecurityAudit(admin, {
+        operatorId: authUser.user.id,
+        empresaId: targetEmpresaId,
+        usuarioId: usuarioId || profile?.id || null,
+        action,
+        error: "profile_not_found"
+      });
+      return logAndRespond("profile_not_found", 404, {
+        success: false,
+        error: "profile_not_found"
+      });
     }
 
     const resolvedAuthUserId = usuarioId
@@ -580,6 +828,12 @@ Deno.serve(async (req: Request) => {
       Boolean(
         existingUser?.email_confirmed_at
       );
+    const inviteAuditAction =
+      action === "status" || action === "update_email"
+        ? action
+        : existingUser && !emailConfirmed
+          ? "resend_invite"
+          : "invite";
 
     console.log(
       "AUTH USER CHECK",
@@ -598,65 +852,48 @@ Deno.serve(async (req: Request) => {
     // -------------------------------------------------------
     // STATUS REQUEST
     // -------------------------------------------------------
-    const action =
-      String(
-        body.action ||
-          "invite"
-      )
-        .trim()
-        .toLowerCase();
-
     if (action === "update_email") {
       const nextEmail = normalizeEmail(body.newEmail || body.email);
       if (!existingUser?.id || !nextEmail) {
+        await writeSecurityAudit(admin, {
+          operatorId: authUser.user.id,
+          empresaId: targetEmpresaId,
+          usuarioId: existingUser?.id || usuarioId || profile?.id || null,
+          action: "update_email",
+          error: "missing_email_update_context"
+        });
         return logAndRespond("missing_email_update_context", 400, {
           success: false,
           error: "missing_email_update_context"
         });
       }
 
-      if (profile?.empresa_id) {
-        const { data: callerProfile, error: callerProfileError } = await admin
-          .from("usuarios")
-          .select("id")
-          .eq("auth_user_id", authUser.user.id)
-          .eq("empresa_id", profile.empresa_id)
-          .maybeSingle();
-        if (callerProfileError || !callerProfile) {
-          return logAndRespond("tenant_access_denied", 403, {
-            success: false,
-            error: "tenant_access_denied"
-          });
-        }
-
-        const { data: roleRows, error: roleError } = await admin
-          .from("user_roles")
-          .select("role_id,empresa_id")
-          .eq("user_id", authUser.user.id)
-          .or(`empresa_id.is.null,empresa_id.eq.${profile.empresa_id}`);
-        if (roleError) throw roleError;
-
-        const roleIds = (roleRows || []).map((row: { role_id?: string }) => row.role_id).filter(Boolean);
-        const { data: permissionRows, error: permissionError } = roleIds.length
-          ? await admin.from("role_permissions").select("permissions!inner(code,is_active)").in("role_id", roleIds)
-          : { data: [], error: null };
-        if (permissionError) throw permissionError;
-
-        const canEditUsers = (permissionRows || []).some((row: any) =>
-          row.permissions?.is_active !== false && row.permissions?.code === "users.edit"
-        );
-        if (!canEditUsers) {
-          return logAndRespond("permission_denied", 403, {
-            success: false,
-            error: "permission_denied"
-          });
-        }
-      }
+      const auditId = await createPendingAuditRecord(admin, {
+        operatorId: authUser.user.id,
+        empresaId: targetEmpresaId,
+        usuarioId: existingUser.id,
+        action: "update_email"
+      });
 
       const { data, error } = await admin.auth.admin.updateUserById(existingUser.id, {
         email: nextEmail
       });
-      if (error) throw error;
+      if (error) {
+        await finalizeAuditRecord(admin, {
+          auditId,
+          action: "update_email",
+          status: "error",
+          error: error.message || "email_update_failed"
+        });
+        throw error;
+      }
+
+      await finalizeAuditRecord(admin, {
+        auditId,
+        action: "update_email",
+        status: "success",
+        error: null
+      });
 
       return logAndRespond("email_updated", 200, {
         success: true,
@@ -667,6 +904,19 @@ Deno.serve(async (req: Request) => {
     if (
       action === "status"
     ) {
+      const auditId = await createPendingAuditRecord(admin, {
+        operatorId: authUser.user.id,
+        empresaId: targetEmpresaId,
+        usuarioId: usuarioId || profile?.id || null,
+        action: "status"
+      });
+
+      await finalizeAuditRecord(admin, {
+        auditId,
+        action: "status",
+        status: "success",
+        error: null
+      });
       return logAndRespond(
         "status",
         200,
@@ -710,6 +960,19 @@ Deno.serve(async (req: Request) => {
       existingUser &&
       emailConfirmed
     ) {
+      const auditId = await createPendingAuditRecord(admin, {
+        operatorId: authUser.user.id,
+        empresaId: targetEmpresaId,
+        usuarioId: existingUser.id,
+        action: "status"
+      });
+
+      await finalizeAuditRecord(admin, {
+        auditId,
+        action: "status",
+        status: "success",
+        error: null
+      });
       return logAndRespond(
         "existing_user_confirmed",
         200,
@@ -766,6 +1029,13 @@ Deno.serve(async (req: Request) => {
     try {
       activationRedirectTo = ensureActivationRedirect(redirectTo);
     } catch (_error) {
+      await writeSecurityAudit(admin, {
+        operatorId: authUser.user.id,
+        empresaId: targetEmpresaId,
+        usuarioId: usuarioId || profile?.id || null,
+        action: inviteAuditAction,
+        error: "invalid_redirect"
+      });
       return logAndRespond("invalid_redirect", 400, {
         success: false,
         error: "invalid_redirect"
@@ -795,6 +1065,13 @@ Deno.serve(async (req: Request) => {
           activationRedirectTo
       }
     );
+
+    const inviteAuditId = await createPendingAuditRecord(admin, {
+      operatorId: authUser.user.id,
+      empresaId: targetEmpresaId,
+      usuarioId: usuarioId || profile?.id || existingUser?.id || null,
+      action: inviteAuditAction
+    });
 
     const {
       data,
@@ -843,6 +1120,12 @@ Deno.serve(async (req: Request) => {
           "email_exists" ||
         status === 422
       ) {
+        await finalizeAuditRecord(admin, {
+          auditId: inviteAuditId,
+          action: inviteAuditAction,
+          status: "error",
+          error: "existing_user"
+        });
         return logAndRespond(
           "invite_existing_user_rejected",
           409,
@@ -886,6 +1169,12 @@ Deno.serve(async (req: Request) => {
       // -----------------------------------------------------
       // OTHER AUTH ERROR
       // -----------------------------------------------------
+      await finalizeAuditRecord(admin, {
+        auditId: inviteAuditId,
+        action: inviteAuditAction,
+        status: "error",
+        error: authError.message || "invite_error"
+      });
       return logAndRespond(
         "invite_error",
         status,
@@ -962,6 +1251,13 @@ Deno.serve(async (req: Request) => {
     // -------------------------------------------------------
     // SUCCESS
     // -------------------------------------------------------
+    await finalizeAuditRecord(admin, {
+      auditId: inviteAuditId,
+      action: inviteAuditAction,
+      status: "success",
+      error: null
+    });
+
     return logAndRespond(
       existingUser
         ? "invite_resent"
@@ -986,9 +1282,20 @@ Deno.serve(async (req: Request) => {
     );
 
   } catch (e) {
+    const safeError =
+      e instanceof Error && (
+        e.message === "audit_write_failed" ||
+        e.message === "audit_update_failed" ||
+        e.message === "invalid_action"
+      )
+        ? e.message
+        : "unexpected_error";
+
     console.error(
       "UNHANDLED ERROR",
-      e
+      {
+        error: safeError
+      }
     );
 
     return logAndRespond(
@@ -1001,12 +1308,7 @@ Deno.serve(async (req: Request) => {
           false,
 
         error:
-          e instanceof Error
-            ? e.message
-            : "unexpected_error",
-
-        details:
-          e
+          safeError
       }
     );
   }
